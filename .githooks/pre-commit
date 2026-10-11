@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+blocked_files=$(git diff --cached --name-only --diff-filter=ACMR | grep -Ei '(^|/)(\.env($|\.)|id_rsa$)|\.(pem|p12|pfx)$' || true)
+if [ -n "$blocked_files" ]; then
+  echo "HABITAT: commit bloqueado; hay posibles secretos o credenciales:" >&2
+  echo "$blocked_files" >&2
+  exit 1
+fi
+
+added_lines=$(git diff --cached --unified=0 --no-color -- . ':!*.lock' || true)
+if printf '%s\n' "$added_lines" | grep -Eq '^\+.*(-----BEGIN ([A-Z ]+ )?PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{20,}|sk-(proj-)?[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16})'; then
+  echo "HABITAT: commit bloqueado; el contenido añadido parece incluir una credencial." >&2
+  exit 1
+fi

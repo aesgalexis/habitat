@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+echo "HABITAT: validando antes de subir..."
+python -c "import ast, pathlib; ast.parse(pathlib.Path('app.py').read_text(encoding='utf-8'))"
+node --check extension/background.js
+node --check extension/content.js
+node --check extension/connect.js
+node --check extension/finish.js
+node --check extension/popup.js
+node --check extension/reload.js
+node -e "JSON.parse(require('fs').readFileSync('extension/manifest.json', 'utf8'))"
+git diff --check

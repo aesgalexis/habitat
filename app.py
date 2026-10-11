@@ -3,6 +3,7 @@ import json
 import queue
 import secrets
 import threading
+import time
 import tkinter as tk
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from tkinter import scrolledtext, ttk
@@ -11,7 +12,7 @@ HOST, PORT = "127.0.0.1", 8765
 pending = queue.Queue()
 events = queue.Queue()
 pair_key = secrets.token_urlsafe(24)
-state = {"connected": False, "inflight": None}
+state = {"last_poll": 0.0, "inflight": None, "inflight_since": None}
 lock = threading.Lock()
 
 
@@ -41,12 +42,19 @@ class Bridge(BaseHTTPRequestHandler):
         return secrets.compare_digest(self.headers.get("X-Habitat-Key", ""), pair_key)
 
     def do_GET(self):
+        if self.path == "/pair":
+            # A normal web page cannot add this header without a successful
+            # CORS preflight (which this server deliberately does not allow).
+            # The installed extension has explicit loopback host permission.
+            if self.headers.get("X-Habitat-Pair") != "1":
+                return self.reply(403, {"error": "Pairing denied"})
+            return self.reply(200, {"key": pair_key})
         if not self.authorized():
             return self.reply(403, {"error": "Unauthorized"})
         if self.path != "/next":
             return self.reply(404, {"error": "Not found"})
         with lock:
-            state["connected"] = True
+            state["last_poll"] = time.monotonic()
         try:
             item = pending.get_nowait()
         except queue.Empty:
@@ -73,9 +81,11 @@ def main():
     root.geometry("760x650")
     root.minsize(500, 420)
     root.configure(bg="#10131a")
+    root.grid_columnconfigure(0, weight=1)
+    root.grid_rowconfigure(1, weight=1)
 
     header = tk.Frame(root, bg="#10131a")
-    header.pack(fill="x", padx=22, pady=(20, 12))
+    header.grid(row=0, column=0, sticky="ew", padx=22, pady=(20, 12))
     tk.Label(header, text="HABITAT", fg="#e8edff", bg="#10131a",
              font=("Segoe UI", 18, "bold")).pack(side="left")
     status = tk.StringVar(value="Abre ChatGPT y conecta la extensión")
@@ -86,7 +96,7 @@ def main():
                                        insertbackground="white", wrap="word",
                                        font=("Segoe UI", 11), relief="flat",
                                        padx=18, pady=16, state="disabled")
-    output.pack(fill="both", expand=True, padx=22, pady=(0, 12))
+    output.grid(row=1, column=0, sticky="nsew", padx=22, pady=(0, 12))
     output.tag_configure("you", foreground="#91c5ff")
     output.tag_configure("assistant", foreground="#d8e6ff")
     output.tag_configure("muted", foreground="#9aa8bf")
@@ -99,7 +109,7 @@ def main():
         output.see("end")
 
     keyrow = tk.Frame(root, bg="#10131a")
-    keyrow.pack(fill="x", padx=22, pady=(0, 8))
+    keyrow.grid(row=2, column=0, sticky="ew", padx=22, pady=(0, 8))
     tk.Label(keyrow, text="Código de vinculación:", bg="#10131a",
              fg="#9aa8bf").pack(side="left")
     key_field = ttk.Entry(keyrow, width=36)
@@ -112,7 +122,7 @@ def main():
     ttk.Button(keyrow, text="Copiar", command=copy_key).pack(side="left")
 
     bottom = tk.Frame(root, bg="#10131a")
-    bottom.pack(fill="x", padx=22, pady=(0, 22))
+    bottom.grid(row=3, column=0, sticky="ew", padx=22, pady=(0, 22))
     entry = tk.Text(bottom, height=3, bg="#252d3d", fg="white",
                     insertbackground="white", font=("Segoe UI", 11),
                     wrap="word", relief="flat", padx=10, pady=9)
@@ -125,11 +135,15 @@ def main():
         if not message:
             return "break"
         with lock:
+            if time.monotonic() - state["last_poll"] >= 4.0:
+                status.set("Conecta primero la extensión en una pestaña de ChatGPT")
+                return "break"
             if state["inflight"] is not None:
                 status.set("Espera a que termine la respuesta")
                 return "break"
             message_id = secrets.token_hex(8)
             state["inflight"] = message_id
+            state["inflight_since"] = time.monotonic()
         pending.put({"id": message_id, "text": message})
         append("TÚ", message, "you")
         entry.delete("1.0", "end")
@@ -141,9 +155,22 @@ def main():
 
     def pump():
         with lock:
-            connected = state["connected"]
-        if connected and state["inflight"] is None:
+            last_poll = state["last_poll"]
+            inflight = state["inflight"]
+            inflight_since = state["inflight_since"]
+        connected = time.monotonic() - last_poll < 4.0
+        if connected and inflight is None:
             status.set("Extensión conectada")
+        elif not connected and inflight is None:
+            status.set("Abre ChatGPT y conecta la extensión")
+        if inflight is not None and inflight_since is not None \
+                and time.monotonic() - inflight_since > 240:
+            with lock:
+                if state["inflight"] == inflight:
+                    state["inflight"] = None
+                    state["inflight_since"] = None
+            append("HABITAT", "Se agotó el tiempo de espera. Revisa ChatGPT antes de volver a enviar.", "muted")
+            status.set("Tiempo agotado; revisa Chrome")
         while True:
             try:
                 event = events.get_nowait()
@@ -159,6 +186,7 @@ def main():
                     continue
                 if kind in ("response", "error"):
                     state["inflight"] = None
+                    state["inflight_since"] = None
             if kind == "started":
                 status.set("ChatGPT está respondiendo…")
             elif kind == "response":
@@ -177,9 +205,9 @@ def main():
         return
     threading.Thread(target=server.serve_forever, daemon=True).start()
     append("HABITAT", "1. Instala la extensión desde la carpeta extension.\n"
-           "2. Abre ESTA conversación en Chrome.\n"
-           "3. Pulsa el icono de la extensión, vincula y selecciona esta pestaña.\n"
-           "4. Escribe aquí. Ctrl+Enter para enviar.", "muted")
+           "2. Abre la conversación deseada en Chrome y déjala activa.\n"
+           "3. La extensión se vinculará automáticamente.\n"
+           "4. Cuando indique Extensión conectada, escribe aquí. Ctrl+Enter para enviar.", "muted")
     root.after(200, pump)
     def close():
         server.shutdown()
