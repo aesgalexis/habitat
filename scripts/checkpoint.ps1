@@ -6,10 +6,18 @@ $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 
 git -C $repoRoot add --all
+if ($LASTEXITCODE -ne 0) {
+    throw "No se pudieron preparar los cambios para el checkpoint."
+}
+
 git -C $repoRoot diff --cached --quiet
-if ($LASTEXITCODE -eq 0) {
+$diffExitCode = $LASTEXITCODE
+if ($diffExitCode -eq 0) {
     Write-Host "No hay cambios para guardar."
     exit 0
+}
+if ($diffExitCode -ne 1) {
+    throw "No se pudo comprobar si hay cambios preparados."
 }
 
 git -C $repoRoot commit -m $Message
