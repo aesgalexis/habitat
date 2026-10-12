@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -12,12 +11,12 @@ namespace Habitat.Services;
 public sealed class BridgeService : IAsyncDisposable
 {
     private const int Port = 8765;
-    private readonly ConcurrentQueue<OutgoingMessage> _pending = new();
     private readonly object _stateLock = new();
     private WebApplication? _server;
     private DateTimeOffset _lastPoll = DateTimeOffset.MinValue;
     private OutgoingMessage? _inflight;
     private DateTimeOffset? _inflightSince;
+    private bool _deliveryAcknowledged;
 
     public BridgeService()
     {
@@ -60,8 +59,16 @@ public sealed class BridgeService : IAsyncDisposable
                 {
                     return Results.Json(new { error = "Unauthorized" }, statusCode: StatusCodes.Status403Forbidden);
                 }
-                lock (_stateLock) _lastPoll = DateTimeOffset.UtcNow;
-                _pending.TryDequeue(out var message);
+                OutgoingMessage? message;
+                lock (_stateLock)
+                {
+                    _lastPoll = DateTimeOffset.UtcNow;
+                    // Keep offering an unacknowledged message. If Chrome
+                    // reloads or invalidates the content script between this
+                    // response and its acknowledgement, the replacement
+                    // script can recover the same delivery.
+                    message = _deliveryAcknowledged ? null : _inflight;
+                }
                 return Results.Json(new { message });
             });
 
@@ -82,7 +89,7 @@ public sealed class BridgeService : IAsyncDisposable
                     return Results.Json(new { error = "Invalid JSON" }, statusCode: StatusCodes.Status400BadRequest);
                 }
 
-                if (bridgeEvent is null || bridgeEvent.Type is not ("started" or "response" or "error" or "status"))
+                if (bridgeEvent is null || bridgeEvent.Type is not ("received" or "started" or "response" or "error" or "status"))
                 {
                     return Results.Json(new { error = "Invalid event" }, statusCode: StatusCodes.Status400BadRequest);
                 }
@@ -93,10 +100,15 @@ public sealed class BridgeService : IAsyncDisposable
                     if (bridgeEvent.Type != "status" && bridgeEvent.Id == _inflight?.Id)
                     {
                         accepted = true;
+                        if (bridgeEvent.Type is "received" or "started")
+                        {
+                            _deliveryAcknowledged = true;
+                        }
                         if (bridgeEvent.Type is "response" or "error")
                         {
                             _inflight = null;
                             _inflightSince = null;
+                            _deliveryAcknowledged = false;
                         }
                     }
                 }
@@ -129,7 +141,7 @@ public sealed class BridgeService : IAsyncDisposable
             }
             _inflight = new OutgoingMessage(Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant(), text);
             _inflightSince = DateTimeOffset.UtcNow;
-            _pending.Enqueue(_inflight);
+            _deliveryAcknowledged = false;
             reason = string.Empty;
             return true;
         }
@@ -145,6 +157,7 @@ public sealed class BridgeService : IAsyncDisposable
             }
             _inflight = null;
             _inflightSince = null;
+            _deliveryAcknowledged = false;
             return true;
         }
     }

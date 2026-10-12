@@ -230,6 +230,9 @@ public sealed class MainPage : Page
         {
             switch (bridgeEvent.Type)
             {
+                case "received":
+                    SetStatus("Chrome recibió el mensaje…", StatusTone.Active);
+                    break;
                 case "started":
                     SetStatus("ChatGPT está respondiendo…", StatusTone.Active);
                     break;

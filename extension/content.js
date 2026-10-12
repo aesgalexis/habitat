@@ -78,35 +78,38 @@
     const style=getComputedStyle(element), rect=element.getBoundingClientRect();
     return style.display!=="none" && style.visibility!=="hidden" && rect.width>0 && rect.height>0;
   }
+  function enabled(element) {
+    return element && !element.disabled && element.getAttribute("aria-disabled")!=="true";
+  }
+  function composerRoot(box) {
+    return box.closest("form") ||
+      box.closest('[data-type="unified-composer"]') ||
+      box.closest('[data-testid*="composer"]') ||
+      box.parentElement;
+  }
   function findSendButton(box) {
     const selectors = [
       '[data-testid="send-button"]',
       '[data-testid="composer-submit-button"]',
       '[data-testid*="send"]',
       '#composer-submit-button',
-      '[type="submit"]',
       'button[aria-label^="Enviar"]',
       'button[aria-label^="Send"]',
       '[role="button"][aria-label^="Enviar"]',
       '[role="button"][aria-label^="Send"]'
     ];
+    const root=composerRoot(box);
     for (const selector of selectors) {
-      const button=document.querySelector(selector);
+      const button=root?.querySelector(selector) || document.querySelector(selector);
       if(button && visible(button))return button;
     }
 
-    // ChatGPT currently exposes the send control as the composer's submit
-    // button. Keep this scoped to the same form so another page button cannot
-    // be mistaken for Send when labels or test ids change again.
-    const form=box.closest("form");
-    if(form) {
-      const submit=form.querySelector('[type="submit"]');
-      if(submit && visible(submit))return submit;
-    }
-
-    const composer=box.closest('[data-type="unified-composer"]') || form;
-    if(!composer)return null;
-    return [...composer.querySelectorAll("button")].find(button => {
+    // The submit selector must stay inside the composer. A global
+    // [type=submit] can select an unrelated control elsewhere on ChatGPT.
+    const submit=root?.querySelector('button[type="submit"], input[type="submit"], [role="button"][type="submit"]');
+    if(submit && visible(submit))return submit;
+    if(!root)return null;
+    return [...root.querySelectorAll('button, [role="button"]')].find(button => {
       const name=[
         button.getAttribute("aria-label"),
         button.getAttribute("data-testid"),
@@ -118,7 +121,7 @@
     }) || null;
   }
   async function confirmSent(box, priorUserCount, originalUrl) {
-    const deadline=Date.now()+2500;
+    const deadline=Date.now()+5000;
     while(Date.now()<deadline) {
       await pause(100);
       if(!box.isConnected || composerText(box)==="" || userNodes().length>priorUserCount || location.href!==originalUrl) {
@@ -130,16 +133,15 @@
   async function submitComposer(box) {
     const priorUserCount=userNodes().length;
     const originalUrl=location.href;
-    const form=box.closest("form");
     let send=null;
-    const buttonDeadline=Date.now()+1200;
+    const buttonDeadline=Date.now()+5000;
     while(Date.now()<buttonDeadline) {
       send=findSendButton(box);
-      if(send && !send.disabled)break;
+      if(send && enabled(send))break;
       await pause(100);
     }
 
-    if(send && !send.disabled) {
+    if(send && enabled(send)) {
       send.click();
       if(await confirmSent(box,priorUserCount,originalUrl))return;
     }
@@ -153,14 +155,10 @@
     }
     if(await confirmSent(box,priorUserCount,originalUrl))return;
 
-    // Final route for frontend variants that only register the form submit.
-    if(form) {
-      if(typeof form.requestSubmit==="function")form.requestSubmit();
-      else form.dispatchEvent(new Event("submit",{bubbles:true,cancelable:true}));
-      if(await confirmSent(box,priorUserCount,originalUrl))return;
-    }
-
-    throw Error("ChatGPT recibió el texto, pero no aceptó el envío. Recarga esa pestaña una vez.");
+    const detail=send
+      ? `${send.tagName.toLowerCase()}${send.id?"#"+send.id:""} (${send.getAttribute("aria-label")||send.getAttribute("data-testid")||"sin etiqueta"})`
+      : "ningún control de envío en el compositor";
+    throw Error("ChatGPT recibió el texto, pero no aceptó el envío. Detectado: "+detail+".");
   }
   async function process(message) {
     busy=true;
@@ -186,6 +184,10 @@
         setter?.call(box,text);
         box.dispatchEvent(new Event("input",{bubbles:true}));
       }
+      // Confirm delivery to the desktop before interacting with the button.
+      // This also prevents HABITAT from remaining indefinitely in
+      // "Enviando a Chrome" when the page later changes context.
+      await event("received",id,"");
       await submitComposer(box);
       await event("started",id,"");
       let stable=0,last="",started=false;
