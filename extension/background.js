@@ -4,7 +4,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (!isChatGPT(sender.tab?.url)) return {error:"Not a ChatGPT tab"};
     let s = await chrome.storage.local.get(["habitatKey","habitatTab","habitatUrl"]);
     const senderUrl=normalizeUrl(sender.tab.url);
-    const knownBinding=sender.tab.id===s.habitatTab && senderUrl===s.habitatUrl;
+    const sameTab=sender.tab.id===s.habitatTab;
+    const newChatTransition=sameTab && !isConversationUrl(s.habitatUrl) && isConversationUrl(senderUrl);
+    if(newChatTransition) {
+      s.habitatUrl=senderUrl;
+      await chrome.storage.local.set({habitatUrl:senderUrl});
+    }
+    const knownBinding=sameTab && (senderUrl===s.habitatUrl || newChatTransition);
     if (!knownBinding) {
       if (!sender.tab.active) return {error:"Open the ChatGPT tab to pair it"};
       s = await pairTab(sender.tab);
@@ -62,9 +68,14 @@ function compareChatTabs(a,b) {
     try { return /\/c\//.test(new URL(value).pathname) ? 1 : 0; }
     catch (_) { return 0; }
   };
-  return conversation(b.url)-conversation(a.url) ||
-    Number(b.active)-Number(a.active) ||
-    (b.lastAccessed||0)-(a.lastAccessed||0);
+  return Number(b.active)-Number(a.active) ||
+    (b.lastAccessed||0)-(a.lastAccessed||0) ||
+    conversation(b.url)-conversation(a.url);
+}
+
+function isConversationUrl(value) {
+  try { return /(^|\/)c\/[^/]+/.test(new URL(value).pathname); }
+  catch (_) { return false; }
 }
 
 async function pairTab(tab) {

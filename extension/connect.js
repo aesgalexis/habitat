@@ -5,9 +5,9 @@ const normalizeUrl=value=>{
 };
 const compareChatTabs=(a,b)=>{
   const conversation=value=>/\/c\//.test(new URL(value).pathname)?1:0;
-  return conversation(b.url)-conversation(a.url) ||
-    Number(b.active)-Number(a.active) ||
-    (b.lastAccessed||0)-(a.lastAccessed||0);
+  return Number(b.active)-Number(a.active) ||
+    (b.lastAccessed||0)-(a.lastAccessed||0) ||
+    conversation(b.url)-conversation(a.url);
 };
 
 (async()=>{

@@ -64,19 +64,35 @@
       'button[aria-label*="Interrumpir"]'
     ].join(", "));
   }
+  const userNodes = () => {
+    const current=[...document.querySelectorAll('[data-content-search-unit-key$=":user"]')];
+    if(current.length)return current;
+    return [...document.querySelectorAll('[data-message-author-role="user"]')];
+  };
+  function composerText(box) {
+    const value=box instanceof HTMLTextAreaElement ? box.value : box.innerText || box.textContent || "";
+    return value.replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
+  }
+  function visible(element) {
+    if(!element)return false;
+    const style=getComputedStyle(element), rect=element.getBoundingClientRect();
+    return style.display!=="none" && style.visibility!=="hidden" && rect.width>0 && rect.height>0;
+  }
   function findSendButton(box) {
     const selectors = [
-      'button[data-testid="send-button"]',
-      'button[data-testid="composer-submit-button"]',
+      '[data-testid="send-button"]',
+      '[data-testid="composer-submit-button"]',
+      '[data-testid*="send"]',
       '#composer-submit-button',
-      'button[aria-label="Enviar"]',
-      'button[aria-label="Enviar mensaje"]',
-      'button[aria-label="Send"]',
-      'button[aria-label="Send message"]'
+      '[type="submit"]',
+      'button[aria-label^="Enviar"]',
+      'button[aria-label^="Send"]',
+      '[role="button"][aria-label^="Enviar"]',
+      '[role="button"][aria-label^="Send"]'
     ];
     for (const selector of selectors) {
       const button=document.querySelector(selector);
-      if(button)return button;
+      if(button && visible(button))return button;
     }
 
     // ChatGPT currently exposes the send control as the composer's submit
@@ -84,8 +100,8 @@
     // be mistaken for Send when labels or test ids change again.
     const form=box.closest("form");
     if(form) {
-      const submit=form.querySelector('button[type="submit"]');
-      if(submit)return submit;
+      const submit=form.querySelector('[type="submit"]');
+      if(submit && visible(submit))return submit;
     }
 
     const composer=box.closest('[data-type="unified-composer"]') || form;
@@ -97,9 +113,54 @@
         button.getAttribute("title"),
         button.innerText
       ].filter(Boolean).join(" ");
-      return /(^|\b)(send|enviar|submit)(\b|$)/i.test(name) &&
+      return visible(button) && /(^|\b)(send|enviar|submit)(\b|$)/i.test(name) &&
         !/(stop|detener|cancel)/i.test(name);
     }) || null;
+  }
+  async function confirmSent(box, priorUserCount, originalUrl) {
+    const deadline=Date.now()+2500;
+    while(Date.now()<deadline) {
+      await pause(100);
+      if(!box.isConnected || composerText(box)==="" || userNodes().length>priorUserCount || location.href!==originalUrl) {
+        return true;
+      }
+    }
+    return false;
+  }
+  async function submitComposer(box) {
+    const priorUserCount=userNodes().length;
+    const originalUrl=location.href;
+    const form=box.closest("form");
+    let send=null;
+    const buttonDeadline=Date.now()+1200;
+    while(Date.now()<buttonDeadline) {
+      send=findSendButton(box);
+      if(send && !send.disabled)break;
+      await pause(100);
+    }
+
+    if(send && !send.disabled) {
+      send.click();
+      if(await confirmSent(box,priorUserCount,originalUrl))return;
+    }
+
+    // A new, empty chat does not always expose a stable send button. ChatGPT's
+    // composer still handles Enter, which is the same action a user performs.
+    for(const type of ["keydown","keypress","keyup"]) {
+      box.dispatchEvent(new KeyboardEvent(type,{
+        key:"Enter",code:"Enter",keyCode:13,which:13,bubbles:true,cancelable:true
+      }));
+    }
+    if(await confirmSent(box,priorUserCount,originalUrl))return;
+
+    // Final route for frontend variants that only register the form submit.
+    if(form) {
+      if(typeof form.requestSubmit==="function")form.requestSubmit();
+      else form.dispatchEvent(new Event("submit",{bubbles:true,cancelable:true}));
+      if(await confirmSent(box,priorUserCount,originalUrl))return;
+    }
+
+    throw Error("ChatGPT recibió el texto, pero no aceptó el envío. Recarga esa pestaña una vez.");
   }
   async function process(message) {
     busy=true;
@@ -125,16 +186,7 @@
         setter?.call(box,text);
         box.dispatchEvent(new Event("input",{bubbles:true}));
       }
-      let send=null;
-      const sendDeadline=Date.now()+5000;
-      while(Date.now()<sendDeadline) {
-        send=findSendButton(box);
-        if(send && !send.disabled)break;
-        await pause(100);
-      }
-      if(!send)throw Error("No encuentro el botón Enviar de ChatGPT.");
-      if(send.disabled)throw Error("ChatGPT no habilitó el botón Enviar después de recibir el texto.");
-      send.click();
+      await submitComposer(box);
       await event("started",id,"");
       let stable=0,last="",started=false;
       const deadline=Date.now()+180000;
