@@ -88,7 +88,7 @@ def main():
     header.grid(row=0, column=0, sticky="ew", padx=22, pady=(20, 12))
     tk.Label(header, text="HABITAT", fg="#e8edff", bg="#10131a",
              font=("Segoe UI", 18, "bold")).pack(side="left")
-    status = tk.StringVar(value="Abre ChatGPT y conecta la extensión")
+    status = tk.StringVar(value="Reconectando automáticamente con ChatGPT…")
     tk.Label(header, textvariable=status, fg="#a1b2d6", bg="#10131a",
              font=("Segoe UI", 10)).pack(side="right")
 
@@ -136,7 +136,7 @@ def main():
             return "break"
         with lock:
             if time.monotonic() - state["last_poll"] >= 4.0:
-                status.set("Conecta primero la extensión en una pestaña de ChatGPT")
+                status.set("Esperando la reconexión automática con ChatGPT…")
                 return "break"
             if state["inflight"] is not None:
                 status.set("Espera a que termine la respuesta")
@@ -162,7 +162,7 @@ def main():
         if connected and inflight is None:
             status.set("Extensión conectada")
         elif not connected and inflight is None:
-            status.set("Abre ChatGPT y conecta la extensión")
+            status.set("Esperando la reconexión automática con ChatGPT…")
         if inflight is not None and inflight_since is not None \
                 and time.monotonic() - inflight_since > 240:
             with lock:
@@ -204,10 +204,9 @@ def main():
         root.mainloop()
         return
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    append("HABITAT", "1. Instala la extensión desde la carpeta extension.\n"
-           "2. Abre la conversación deseada en Chrome y déjala activa.\n"
-           "3. La extensión se vinculará automáticamente.\n"
-           "4. Cuando indique Extensión conectada, escribe aquí. Ctrl+Enter para enviar.", "muted")
+    append("HABITAT", "1. Mantén abierta en Chrome la conversación deseada.\n"
+           "2. La extensión se vincula y renueva la conexión automáticamente.\n"
+           "3. Cuando indique Extensión conectada, escribe aquí. Ctrl+Enter para enviar.", "muted")
     root.after(200, pump)
     def close():
         server.shutdown()

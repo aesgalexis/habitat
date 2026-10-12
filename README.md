@@ -11,6 +11,10 @@ Ventana de escritorio Windows para enviar mensajes **a una pestaña existente de
 5. Deja activa la conversación de ChatGPT elegida. La extensión se empareja automáticamente con HABITAT. El código y el botón del popup quedan disponibles como mecanismo manual de recuperación.
 6. Escribe en HABITAT y pulsa Enviar (o Ctrl+Enter). La respuesta de texto aparecerá en la ventana, además de quedar guardada en la conversación original de ChatGPT.
 
+Después del primer enlace, reiniciar HABITAT no requiere volver a abrir el
+popup ni activar Chrome: la pestaña vinculada detecta la nueva instancia local
+y renueva la clave automáticamente, aunque esté en segundo plano.
+
 Si actualizas los archivos de una extensión ya cargada, pulsa **Recargar** en
 `chrome://extensions` y recarga después la pestaña de ChatGPT. Un contexto
 anterior puede mostrar `Extension context invalidated` hasta que se recargue la

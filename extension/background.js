@@ -3,13 +3,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   (async () => {
     if (!isChatGPT(sender.tab?.url)) return {error:"Not a ChatGPT tab"};
     let s = await chrome.storage.local.get(["habitatKey","habitatTab","habitatUrl"]);
-    if (!s.habitatKey || sender.tab.id !== s.habitatTab ||
-        normalizeUrl(sender.tab.url) !== s.habitatUrl) {
+    const senderUrl=normalizeUrl(sender.tab.url);
+    const knownBinding=sender.tab.id===s.habitatTab && senderUrl===s.habitatUrl;
+    if (!knownBinding) {
       if (!sender.tab.active) return {error:"Open the ChatGPT tab to pair it"};
       s = await pairTab(sender.tab);
       if (!s) return {error:"HABITAT desktop app is unavailable"};
+    } else if (!s.habitatKey) {
+      // A known bound tab may recover the local key even while it is in the
+      // background. This is what makes restarting HABITAT self-healing.
+      s = await pairTab(sender.tab);
+      if (!s) return {error:"HABITAT desktop app is unavailable"};
     }
-    if (normalizeUrl(sender.tab.url) !== s.habitatUrl) {
+    if (senderUrl !== s.habitatUrl) {
       return {error:"The linked tab changed conversation"};
     }
     if (request.kind !== "next" && request.kind !== "event") return {error:"Invalid operation"};
@@ -22,7 +28,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     };
     try {
       let response=await run(s);
-      if(response.status===403 && sender.tab.active) {
+      // HABITAT generates a fresh key on every launch. The already-bound tab
+      // is allowed to renew it without requiring the user to foreground Chrome.
+      if(response.status===403 && (knownBinding || sender.tab.active)) {
         const refreshed=await pairTab(sender.tab);
         if(refreshed) response=await run(refreshed);
       }
