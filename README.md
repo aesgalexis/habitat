@@ -1,57 +1,49 @@
-# HABITAT — MVP 0.1
+# HABITAT — WinUI 3
 
-Ventana de escritorio Windows para enviar mensajes **a una pestaña existente de ChatGPT** y mostrar sus respuestas en HABITAT. No usa la API de modelos ni crea otro historial: escribe en la interfaz web de la conversación seleccionada.
+Aplicación de escritorio nativa para Windows que permite escribir en una pestaña existente de ChatGPT y recibir sus respuestas dentro de HABITAT. Usa la sesión real de Chrome: no consume la API de OpenAI ni crea otra conversación.
 
-## Ejecutar (Windows)
+## Ejecutar
 
-1. Instala Python 3.11+ si no lo tienes.
-2. En la carpeta del repositorio abre `HABITAT.vbs` para iniciarlo sin consola. También puedes usar `iniciar-habitat.bat`, que arranca la aplicación con `pythonw` y cierra inmediatamente su ventana. No hacen falta paquetes adicionales.
-3. En Chrome abre `chrome://extensions`, activa **Modo desarrollador**, elige **Cargar descomprimida** y selecciona la carpeta `extension`.
-4. Abre **esta misma conversación** de ChatGPT en Chrome e inicia sesión si hace falta.
-5. Deja activa la conversación de ChatGPT elegida. La extensión se empareja automáticamente con HABITAT. El código y el botón del popup quedan disponibles como mecanismo manual de recuperación.
-6. Escribe en HABITAT y pulsa Enter o el botón Enviar. Usa Shift+Enter para añadir una línea. La respuesta de texto aparecerá en la ventana, además de quedar guardada en la conversación original de ChatGPT.
+1. Abre `HABITAT.vbs`. Inicia la aplicación sin mostrar una consola.
+2. En Chrome, abre la conversación de ChatGPT que quieras mantener vinculada.
+3. Si aún no está instalada, carga `extension` desde `chrome://extensions` con **Modo desarrollador → Cargar descomprimida**.
+4. Espera a que HABITAT muestre **Extensión conectada**.
 
-Después del primer enlace, reiniciar HABITAT no requiere volver a abrir el
-popup ni activar Chrome: la pestaña vinculada detecta la nueva instancia local
-y renueva la clave automáticamente, aunque esté en segundo plano.
+La extensión se vuelve a emparejar automáticamente cuando HABITAT cambia su clave al reiniciarse. El código manual sigue disponible en el menú de tres puntos como mecanismo de recuperación.
 
-Si actualizas los archivos de una extensión ya cargada, pulsa **Recargar** en
-`chrome://extensions` y recarga después la pestaña de ChatGPT. Un contexto
-anterior puede mostrar `Extension context invalidated` hasta que se recargue la
-pestaña.
+En el editor, Enter envía el mensaje y Shift+Enter inserta un salto de línea. Las respuestas de texto vuelven a HABITAT y permanecen también en la conversación original de ChatGPT.
 
-**Importante:** deja la pestaña abierta. Puedes estar en otras ventanas. El modelo y la memoria son los que ChatGPT tenga seleccionados en esa conversación. Las respuestas con widgets, archivos, imágenes u otras UI complejas no se reproducen aquí; consúltalas en Chrome.
+## Compilar
 
-## Límites y seguridad
+Requisitos de desarrollo:
 
-- Prueba experimental, **no comprobada aún contra la versión concreta de ChatGPT que tienes abierta**. Sus selectores HTML pueden cambiar; si falla, revisa `extension/content.js`.
-- La extensión puede interactuar con tu sesión ChatGPT, por lo que conviene instalarla solo desde código que hayas revisado. No publiques el código de vinculación.
-- El servidor escucha **solo en 127.0.0.1:8765** y exige una clave aleatoria nueva en cada ejecución. No expone una API pública. La extensión renueva el código automáticamente; el menú de tres puntos permite copiarlo si alguna vez hace falta recuperarlo manualmente.
-- No intentes enviar otra pregunta hasta que la anterior termine. Hay un timeout de 3 minutos. Un mensaje enviado que falle a mitad podría haber llegado igualmente a ChatGPT: comprueba Chrome antes de repetirlo.
-- El vínculo queda fijado a la URL de la conversación elegida. Si navegas a otra conversación en esa misma pestaña, HABITAT deja de enviar hasta que vuelvas a vincularla de forma explícita.
-- No garantiza representar estados complejos (herramientas, preguntas de confirmación, streaming, cambios de modelo, contenido no textual). Tampoco hay garantía de estabilidad ni soporte oficial para esta automatización.
-- El contenido de la conversación seguirá en ChatGPT. HABITAT solo presenta copias del texto mientras se ejecuta.
+- Windows 10, versión 2004 o posterior.
+- SDK de .NET 10.
+- Plantillas oficiales `Microsoft.WindowsAppSDK.WinUI.CSharp.Templates`.
 
-## Siguiente paso
+Genera la versión autocontenida x64 con:
 
-Una vez validado el puente en Windows, sustituir Tkinter por una superficie visual más cuidada (por ejemplo Tauri) y añadir un fondo dinámico. Primero validar que la comunicación funciona.
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build-winui.ps1
+```
+
+El resultado se guarda en `artifacts\win-x64`. Es una aplicación WinUI 3 sin paquete, por lo que no necesita Modo de desarrollador ni abre una consola. La solución es `Habitat.sln` y el proyecto principal está en `src\Habitat.App`.
+
+## Seguridad y límites
+
+- El servidor escucha exclusivamente en `127.0.0.1:8765` y exige una clave aleatoria nueva en cada ejecución.
+- No publiques el código de vinculación.
+- El vínculo queda fijado a la URL de la conversación elegida. Si esa pestaña navega a otra conversación, hay que volver a vincularla.
+- Los selectores de la extensión dependen de la interfaz web de ChatGPT y pueden requerir mantenimiento cuando ésta cambie.
+- Widgets, archivos, imágenes y otras interfaces complejas no se reproducen en HABITAT; consúltalos en Chrome.
+- No repitas un envío fallido sin revisar antes Chrome: el mensaje podría haber llegado aunque la confirmación no haya vuelto.
 
 ## Checkpoints automáticos en GitHub
 
-El repositorio incluye hooks versionados en `.githooks` para trabajar en la
-rama segura `codex/autosave`. Antes de cada commit se bloquean archivos y
-patrones habituales de credenciales; antes de cada push se validan Python,
-JavaScript y el manifiesto de la extensión. Después de un commit correcto, el
-hook `post-commit` lo sube automáticamente a `origin/codex/autosave`.
+Los hooks versionados en `.githooks` trabajan sobre la rama `codex/autosave`. Antes de subir, compilan la solución C#, validan la extensión y revisan el diff. El hook `post-commit` envía automáticamente el commit a `origin/codex/autosave`.
 
-En un clon nuevo, activa los hooks una vez con:
+Activa los hooks en un clon nuevo con:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\instalar-autopush.ps1
-```
-
-Para crear un checkpoint manual (el push posterior es automático):
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\checkpoint.ps1 -Message "descripción del cambio"
 ```

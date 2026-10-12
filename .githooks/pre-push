@@ -5,7 +5,9 @@ repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root"
 
 echo "HABITAT: validando antes de subir..."
-python -c "import ast, pathlib; ast.parse(pathlib.Path('app.py').read_text(encoding='utf-8'))"
+DOTNET_CLI_HOME="$repo_root/.dotnet-local" \
+NUGET_PACKAGES="$repo_root/.nuget/packages" \
+dotnet build Habitat.sln --configuration Release -p:Platform=x64 --no-restore
 node --check extension/background.js
 node --check extension/content.js
 node --check extension/connect.js

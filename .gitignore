@@ -3,6 +3,17 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+.dotnet-local/
+.nuget/
+
+# .NET / WinUI build outputs
+bin/
+obj/
+AppPackages/
+BundleArtifacts/
+artifacts/
+*.user
+*.suo
 
 # Local configuration and secrets
 .env

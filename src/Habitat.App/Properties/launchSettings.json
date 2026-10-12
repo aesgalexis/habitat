@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Habitat.App (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "Habitat.App (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
