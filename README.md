@@ -5,11 +5,11 @@ Ventana de escritorio Windows para enviar mensajes **a una pestaña existente de
 ## Ejecutar (Windows)
 
 1. Instala Python 3.11+ si no lo tienes.
-2. En la carpeta del repositorio ejecuta `iniciar-habitat.bat` o `python app.py`. No hacen falta paquetes adicionales.
+2. En la carpeta del repositorio abre `HABITAT.vbs` para iniciarlo sin consola. También puedes usar `iniciar-habitat.bat`, que arranca la aplicación con `pythonw` y cierra inmediatamente su ventana. No hacen falta paquetes adicionales.
 3. En Chrome abre `chrome://extensions`, activa **Modo desarrollador**, elige **Cargar descomprimida** y selecciona la carpeta `extension`.
 4. Abre **esta misma conversación** de ChatGPT en Chrome e inicia sesión si hace falta.
 5. Deja activa la conversación de ChatGPT elegida. La extensión se empareja automáticamente con HABITAT. El código y el botón del popup quedan disponibles como mecanismo manual de recuperación.
-6. Escribe en HABITAT y pulsa Enviar (o Ctrl+Enter). La respuesta de texto aparecerá en la ventana, además de quedar guardada en la conversación original de ChatGPT.
+6. Escribe en HABITAT y pulsa Enter o el botón Enviar. Usa Shift+Enter para añadir una línea. La respuesta de texto aparecerá en la ventana, además de quedar guardada en la conversación original de ChatGPT.
 
 Después del primer enlace, reiniciar HABITAT no requiere volver a abrir el
 popup ni activar Chrome: la pestaña vinculada detecta la nueva instancia local
@@ -26,7 +26,7 @@ pestaña.
 
 - Prueba experimental, **no comprobada aún contra la versión concreta de ChatGPT que tienes abierta**. Sus selectores HTML pueden cambiar; si falla, revisa `extension/content.js`.
 - La extensión puede interactuar con tu sesión ChatGPT, por lo que conviene instalarla solo desde código que hayas revisado. No publiques el código de vinculación.
-- El servidor escucha **solo en 127.0.0.1:8765** y exige una clave aleatoria nueva en cada ejecución. No expone una API pública. Si reinicias HABITAT, vuelve a pegar el nuevo código en la extensión.
+- El servidor escucha **solo en 127.0.0.1:8765** y exige una clave aleatoria nueva en cada ejecución. No expone una API pública. La extensión renueva el código automáticamente; el menú de tres puntos permite copiarlo si alguna vez hace falta recuperarlo manualmente.
 - No intentes enviar otra pregunta hasta que la anterior termine. Hay un timeout de 3 minutos. Un mensaje enviado que falle a mitad podría haber llegado igualmente a ChatGPT: comprueba Chrome antes de repetirlo.
 - El vínculo queda fijado a la URL de la conversación elegida. Si navegas a otra conversación en esa misma pestaña, HABITAT deja de enviar hasta que vuelvas a vincularla de forma explícita.
 - No garantiza representar estados complejos (herramientas, preguntas de confirmación, streaming, cambios de modelo, contenido no textual). Tampoco hay garantía de estabilidad ni soporte oficial para esta automatización.
