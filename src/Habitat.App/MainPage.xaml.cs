@@ -120,7 +120,10 @@ public sealed class MainPage : Page
         Composer.TextWrapping = TextWrapping.Wrap;
         Composer.PlaceholderText = "Escribe a ChatGPT…";
         Composer.BorderThickness = new Thickness(0);
-        Composer.KeyDown += Composer_KeyDown;
+        // TextBox handles Enter internally when AcceptsReturn is enabled.
+        // Listen to handled routed events as well so plain Enter always sends,
+        // while Shift+Enter is left to the TextBox to insert a line break.
+        Composer.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(Composer_KeyDown), true);
         composerGrid.Children.Add(Composer);
         SendButton.Content = "Enviar";
         SendButton.Padding = new Thickness(20, 10, 20, 10);
