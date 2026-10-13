@@ -26,6 +26,9 @@ public sealed class MainPage : Page
     private BridgeService? _bridge;
     private Preferences _preferences = Preferences.Load();
     private string _activeModel = "MODEL";
+    private bool _hybridDark;
+    private bool _appearanceDialogOpen;
+    private DateTimeOffset _nextHybridProbe = DateTimeOffset.MinValue;
 
     public MainPage(BridgeService bridge)
     {
@@ -55,6 +58,7 @@ public sealed class MainPage : Page
         OverflowButton.Content = "•••";
         OverflowButton.Width = 34;
         OverflowButton.Height = 34;
+        OverflowButton.IsTabStop = false;
         OverflowButton.Padding = new Thickness(0);
         OverflowButton.BorderThickness = new Thickness(0);
         OptionsMenu.Placement = FlyoutPlacementMode.BottomEdgeAlignedRight;
@@ -92,11 +96,13 @@ public sealed class MainPage : Page
         Composer.TextWrapping = TextWrapping.Wrap;
         Composer.PlaceholderText = string.Empty;
         Composer.BorderThickness = new Thickness(0);
+        Composer.IsTabStop = true;
         // Handle Enter before TextBox processes it. Plain Enter sends without
         // adding a newline; Shift+Enter reaches TextBox and inserts one.
         Composer.AddHandler(UIElement.PreviewKeyDownEvent, new KeyEventHandler(Composer_KeyDown), true);
         composerGrid.Children.Add(Composer);
         SendButton.Content = "Send";
+        SendButton.IsTabStop = false;
         SendButton.Padding = new Thickness(12, 9, 0, 9);
         SendButton.BorderThickness = new Thickness(0);
         SendButton.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
@@ -173,6 +179,12 @@ public sealed class MainPage : Page
 
     private void Timer_Tick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
     {
+        if (_preferences.Theme == "hybrid" && !_appearanceDialogOpen && DateTimeOffset.UtcNow >= _nextHybridProbe)
+        {
+            RefreshHybridAppearance();
+            _nextHybridProbe = DateTimeOffset.UtcNow.AddMilliseconds(750);
+        }
+
         if (_bridge is null)
         {
             return;
@@ -302,14 +314,16 @@ public sealed class MainPage : Page
         var theme = new ComboBox
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            ItemsSource = new[] { "Day", "Night" },
-            SelectedIndex = _preferences.Theme == "night" ? 1 : 0
+            ItemsSource = new[] { "Day", "Night", "Hybrid" },
+            SelectedIndex = _preferences.Theme switch { "night" => 1, "hybrid" => 2, _ => 0 }
         };
         theme.SelectionChanged += (_, _) =>
         {
-            RequestedTheme = theme.SelectedIndex == 1 ? ElementTheme.Dark : ElementTheme.Light;
+            var dark = theme.SelectedIndex == 1 ||
+                (theme.SelectedIndex == 2 && DetectHybridTheme());
+            RequestedTheme = dark ? ElementTheme.Dark : ElementTheme.Light;
             ((App)Application.Current).MainWindow?.SetBackgroundAppearance(
-                opacity.Value, RequestedTheme == ElementTheme.Dark);
+                opacity.Value, dark);
         };
 
         var panel = new StackPanel { Spacing = 10, MinWidth = 360 };
@@ -333,11 +347,13 @@ public sealed class MainPage : Page
             DefaultButton = ContentDialogButton.Close
         };
         StyleDialog(dialog);
+        _appearanceDialogOpen = true;
         await dialog.ShowAsync();
+        _appearanceDialogOpen = false;
 
         _preferences = _preferences with
         {
-            Theme = theme.SelectedIndex == 1 ? "night" : "day",
+            Theme = theme.SelectedIndex switch { 1 => "night", 2 => "hybrid", _ => "day" },
             Opacity = opacity.Value
         };
         _preferences.Save();
@@ -390,9 +406,39 @@ public sealed class MainPage : Page
 
     private void ApplyPreferences()
     {
+        if (_preferences.Theme == "hybrid")
+        {
+            RefreshHybridAppearance(force: true);
+            return;
+        }
+
         RequestedTheme = _preferences.Theme == "night" ? ElementTheme.Dark : ElementTheme.Light;
         ((App)Application.Current).MainWindow?.SetBackgroundAppearance(
             _preferences.Opacity, RequestedTheme == ElementTheme.Dark);
+    }
+
+    private bool DetectHybridTheme()
+    {
+        var window = ((App)Application.Current).MainWindow;
+        return window?.DetectBackdropIsDark(_hybridDark) ?? _hybridDark;
+    }
+
+    public void RefreshHybridAppearance(bool force = false)
+    {
+        if (_preferences.Theme != "hybrid")
+        {
+            return;
+        }
+
+        var dark = DetectHybridTheme();
+        if (!force && dark == _hybridDark)
+        {
+            return;
+        }
+
+        _hybridDark = dark;
+        RequestedTheme = dark ? ElementTheme.Dark : ElementTheme.Light;
+        ((App)Application.Current).MainWindow?.SetBackgroundAppearance(_preferences.Opacity, dark);
     }
 
     public void SetBackgroundOpacity(double percent)
@@ -403,7 +449,11 @@ public sealed class MainPage : Page
 
     public void FocusComposer()
     {
-        DispatcherQueue.TryEnqueue(() => Composer.Focus(FocusState.Programmatic));
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            Composer.Focus(FocusState.Keyboard);
+            Composer.Select(Composer.Text.Length, 0);
+        });
     }
 
     public void RestoreWindowPlacement(Microsoft.UI.Windowing.AppWindow appWindow)
@@ -570,7 +620,7 @@ internal sealed record Preferences(string Theme, double Opacity)
         try
         {
             var saved = JsonSerializer.Deserialize<Preferences>(File.ReadAllText(FilePath));
-            if (saved is not null && saved.Theme is "day" or "night")
+            if (saved is not null && saved.Theme is "day" or "night" or "hybrid")
             {
                 return saved with { Opacity = Math.Clamp(saved.Opacity, 0, 100) };
             }

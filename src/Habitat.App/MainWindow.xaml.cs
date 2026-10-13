@@ -2,6 +2,7 @@ using Habitat.Services;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Xaml;
+using System.Runtime.InteropServices;
 using Windows.UI;
 using WinRT;
 
@@ -9,6 +10,11 @@ namespace Habitat;
 
 public sealed class MainWindow : Window
 {
+    private const int SmXVirtualScreen = 76;
+    private const int SmYVirtualScreen = 77;
+    private const int SmCxVirtualScreen = 78;
+    private const int SmCyVirtualScreen = 79;
+
     private readonly BridgeService _bridge;
     private readonly MainPage _page;
     private readonly DesktopAcrylicController? _acrylic;
@@ -103,10 +109,78 @@ public sealed class MainWindow : Window
         }
     }
 
-    private void OnActivated(object sender, WindowActivatedEventArgs args)
+    public bool DetectBackdropIsDark(bool current)
+    {
+        var position = AppWindow.Position;
+        var size = AppWindow.Size;
+        const int gap = 20;
+        var xs = new[] { position.X + size.Width / 5, position.X + size.Width / 2, position.X + size.Width * 4 / 5 };
+        var ys = new[] { position.Y + size.Height / 5, position.Y + size.Height / 2, position.Y + size.Height * 4 / 5 };
+        var points = new List<(int X, int Y)>();
+        foreach (var x in xs)
+        {
+            points.Add((x, position.Y - gap));
+            points.Add((x, position.Y + size.Height + gap));
+        }
+        foreach (var y in ys)
+        {
+            points.Add((position.X - gap, y));
+            points.Add((position.X + size.Width + gap, y));
+        }
+
+        var virtualLeft = GetSystemMetrics(SmXVirtualScreen);
+        var virtualTop = GetSystemMetrics(SmYVirtualScreen);
+        var virtualRight = virtualLeft + GetSystemMetrics(SmCxVirtualScreen);
+        var virtualBottom = virtualTop + GetSystemMetrics(SmCyVirtualScreen);
+        var luminances = new List<double>();
+        var screen = GetDC(IntPtr.Zero);
+        if (screen == IntPtr.Zero)
+        {
+            return current;
+        }
+
+        try
+        {
+            foreach (var point in points)
+            {
+                if (point.X < virtualLeft || point.X >= virtualRight || point.Y < virtualTop || point.Y >= virtualBottom)
+                {
+                    continue;
+                }
+
+                var pixel = GetPixel(screen, point.X, point.Y);
+                if (pixel == 0xFFFFFFFF)
+                {
+                    continue;
+                }
+
+                var red = pixel & 0xFF;
+                var green = (pixel >> 8) & 0xFF;
+                var blue = (pixel >> 16) & 0xFF;
+                luminances.Add((0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255d);
+            }
+        }
+        finally
+        {
+            ReleaseDC(IntPtr.Zero, screen);
+        }
+
+        if (luminances.Count == 0)
+        {
+            return current;
+        }
+
+        luminances.Sort();
+        var median = luminances[luminances.Count / 2];
+        return current ? median < 0.58 : median < 0.42;
+    }
+
+    private async void OnActivated(object sender, WindowActivatedEventArgs args)
     {
         if (args.WindowActivationState != WindowActivationState.Deactivated)
         {
+            _page.RefreshHybridAppearance(force: true);
+            await Task.Delay(80);
             _page.FocusComposer();
         }
     }
@@ -117,4 +191,16 @@ public sealed class MainWindow : Window
         _acrylic?.Dispose();
         await _bridge.DisposeAsync();
     }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetDC(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern int ReleaseDC(IntPtr window, IntPtr deviceContext);
+
+    [DllImport("gdi32.dll")]
+    private static extern uint GetPixel(IntPtr deviceContext, int x, int y);
+
+    [DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int index);
 }
