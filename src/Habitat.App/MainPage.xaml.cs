@@ -163,6 +163,37 @@ public sealed class MainPage : Page
         var height = _root.ActualHeight;
         if (height <= 0) return;
 
+        var historyTop = _header.Margin.Top + _header.ActualHeight + 10;
+        ConversationScroll.Margin = new Thickness(0, historyTop, 0, 0);
+        if (Conversation.Children.Count > 0)
+        {
+            const double bottomPadding = 24;
+            var sendWidth = SendButton.ActualWidth > 0 ? SendButton.ActualWidth : 60;
+            Composer.MaxHeight = 180;
+            Composer.TextAlignment = TextAlignment.Left;
+            Composer.VerticalContentAlignment = VerticalAlignment.Top;
+            Composer.VerticalAlignment = VerticalAlignment.Bottom;
+            Composer.Margin = new Thickness(0, 0, sendWidth + 10, bottomPadding);
+            SendButton.HorizontalAlignment = HorizontalAlignment.Right;
+            SendButton.VerticalAlignment = VerticalAlignment.Bottom;
+            SendButton.Padding = new Thickness(12, 9, 0, 9);
+            SendButton.Margin = new Thickness(0, 0, 0, bottomPadding);
+
+            var editorHeight = Composer.ActualHeight > 0 ? Composer.ActualHeight : Composer.MinHeight;
+            ConversationScroll.Visibility = Visibility.Visible;
+            ConversationScroll.Height = Math.Max(0, height - bottomPadding - editorHeight - 10 - historyTop);
+            return;
+        }
+
+        // The centered writing layout is only the welcome state. The first
+        // message restores the bottom composer and gives the history space.
+        Composer.TextAlignment = TextAlignment.Center;
+        Composer.VerticalContentAlignment = VerticalAlignment.Center;
+        Composer.VerticalAlignment = VerticalAlignment.Top;
+        SendButton.HorizontalAlignment = HorizontalAlignment.Center;
+        SendButton.VerticalAlignment = VerticalAlignment.Top;
+        SendButton.Padding = new Thickness(12, 9, 12, 9);
+        ConversationScroll.Visibility = Visibility.Collapsed;
         var sendHeight = SendButton.ActualHeight > 0 ? SendButton.ActualHeight : 38;
         // Reserve space between the midpoint and two-thirds anchor even when
         // a multiline draft grows; longer drafts scroll inside the editor.
@@ -174,9 +205,6 @@ public sealed class MainPage : Page
         Composer.Margin = new Thickness(0, composerTop, 0, 0);
         SendButton.Margin = new Thickness(0, sendTop, 0, 0);
 
-        var historyTop = _header.Margin.Top + _header.ActualHeight + 10;
-        ConversationScroll.Margin = new Thickness(0, historyTop, 0, 0);
-        ConversationScroll.Height = Math.Max(0, composerTop - historyTop - 16);
     }
 
     private void MainPage_Loaded(object sender, RoutedEventArgs e)
@@ -427,6 +455,7 @@ public sealed class MainPage : Page
             Foreground = TextBrush()
         });
         Conversation.Children.Add(group);
+        UpdateWritingLayout();
         ConversationScroll.UpdateLayout();
         ConversationScroll.ChangeView(null, ConversationScroll.ScrollableHeight, null);
     }
