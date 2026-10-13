@@ -19,7 +19,7 @@ public sealed class MainWindow : Window
     {
         _bridge = bridge;
         Title = "HABITAT";
-        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico");
+        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "HabitatDot.ico");
         if (File.Exists(iconPath)) AppWindow.SetIcon(iconPath);
         _page = new MainPage(bridge);
         Content = _page;
@@ -82,7 +82,7 @@ public sealed class MainWindow : Window
 
     public void SetStatusPresentation(string text, string status)
     {
-        Title = string.IsNullOrWhiteSpace(text) ? "HABITAT" : $"HABITAT — {text}";
+        Title = string.IsNullOrWhiteSpace(text) ? "HABITAT" : $"HABITAT - {text}";
         var normalized = status switch
         {
             "Success" => "Success",

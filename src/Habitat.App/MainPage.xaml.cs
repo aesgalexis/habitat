@@ -7,7 +7,6 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Ellipse = Microsoft.UI.Xaml.Shapes.Ellipse;
 using System.Text.Json;
 using Windows.System;
 using Windows.UI.Core;
@@ -18,8 +17,6 @@ public sealed class MainPage : Page
 {
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _timer;
     private readonly Grid _root = new();
-    private readonly TextBlock StatusText = new();
-    private readonly Ellipse StatusDot = new();
     private readonly ScrollViewer ConversationScroll = new();
     private readonly StackPanel Conversation = new();
     private readonly TextBox Composer = new();
@@ -54,17 +51,6 @@ public sealed class MainPage : Page
         var header = new Grid { ColumnSpacing = 12 };
         header.ColumnDefinitions.Add(new ColumnDefinition());
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-        StatusDot.Width = 6;
-        StatusDot.Height = 6;
-        StatusText.Text = "Starting bridge…";
-        StatusText.FontSize = 12;
-        StatusText.VerticalAlignment = VerticalAlignment.Center;
-        var statusRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 7 };
-        statusRow.Children.Add(StatusDot);
-        statusRow.Children.Add(StatusText);
-        Grid.SetColumn(statusRow, 0);
-        header.Children.Add(statusRow);
 
         OverflowButton.Content = "•••";
         OverflowButton.Width = 34;
@@ -104,7 +90,7 @@ public sealed class MainPage : Page
         Composer.FontFamily = new FontFamily("Cascadia Mono");
         Composer.AcceptsReturn = true;
         Composer.TextWrapping = TextWrapping.Wrap;
-        Composer.PlaceholderText = ">";
+        Composer.PlaceholderText = string.Empty;
         Composer.BorderThickness = new Thickness(0);
         // Handle Enter before TextBox processes it. Plain Enter sends without
         // adding a newline; Shift+Enter reaches TextBox and inserts one.
@@ -275,15 +261,6 @@ public sealed class MainPage : Page
 
     private void SetStatus(string text, StatusTone tone)
     {
-        StatusText.Text = text;
-        var dark = RequestedTheme == ElementTheme.Dark;
-        StatusDot.Fill = new SolidColorBrush(tone switch
-        {
-            StatusTone.Success => Color(0xFF, dark ? 0x55 : 0x24, dark ? 0xC7 : 0x84, dark ? 0x9C : 0x5F),
-            StatusTone.Danger => Color(0xFF, dark ? 0xED : 0xB8, dark ? 0x71 : 0x42, dark ? 0x81 : 0x58),
-            StatusTone.Warning => Color(0xFF, dark ? 0xE2 : 0xA9, dark ? 0xA0 : 0x63, dark ? 0x6B : 0x31),
-            _ => Color(0xFF, dark ? 0x89 : 0x66, dark ? 0x95 : 0x74, dark ? 0xFF : 0xF4)
-        });
         ((App)Application.Current).MainWindow?.SetStatusPresentation(text, tone.ToString());
     }
 
@@ -482,7 +459,6 @@ public sealed class MainPage : Page
         var hover = new SolidColorBrush(dark ? Color(0x33, 0xFF, 0xFF, 0xFF) : Color(0x12, 0, 0, 0));
 
         _root.Background = canvas;
-        StatusText.Foreground = muted;
         Composer.Background = transparent;
         Composer.BorderBrush = transparent;
         Composer.Foreground = text;
