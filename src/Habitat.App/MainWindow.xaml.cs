@@ -13,6 +13,7 @@ public sealed class MainWindow : Window
     private readonly MainPage _page;
     private readonly DesktopAcrylicController? _acrylic;
     private readonly SystemBackdropConfiguration? _backdropConfiguration;
+    private string _statusIcon = string.Empty;
 
     public MainWindow(BridgeService bridge)
     {
@@ -42,14 +43,17 @@ public sealed class MainWindow : Window
         var foreground = dark
             ? Color.FromArgb(0xFF, 0xEE, 0xF3, 0xFB)
             : Color.FromArgb(0xFF, 0x1B, 0x24, 0x34);
+        var titleBackground = dark
+            ? Color.FromArgb(0xFF, 0x00, 0x00, 0x00)
+            : Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF);
         var transparent = Color.FromArgb(0, 0, 0, 0);
         var hover = dark
             ? Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)
             : Color.FromArgb(0x22, 0, 0, 0);
 
         var titleBar = AppWindow.TitleBar;
-        titleBar.BackgroundColor = tint;
-        titleBar.InactiveBackgroundColor = tint;
+        titleBar.BackgroundColor = titleBackground;
+        titleBar.InactiveBackgroundColor = titleBackground;
         titleBar.ForegroundColor = foreground;
         titleBar.InactiveForegroundColor = foreground;
         titleBar.ButtonBackgroundColor = transparent;
@@ -70,6 +74,28 @@ public sealed class MainWindow : Window
             _acrylic.LuminosityOpacity = opacity;
         }
         _page.SetBackgroundOpacity(percent);
+    }
+
+    public void SetStatusIcon(string status)
+    {
+        var normalized = status switch
+        {
+            "Success" => "Success",
+            "Warning" => "Warning",
+            "Danger" => "Danger",
+            _ => "Active"
+        };
+        if (_statusIcon == normalized)
+        {
+            return;
+        }
+
+        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", $"Status{normalized}.ico");
+        if (File.Exists(iconPath))
+        {
+            AppWindow.SetIcon(iconPath);
+            _statusIcon = normalized;
+        }
     }
 
     private async void OnClosed(object sender, WindowEventArgs args)

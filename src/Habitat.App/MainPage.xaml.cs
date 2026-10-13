@@ -20,7 +20,6 @@ public sealed class MainPage : Page
     private readonly Grid _root = new();
     private readonly TextBlock StatusText = new();
     private readonly Ellipse StatusDot = new();
-    private readonly TextBlock PromptGlyph = new();
     private readonly ScrollViewer ConversationScroll = new();
     private readonly StackPanel Conversation = new();
     private readonly TextBox Composer = new();
@@ -96,25 +95,19 @@ public sealed class MainPage : Page
         _root.Children.Add(ConversationScroll);
 
         var composerGrid = new Grid { ColumnSpacing = 10 };
-        composerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         composerGrid.ColumnDefinitions.Add(new ColumnDefinition());
         composerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        PromptGlyph.Text = ">";
-        PromptGlyph.FontFamily = new FontFamily("Cascadia Mono");
-        PromptGlyph.FontSize = 18;
-        PromptGlyph.VerticalAlignment = VerticalAlignment.Center;
-        composerGrid.Children.Add(PromptGlyph);
         Composer.MinHeight = 58;
         Composer.MaxHeight = 180;
         Composer.Padding = new Thickness(0, 9, 0, 9);
+        Composer.FontFamily = new FontFamily("Cascadia Mono");
         Composer.AcceptsReturn = true;
         Composer.TextWrapping = TextWrapping.Wrap;
-        Composer.PlaceholderText = string.Empty;
+        Composer.PlaceholderText = ">";
         Composer.BorderThickness = new Thickness(0);
         // Handle Enter before TextBox processes it. Plain Enter sends without
         // adding a newline; Shift+Enter reaches TextBox and inserts one.
         Composer.AddHandler(UIElement.PreviewKeyDownEvent, new KeyEventHandler(Composer_KeyDown), true);
-        Grid.SetColumn(Composer, 1);
         composerGrid.Children.Add(Composer);
         SendButton.Content = "Send";
         SendButton.Padding = new Thickness(12, 9, 0, 9);
@@ -122,7 +115,7 @@ public sealed class MainPage : Page
         SendButton.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
         SendButton.VerticalAlignment = VerticalAlignment.Bottom;
         SendButton.Click += SendButton_Click;
-        Grid.SetColumn(SendButton, 2);
+        Grid.SetColumn(SendButton, 1);
         composerGrid.Children.Add(SendButton);
         Grid.SetRow(composerGrid, 2);
         _root.Children.Add(composerGrid);
@@ -134,6 +127,7 @@ public sealed class MainPage : Page
     private void MainPage_Loaded(object sender, RoutedEventArgs e)
     {
         ApplyPreferences();
+        SetStatus("Starting bridge…", StatusTone.Active);
         _timer.Start();
         Composer.Focus(FocusState.Programmatic);
     }
@@ -286,6 +280,7 @@ public sealed class MainPage : Page
             StatusTone.Warning => Color(0xFF, dark ? 0xE2 : 0xA9, dark ? 0xA0 : 0x63, dark ? 0x6B : 0x31),
             _ => Color(0xFF, dark ? 0x89 : 0x66, dark ? 0x95 : 0x74, dark ? 0xFF : 0xF4)
         });
+        ((App)Application.Current).MainWindow?.SetStatusIcon(tone.ToString());
     }
 
     private Brush ToneBrush(MessageTone tone)
@@ -429,7 +424,6 @@ public sealed class MainPage : Page
 
         _root.Background = canvas;
         StatusText.Foreground = muted;
-        PromptGlyph.Foreground = accent;
         Composer.Background = transparent;
         Composer.BorderBrush = transparent;
         Composer.Foreground = text;
@@ -474,7 +468,7 @@ public sealed class MainPage : Page
             "TextControlPlaceholderForegroundFocused"
         })
         {
-            Composer.Resources[key] = muted;
+            Composer.Resources[key] = text;
         }
         foreach(var key in new[]
         {
