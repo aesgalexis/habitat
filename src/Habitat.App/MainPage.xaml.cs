@@ -332,7 +332,8 @@ public sealed class MainPage : Page
         opacity.ValueChanged += (_, args) =>
         {
             opacityValue.Text = $"{args.NewValue:0}%";
-            ((App)Application.Current).MainWindow?.SetBackgroundOpacity(args.NewValue);
+            ((App)Application.Current).MainWindow?.SetBackgroundAppearance(
+                args.NewValue, RequestedTheme == ElementTheme.Dark);
         };
         var theme = new ComboBox
         {
@@ -343,7 +344,8 @@ public sealed class MainPage : Page
         theme.SelectionChanged += (_, _) =>
         {
             RequestedTheme = theme.SelectedIndex == 1 ? ElementTheme.Dark : ElementTheme.Light;
-            PaintSurface();
+            ((App)Application.Current).MainWindow?.SetBackgroundAppearance(
+                opacity.Value, RequestedTheme == ElementTheme.Dark);
         };
 
         var panel = new StackPanel { Spacing = 10, MinWidth = 360 };
@@ -413,7 +415,8 @@ public sealed class MainPage : Page
     private void ApplyPreferences()
     {
         RequestedTheme = _preferences.Theme == "night" ? ElementTheme.Dark : ElementTheme.Light;
-        ((App)Application.Current).MainWindow?.SetBackgroundOpacity(_preferences.Opacity);
+        ((App)Application.Current).MainWindow?.SetBackgroundAppearance(
+            _preferences.Opacity, RequestedTheme == ElementTheme.Dark);
     }
 
     public void SetBackgroundOpacity(double percent)
@@ -425,10 +428,10 @@ public sealed class MainPage : Page
     private void PaintSurface()
     {
         var dark = RequestedTheme == ElementTheme.Dark;
-        var alpha = (int)Math.Clamp(Math.Round(_preferences.Opacity * 2.55), 0, 255);
-        var canvas = new SolidColorBrush(dark ? Color(alpha, 0x10, 0x16, 0x23) : Color(alpha, 0xF2, 0xF6, 0xFB));
-        var surface = new SolidColorBrush(dark ? Color(alpha, 0x19, 0x21, 0x31) : Color(alpha, 0xF9, 0xFC, 0xFF));
-        var surfaceAlt = new SolidColorBrush(dark ? Color(alpha, 0x22, 0x2C, 0x3D) : Color(alpha, 0xED, 0xF2, 0xF8));
+        var surfaceAlpha = (int)Math.Clamp(Math.Round(_preferences.Opacity * 1.85), 0, 185);
+        var canvas = new SolidColorBrush(Color(0, 0, 0, 0));
+        var surface = new SolidColorBrush(dark ? Color(surfaceAlpha, 0x19, 0x21, 0x31) : Color(surfaceAlpha, 0xF9, 0xFC, 0xFF));
+        var surfaceAlt = new SolidColorBrush(dark ? Color(surfaceAlpha, 0x22, 0x2C, 0x3D) : Color(surfaceAlpha, 0xED, 0xF2, 0xF8));
         var border = new SolidColorBrush(dark ? Color(0xFF, 0x34, 0x41, 0x58) : Color(0xFF, 0xD7, 0xE0, 0xEA));
         var muted = new SolidColorBrush(dark ? Color(0xFF, 0xA1, 0xAE, 0xC1) : Color(0xFF, 0x6D, 0x7B, 0x91));
         var accent = new SolidColorBrush(dark ? Color(0xFF, 0x89, 0x95, 0xFF) : Color(0xFF, 0x66, 0x74, 0xF4));
@@ -482,7 +485,7 @@ internal sealed record Preferences(string Theme, double Opacity)
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
         catch (JsonException) { }
-        return new Preferences("day", 98);
+        return new Preferences("day", 85);
     }
 
     public void Save()
