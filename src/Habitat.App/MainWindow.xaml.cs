@@ -31,6 +31,7 @@ public sealed class MainWindow : Window
             _acrylic.SetSystemBackdropConfiguration(_backdropConfiguration);
         }
         AppWindow.Resize(new Windows.Graphics.SizeInt32(860, 720));
+        _page.RestoreWindowPlacement(AppWindow);
         Closed += OnClosed;
     }
 
@@ -40,30 +41,32 @@ public sealed class MainWindow : Window
         var tint = dark
             ? Color.FromArgb(0xFF, 0x10, 0x16, 0x23)
             : Color.FromArgb(0xFF, 0xF2, 0xF6, 0xFB);
-        var foreground = dark
-            ? Color.FromArgb(0xFF, 0xEE, 0xF3, 0xFB)
-            : Color.FromArgb(0xFF, 0x1B, 0x24, 0x34);
         var titleBackground = dark
             ? Color.FromArgb(0xFF, 0x00, 0x00, 0x00)
             : Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF);
-        var transparent = Color.FromArgb(0, 0, 0, 0);
+        var titleForeground = dark
+            ? Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF)
+            : Color.FromArgb(0xFF, 0x00, 0x00, 0x00);
         var hover = dark
-            ? Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)
-            : Color.FromArgb(0x22, 0, 0, 0);
+            ? Color.FromArgb(0xFF, 0x28, 0x28, 0x28)
+            : Color.FromArgb(0xFF, 0xE8, 0xE8, 0xE8);
+        var pressed = dark
+            ? Color.FromArgb(0xFF, 0x3A, 0x3A, 0x3A)
+            : Color.FromArgb(0xFF, 0xD5, 0xD5, 0xD5);
 
         var titleBar = AppWindow.TitleBar;
         titleBar.BackgroundColor = titleBackground;
         titleBar.InactiveBackgroundColor = titleBackground;
-        titleBar.ForegroundColor = foreground;
-        titleBar.InactiveForegroundColor = foreground;
-        titleBar.ButtonBackgroundColor = transparent;
-        titleBar.ButtonInactiveBackgroundColor = transparent;
-        titleBar.ButtonForegroundColor = foreground;
-        titleBar.ButtonInactiveForegroundColor = foreground;
+        titleBar.ForegroundColor = titleForeground;
+        titleBar.InactiveForegroundColor = titleForeground;
+        titleBar.ButtonBackgroundColor = titleBackground;
+        titleBar.ButtonInactiveBackgroundColor = titleBackground;
+        titleBar.ButtonForegroundColor = titleForeground;
+        titleBar.ButtonInactiveForegroundColor = titleForeground;
         titleBar.ButtonHoverBackgroundColor = hover;
-        titleBar.ButtonHoverForegroundColor = foreground;
-        titleBar.ButtonPressedBackgroundColor = hover;
-        titleBar.ButtonPressedForegroundColor = foreground;
+        titleBar.ButtonHoverForegroundColor = titleForeground;
+        titleBar.ButtonPressedBackgroundColor = pressed;
+        titleBar.ButtonPressedForegroundColor = titleForeground;
 
         if (_acrylic is not null && _backdropConfiguration is not null)
         {
@@ -76,8 +79,9 @@ public sealed class MainWindow : Window
         _page.SetBackgroundOpacity(percent);
     }
 
-    public void SetStatusIcon(string status)
+    public void SetStatusPresentation(string text, string status)
     {
+        Title = string.IsNullOrWhiteSpace(text) ? "HABITAT" : $"HABITAT — {text}";
         var normalized = status switch
         {
             "Success" => "Success",
@@ -100,6 +104,7 @@ public sealed class MainWindow : Window
 
     private async void OnClosed(object sender, WindowEventArgs args)
     {
+        _page.SaveWindowPlacement(AppWindow);
         _acrylic?.Dispose();
         await _bridge.DisposeAsync();
     }

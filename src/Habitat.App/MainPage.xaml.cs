@@ -280,7 +280,7 @@ public sealed class MainPage : Page
             StatusTone.Warning => Color(0xFF, dark ? 0xE2 : 0xA9, dark ? 0xA0 : 0x63, dark ? 0x6B : 0x31),
             _ => Color(0xFF, dark ? 0x89 : 0x66, dark ? 0x95 : 0x74, dark ? 0xFF : 0xF4)
         });
-        ((App)Application.Current).MainWindow?.SetStatusIcon(tone.ToString());
+        ((App)Application.Current).MainWindow?.SetStatusPresentation(text, tone.ToString());
     }
 
     private Brush ToneBrush(MessageTone tone)
@@ -354,7 +354,11 @@ public sealed class MainPage : Page
         StyleDialog(dialog);
         await dialog.ShowAsync();
 
-        _preferences = new Preferences(theme.SelectedIndex == 1 ? "night" : "day", opacity.Value);
+        _preferences = _preferences with
+        {
+            Theme = theme.SelectedIndex == 1 ? "night" : "day",
+            Opacity = opacity.Value
+        };
         _preferences.Save();
         ApplyPreferences();
     }
@@ -408,6 +412,46 @@ public sealed class MainPage : Page
     {
         _preferences = _preferences with { Opacity = Math.Clamp(percent, 0, 100) };
         PaintSurface();
+    }
+
+    public void RestoreWindowPlacement(Microsoft.UI.Windowing.AppWindow appWindow)
+    {
+        if (_preferences.WindowX is not int savedX ||
+            _preferences.WindowY is not int savedY ||
+            _preferences.WindowWidth is not int savedWidth ||
+            _preferences.WindowHeight is not int savedHeight)
+        {
+            return;
+        }
+
+        var requested = new Windows.Graphics.RectInt32(
+            savedX,
+            savedY,
+            Math.Max(480, savedWidth),
+            Math.Max(420, savedHeight));
+        var display = Microsoft.UI.Windowing.DisplayArea.GetFromRect(
+            requested,
+            Microsoft.UI.Windowing.DisplayAreaFallback.Primary);
+        var workArea = display.WorkArea;
+        var width = Math.Min(requested.Width, workArea.Width);
+        var height = Math.Min(requested.Height, workArea.Height);
+        var x = Math.Clamp(requested.X, workArea.X, workArea.X + workArea.Width - width);
+        var y = Math.Clamp(requested.Y, workArea.Y, workArea.Y + workArea.Height - height);
+        appWindow.MoveAndResize(new Windows.Graphics.RectInt32(x, y, width, height));
+    }
+
+    public void SaveWindowPlacement(Microsoft.UI.Windowing.AppWindow appWindow)
+    {
+        var position = appWindow.Position;
+        var size = appWindow.Size;
+        _preferences = _preferences with
+        {
+            WindowX = position.X,
+            WindowY = position.Y,
+            WindowWidth = size.Width,
+            WindowHeight = size.Height
+        };
+        _preferences.Save();
     }
 
     private void PaintSurface()
@@ -522,6 +566,11 @@ public sealed class MainPage : Page
 
 internal sealed record Preferences(string Theme, double Opacity)
 {
+    public int? WindowX { get; init; }
+    public int? WindowY { get; init; }
+    public int? WindowWidth { get; init; }
+    public int? WindowHeight { get; init; }
+
     private static readonly string FilePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HABITAT", "preferences.json");
 
