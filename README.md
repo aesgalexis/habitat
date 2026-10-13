@@ -15,6 +15,8 @@ En el editor, Enter envía el mensaje y Shift+Enter inserta un salto de línea. 
 
 El modo **Text-only replies** está activado por defecto. Añade a cada envío una instrucción visible para que ChatGPT responda con texto simple y evite tablas, imágenes, archivos y otros contenidos enriquecidos, salvo que el propio mensaje los solicite expresamente. Se puede desactivar y su valor queda guardado desde **Preferences…**.
 
+El tiempo aparece en la esquina superior derecha, sin marco, con temperatura en °C y previsión de lluvia para las próximas seis horas. La ciudad inicial es Palma, España; se cambia y guarda en **Preferences… → Weather location** (por ejemplo, `Palma, ES`). Usa datos de [Open-Meteo](https://open-meteo.com/en/docs) y se actualiza cada 15 minutos. El porcentaje es el máximo de las probabilidades horarias de precipitación en ese intervalo. Si falla la conexión, lo indica y reintenta automáticamente; no detecta la ubicación por IP.
+
 ## Compilar
 
 Requisitos de desarrollo:
@@ -30,6 +32,8 @@ powershell -ExecutionPolicy Bypass -File scripts\build-winui.ps1
 ```
 
 El resultado se guarda en `artifacts\win-x64`. Es una aplicación WinUI 3 sin paquete, por lo que no necesita Modo de desarrollador ni abre una consola. La solución es `Habitat.sln` y el proyecto principal está en `src\Habitat.App`.
+
+Las comprobaciones del pronóstico, sin red ni dependencias de pruebas adicionales, se ejecutan con `dotnet run --project tests\Habitat.Weather.Checks`. Para comprobar la conexión real del servicio de tiempo para Palma: `dotnet run --project tests\Habitat.Weather.Checks -- --live`.
 
 ## Seguridad y límites
 

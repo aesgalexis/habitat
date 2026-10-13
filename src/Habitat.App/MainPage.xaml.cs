@@ -29,6 +29,16 @@ public sealed class MainPage : Page
     private readonly Button SendButton = new();
     private readonly Button OverflowButton = new();
     private readonly MenuFlyout OptionsMenu = new();
+    private readonly WeatherService _weather = new();
+    private readonly CancellationTokenSource _weatherCancellation = new();
+    private readonly Grid WeatherBlock = new();
+    private readonly Viewbox WeatherSymbol = new() { Width = 32, Height = 32 };
+    private readonly TextBlock WeatherTemperature = new() { Text = "—", FontSize = 22 };
+    private readonly TextBlock WeatherLocation = new() { FontSize = 11, Opacity = 0.72 };
+    private readonly TextBlock WeatherOutlook = new() { Text = "Loading weather…", FontSize = 12, Opacity = 0.8 };
+    private WeatherSnapshot? _weatherSnapshot;
+    private bool _weatherRefreshing;
+    private DateTimeOffset _nextWeatherRefresh = DateTimeOffset.MinValue;
     private BridgeService? _bridge;
     private Preferences _preferences = Preferences.Load();
     private string _activeModel = "OpenAI model";
@@ -51,19 +61,34 @@ public sealed class MainPage : Page
 
     private void BuildInterface()
     {
-        var surface = new Grid { Padding = new Thickness(30, 20, 30, 24) };
+        var surface = new Grid { Padding = new Thickness(30, 20, 30, 24), RowSpacing = 10 };
+        surface.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        surface.RowDefinitions.Add(new RowDefinition());
         // Stretch fills smaller windows; MaxWidth keeps the chat centered in
         // the available layout slot when the window is wider or maximized.
         _root.MaxWidth = 867;
         _root.HorizontalAlignment = HorizontalAlignment.Stretch;
         _root.RowSpacing = 10;
-        _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         _root.RowDefinitions.Add(new RowDefinition());
         _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        var header = new Grid { ColumnSpacing = 12 };
-        header.ColumnDefinitions.Add(new ColumnDefinition());
+        var header = new Grid { ColumnSpacing = 18, HorizontalAlignment = HorizontalAlignment.Right };
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        WeatherBlock.ColumnSpacing = 12;
+        WeatherBlock.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        WeatherBlock.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        WeatherSymbol.VerticalAlignment = VerticalAlignment.Center;
+        WeatherBlock.Children.Add(WeatherSymbol);
+        var weatherText = new StackPanel { Spacing = 2, MinWidth = 155, MaxWidth = 230 };
+        WeatherLocation.Text = _preferences.WeatherCity;
+        WeatherLocation.TextTrimming = TextTrimming.CharacterEllipsis;
+        weatherText.Children.Add(WeatherLocation);
+        weatherText.Children.Add(WeatherTemperature);
+        weatherText.Children.Add(WeatherOutlook);
+        Grid.SetColumn(weatherText, 1);
+        WeatherBlock.Children.Add(weatherText);
+        header.Children.Add(WeatherBlock);
 
         OverflowButton.Content = "•••";
         OverflowButton.Width = 34;
@@ -71,6 +96,7 @@ public sealed class MainPage : Page
         OverflowButton.IsTabStop = false;
         OverflowButton.Padding = new Thickness(0);
         OverflowButton.BorderThickness = new Thickness(0);
+        OverflowButton.VerticalAlignment = VerticalAlignment.Top;
         OptionsMenu.Placement = FlyoutPlacementMode.BottomEdgeAlignedRight;
         var preferences = new MenuFlyoutItem { Text = "Preferences…" };
         preferences.Click += ShowPreferences_Click;
@@ -86,13 +112,12 @@ public sealed class MainPage : Page
         OverflowButton.Flyout = OptionsMenu;
         Grid.SetColumn(OverflowButton, 1);
         header.Children.Add(OverflowButton);
-        _root.Children.Add(header);
+        surface.Children.Add(header);
 
         Conversation.Spacing = 22;
         ConversationScroll.Content = Conversation;
         ConversationScroll.Padding = new Thickness(2, 18, 8, 18);
         ConversationScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-        Grid.SetRow(ConversationScroll, 1);
         _root.Children.Add(ConversationScroll);
 
         var composerGrid = new Grid { ColumnSpacing = 10 };
@@ -120,9 +145,10 @@ public sealed class MainPage : Page
         SendButton.Click += SendButton_Click;
         Grid.SetColumn(SendButton, 1);
         composerGrid.Children.Add(SendButton);
-        Grid.SetRow(composerGrid, 2);
+        Grid.SetRow(composerGrid, 1);
         _root.Children.Add(composerGrid);
 
+        Grid.SetRow(_root, 1);
         surface.Children.Add(_root);
         Content = surface;
         PaintSurface();
@@ -139,6 +165,8 @@ public sealed class MainPage : Page
     private void MainPage_Unloaded(object sender, RoutedEventArgs e)
     {
         _timer.Stop();
+        _weatherCancellation.Cancel();
+        _weather.Dispose();
         if (_bridge is not null)
         {
             _bridge.EventReceived -= Bridge_EventReceived;
@@ -194,6 +222,10 @@ public sealed class MainPage : Page
 
     private void Timer_Tick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
     {
+        if (!_weatherRefreshing && !_appearanceDialogOpen && DateTimeOffset.UtcNow >= _nextWeatherRefresh)
+        {
+            _ = RefreshWeatherAsync();
+        }
         if (_preferences.Theme == "hybrid" && !_appearanceDialogOpen && DateTimeOffset.UtcNow >= _nextHybridProbe)
         {
             RefreshHybridAppearance();
@@ -217,6 +249,53 @@ public sealed class MainPage : Page
         }
 
         UpdateSendState();
+    }
+
+    private async Task RefreshWeatherAsync()
+    {
+        _weatherRefreshing = true;
+        _nextWeatherRefresh = DateTimeOffset.UtcNow.AddMinutes(15);
+        var city = _preferences.WeatherCity;
+        try
+        {
+            var snapshot = await _weather.GetAsync(city, _weatherCancellation.Token);
+            if (_weatherCancellation.IsCancellationRequested || city != _preferences.WeatherCity) return;
+            _weatherSnapshot = snapshot;
+            WeatherLocation.Text = snapshot.Location;
+            WeatherTemperature.Text = $"{snapshot.Temperature:0}°C";
+            WeatherOutlook.Text = $"{snapshot.Outlook} · {snapshot.PrecipitationChance}% · 6h";
+            ToolTipService.SetToolTip(WeatherBlock,
+                $"{snapshot.Location}\n{snapshot.Condition} · next 6 hours\n" +
+                $"Peak hourly precipitation chance: {snapshot.PrecipitationChance}%\n" +
+                $"Updated {snapshot.UpdatedAt.ToLocalTime():HH:mm}\nWeather data: Open-Meteo");
+            PaintWeather();
+        }
+        catch (OperationCanceledException) when (_weatherCancellation.IsCancellationRequested) { }
+        catch (Exception exception) when (exception is HttpRequestException or OperationCanceledException or
+            JsonException or InvalidDataException or KeyNotFoundException or InvalidOperationException)
+        {
+            if (_weatherCancellation.IsCancellationRequested || city != _preferences.WeatherCity) return;
+            _nextWeatherRefresh = DateTimeOffset.UtcNow.AddMinutes(5);
+            WeatherOutlook.Text = _weatherSnapshot is null ? "Weather unavailable" :
+                $"Offline · updated {_weatherSnapshot.UpdatedAt.ToLocalTime():HH:mm}";
+            ToolTipService.SetToolTip(WeatherBlock,
+                "Could not update the weather. It will retry automatically.\n" +
+                "Check the location in Preferences.\nWeather data: Open-Meteo");
+        }
+        finally
+        {
+            _weatherRefreshing = false;
+        }
+    }
+
+    private void PaintWeather()
+    {
+        var text = TextBrush();
+        WeatherLocation.Foreground = text;
+        WeatherTemperature.Foreground = text;
+        WeatherOutlook.Foreground = text;
+        WeatherSymbol.Child = WeatherIcon.Create(_weatherSnapshot?.Condition ?? WeatherCondition.Cloudy,
+            _weatherSnapshot?.IsDay ?? true, text);
     }
 
     private void Bridge_EventReceived(object? sender, BridgeEvent bridgeEvent)
@@ -397,12 +476,27 @@ public sealed class MainPage : Page
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.72
         });
+        var weatherCity = new TextBox
+        {
+            Header = "Weather location",
+            Text = _preferences.WeatherCity,
+            PlaceholderText = "City, country code (for example Palma, ES)",
+            MaxLength = 100,
+            Margin = new Thickness(0, 8, 0, 0)
+        };
+        panel.Children.Add(weatherCity);
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Weather data: Open-Meteo · refreshes every 15 minutes.",
+            FontSize = 11,
+            Opacity = 0.72
+        });
 
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
             Title = "Preferences",
-            Content = panel,
+            Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto },
             CloseButtonText = "Close",
             DefaultButton = ContentDialogButton.Close
         };
@@ -411,14 +505,26 @@ public sealed class MainPage : Page
         await dialog.ShowAsync();
         _appearanceDialogOpen = false;
 
+        var locationChanged = _preferences.WeatherCity != weatherCity.Text.Trim();
         _preferences = _preferences with
         {
             Theme = theme.SelectedIndex switch { 1 => "night", 2 => "hybrid", _ => "day" },
             Opacity = opacity.Value,
-            TextOnly = textOnly.IsOn
+            TextOnly = textOnly.IsOn,
+            WeatherCity = weatherCity.Text.Trim()
         };
         _preferences.Save();
         ApplyPreferences();
+        if (locationChanged)
+        {
+            _weatherSnapshot = null;
+            WeatherLocation.Text = _preferences.WeatherCity;
+            WeatherTemperature.Text = "—";
+            WeatherOutlook.Text = "Loading weather…";
+            ToolTipService.SetToolTip(WeatherBlock, "Weather data: Open-Meteo");
+            _nextWeatherRefresh = DateTimeOffset.MinValue;
+            PaintWeather();
+        }
         FocusComposer();
     }
 
@@ -577,6 +683,7 @@ public sealed class MainPage : Page
         SendButton.Foreground = accent;
         OverflowButton.Background = transparent;
         OverflowButton.Foreground = muted;
+        PaintWeather();
 
         var menuStyle = new Style(typeof(MenuFlyoutPresenter));
         menuStyle.Setters.Add(new Setter(Control.BackgroundProperty, popup));
@@ -599,6 +706,7 @@ public sealed class MainPage : Page
         foreach(var key in new[] { "ButtonBackground", "ButtonBackgroundPointerOver", "ButtonBackgroundPressed", "ButtonBackgroundDisabled" })
         {
             _root.Resources[key] = transparent;
+            OverflowButton.Resources[key] = transparent;
         }
         foreach(var key in new[]
         {
@@ -669,6 +777,7 @@ public sealed class MainPage : Page
 internal sealed record Preferences(string Theme, double Opacity)
 {
     public bool TextOnly { get; init; } = true;
+    public string WeatherCity { get; init; } = "Palma, ES";
     public int? WindowX { get; init; }
     public int? WindowY { get; init; }
     public int? WindowWidth { get; init; }

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/Habitat.App/Models/WeatherSnapshot.cs" Link="WeatherSnapshot.cs" />
+    <Compile Include="../../src/Habitat.App/Services/WeatherService.cs" Link="WeatherService.cs" />
+  </ItemGroup>
+</Project>
