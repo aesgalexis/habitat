@@ -22,6 +22,7 @@ public sealed class MainPage : Page
     private readonly Border _statusPill = new();
     private readonly TextBlock StatusText = new();
     private readonly Ellipse StatusDot = new();
+    private readonly TextBlock TitleText = new();
     private readonly ScrollViewer ConversationScroll = new();
     private readonly StackPanel Conversation = new();
     private readonly TextBox Composer = new();
@@ -54,14 +55,12 @@ public sealed class MainPage : Page
         header.ColumnDefinitions.Add(new ColumnDefinition());
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        header.Children.Add(new TextBlock
-        {
-            Text = "HABITAT",
-            VerticalAlignment = VerticalAlignment.Center,
-            FontFamily = new FontFamily("Segoe UI Variable Display"),
-            FontSize = 24,
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
-        });
+        TitleText.Text = "HABITAT";
+        TitleText.VerticalAlignment = VerticalAlignment.Center;
+        TitleText.FontFamily = new FontFamily("Segoe UI Variable Display");
+        TitleText.FontSize = 24;
+        TitleText.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+        header.Children.Add(TitleText);
 
         StatusDot.Width = 7;
         StatusDot.Height = 7;
@@ -267,7 +266,7 @@ public sealed class MainPage : Page
 
     private void AddMessage(string author, string body, MessageTone tone)
     {
-        var group = new StackPanel { Spacing = 5 };
+        var group = new StackPanel { Spacing = 5, Tag = tone };
         group.Children.Add(new TextBlock
         {
             Text = author,
@@ -329,11 +328,11 @@ public sealed class MainPage : Page
     private async void ShowPreferences_Click(object sender, RoutedEventArgs e)
     {
         var opacityValue = new TextBlock { Text = $"{_preferences.Opacity:0}%", VerticalAlignment = VerticalAlignment.Center };
-        var opacity = new Slider { Minimum = 5, Maximum = 100, Value = _preferences.Opacity, StepFrequency = 1 };
+        var opacity = new Slider { Minimum = 0, Maximum = 100, Value = _preferences.Opacity, StepFrequency = 1 };
         opacity.ValueChanged += (_, args) =>
         {
             opacityValue.Text = $"{args.NewValue:0}%";
-            ((App)Application.Current).MainWindow?.SetWindowOpacity(args.NewValue);
+            ((App)Application.Current).MainWindow?.SetBackgroundOpacity(args.NewValue);
         };
         var theme = new ComboBox
         {
@@ -344,6 +343,7 @@ public sealed class MainPage : Page
         theme.SelectionChanged += (_, _) =>
         {
             RequestedTheme = theme.SelectedIndex == 1 ? ElementTheme.Dark : ElementTheme.Light;
+            PaintSurface();
         };
 
         var panel = new StackPanel { Spacing = 10, MinWidth = 360 };
@@ -413,16 +413,22 @@ public sealed class MainPage : Page
     private void ApplyPreferences()
     {
         RequestedTheme = _preferences.Theme == "night" ? ElementTheme.Dark : ElementTheme.Light;
+        ((App)Application.Current).MainWindow?.SetBackgroundOpacity(_preferences.Opacity);
+    }
+
+    public void SetBackgroundOpacity(double percent)
+    {
+        _preferences = _preferences with { Opacity = Math.Clamp(percent, 0, 100) };
         PaintSurface();
-        ((App)Application.Current).MainWindow?.SetWindowOpacity(_preferences.Opacity);
     }
 
     private void PaintSurface()
     {
-        var dark = _preferences.Theme == "night";
-        var canvas = new SolidColorBrush(dark ? Color(0xFF, 0x10, 0x16, 0x23) : Color(0xFF, 0xF2, 0xF6, 0xFB));
-        var surface = new SolidColorBrush(dark ? Color(0xFF, 0x19, 0x21, 0x31) : Color(0xFF, 0xF9, 0xFC, 0xFF));
-        var surfaceAlt = new SolidColorBrush(dark ? Color(0xFF, 0x22, 0x2C, 0x3D) : Color(0xFF, 0xED, 0xF2, 0xF8));
+        var dark = RequestedTheme == ElementTheme.Dark;
+        var alpha = (int)Math.Clamp(Math.Round(_preferences.Opacity * 2.55), 0, 255);
+        var canvas = new SolidColorBrush(dark ? Color(alpha, 0x10, 0x16, 0x23) : Color(alpha, 0xF2, 0xF6, 0xFB));
+        var surface = new SolidColorBrush(dark ? Color(alpha, 0x19, 0x21, 0x31) : Color(alpha, 0xF9, 0xFC, 0xFF));
+        var surfaceAlt = new SolidColorBrush(dark ? Color(alpha, 0x22, 0x2C, 0x3D) : Color(alpha, 0xED, 0xF2, 0xF8));
         var border = new SolidColorBrush(dark ? Color(0xFF, 0x34, 0x41, 0x58) : Color(0xFF, 0xD7, 0xE0, 0xEA));
         var muted = new SolidColorBrush(dark ? Color(0xFF, 0xA1, 0xAE, 0xC1) : Color(0xFF, 0x6D, 0x7B, 0x91));
         var accent = new SolidColorBrush(dark ? Color(0xFF, 0x89, 0x95, 0xFF) : Color(0xFF, 0x66, 0x74, 0xF4));
@@ -433,10 +439,25 @@ public sealed class MainPage : Page
         _composerCard.Background = surface;
         _composerCard.BorderBrush = border;
         _statusPill.Background = surfaceAlt;
+        TitleText.Foreground = TextBrush();
         StatusText.Foreground = muted;
         Composer.Background = new SolidColorBrush(Color(0, 0, 0, 0));
+        Composer.Foreground = TextBrush();
         SendButton.Background = accent;
         SendButton.Foreground = new SolidColorBrush(Color(0xFF, 0xFF, 0xFF, 0xFF));
+
+        foreach(var child in Conversation.Children)
+        {
+            if(child is not StackPanel group || group.Tag is not MessageTone tone) continue;
+            if(group.Children.Count > 0 && group.Children[0] is TextBlock author)
+            {
+                author.Foreground = ToneBrush(tone);
+            }
+            if(group.Children.Count > 1 && group.Children[1] is TextBlock body)
+            {
+                body.Foreground = TextBrush();
+            }
+        }
     }
 
     private enum StatusTone { Active, Success, Warning, Danger }
@@ -455,7 +476,7 @@ internal sealed record Preferences(string Theme, double Opacity)
             var saved = JsonSerializer.Deserialize<Preferences>(File.ReadAllText(FilePath));
             if (saved is not null && saved.Theme is "day" or "night")
             {
-                return saved with { Opacity = Math.Clamp(saved.Opacity, 5, 100) };
+                return saved with { Opacity = Math.Clamp(saved.Opacity, 0, 100) };
             }
         }
         catch (IOException) { }
