@@ -32,6 +32,7 @@ public sealed class MainWindow : Window
         }
         AppWindow.Resize(new Windows.Graphics.SizeInt32(860, 720));
         _page.RestoreWindowPlacement(AppWindow);
+        Activated += OnActivated;
         Closed += OnClosed;
     }
 
@@ -99,6 +100,14 @@ public sealed class MainWindow : Window
         {
             AppWindow.SetIcon(iconPath);
             _statusIcon = normalized;
+        }
+    }
+
+    private void OnActivated(object sender, WindowActivatedEventArgs args)
+    {
+        if (args.WindowActivationState != WindowActivationState.Deactivated)
+        {
+            _page.FocusComposer();
         }
     }
 

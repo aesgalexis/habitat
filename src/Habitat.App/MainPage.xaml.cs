@@ -82,6 +82,7 @@ public sealed class MainPage : Page
         var copy = new MenuFlyoutItem { Text = "Copy code" };
         copy.Click += CopyPairingCode_Click;
         OptionsMenu.Items.Add(copy);
+        OptionsMenu.Closed += (_, _) => FocusComposer();
         OverflowButton.Flyout = OptionsMenu;
         Grid.SetColumn(OverflowButton, 1);
         header.Children.Add(OverflowButton);
@@ -129,7 +130,7 @@ public sealed class MainPage : Page
         ApplyPreferences();
         SetStatus("Starting bridge…", StatusTone.Active);
         _timer.Start();
-        Composer.Focus(FocusState.Programmatic);
+        FocusComposer();
     }
 
     private void MainPage_Unloaded(object sender, RoutedEventArgs e)
@@ -166,12 +167,14 @@ public sealed class MainPage : Page
         var text = Composer.Text.Trim();
         if (string.IsNullOrWhiteSpace(text) || _bridge is null)
         {
+            FocusComposer();
             return;
         }
 
         if (!_bridge.TryQueueMessage(text, out var reason))
         {
             SetStatus(reason, StatusTone.Warning);
+            FocusComposer();
             return;
         }
 
@@ -179,6 +182,7 @@ public sealed class MainPage : Page
         Composer.Text = string.Empty;
         SetStatus("Sending to Chrome…", StatusTone.Active);
         UpdateSendState();
+        FocusComposer();
     }
 
     private void Timer_Tick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
@@ -361,6 +365,7 @@ public sealed class MainPage : Page
         };
         _preferences.Save();
         ApplyPreferences();
+        FocusComposer();
     }
 
     private async void ShowPairing_Click(object sender, RoutedEventArgs e)
@@ -388,9 +393,14 @@ public sealed class MainPage : Page
         {
             CopyPairingCode();
         }
+        FocusComposer();
     }
 
-    private void CopyPairingCode_Click(object sender, RoutedEventArgs e) => CopyPairingCode();
+    private void CopyPairingCode_Click(object sender, RoutedEventArgs e)
+    {
+        CopyPairingCode();
+        FocusComposer();
+    }
 
     private void CopyPairingCode()
     {
@@ -412,6 +422,11 @@ public sealed class MainPage : Page
     {
         _preferences = _preferences with { Opacity = Math.Clamp(percent, 0, 100) };
         PaintSurface();
+    }
+
+    public void FocusComposer()
+    {
+        DispatcherQueue.TryEnqueue(() => Composer.Focus(FocusState.Programmatic));
     }
 
     public void RestoreWindowPlacement(Microsoft.UI.Windowing.AppWindow appWindow)
