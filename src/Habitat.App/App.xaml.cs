@@ -1,10 +1,12 @@
 using Habitat.Services;
 using Microsoft.UI.Xaml;
+using System.Runtime.InteropServices;
 
 namespace Habitat;
 
 public partial class App : Application
 {
+    public const string AppUserModelId = "HABITAT.Desktop";
     private readonly Mutex _singleInstance;
     private readonly bool _ownsInstance;
 
@@ -13,6 +15,7 @@ public partial class App : Application
 
     public App()
     {
+        _ = SetCurrentProcessExplicitAppUserModelID(AppUserModelId);
         _singleInstance = new Mutex(true, "Local\\HABITAT.WinUI", out _ownsInstance);
         UnhandledException += LogUnhandledException;
         InitializeComponent();
@@ -41,4 +44,7 @@ public partial class App : Application
         }
         catch { }
     }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern int SetCurrentProcessExplicitAppUserModelID(string appId);
 }
