@@ -64,7 +64,14 @@ public sealed class MainPage : Page
 
     private void BuildInterface()
     {
-        var surface = new Grid { Padding = new Thickness(30, 0, 30, 0) };
+        var surface = new Grid
+        {
+            Padding = new Thickness(30, 0, 30, 0),
+            // A transparent brush makes the full client area clickable,
+            // including the space outside the centered chat column.
+            Background = new SolidColorBrush(Color(0, 0, 0, 0))
+        };
+        surface.AddHandler(UIElement.TappedEvent, new TappedEventHandler(Surface_Tapped), true);
         // Stretch fills smaller windows; MaxWidth keeps the chat centered in
         // the available layout slot when the window is wider or maximized.
         _root.MaxWidth = 867;
@@ -156,6 +163,27 @@ public sealed class MainPage : Page
         surface.Children.Add(header);
         Content = surface;
         PaintSurface();
+    }
+
+    private void Surface_Tapped(object sender, TappedRoutedEventArgs e)
+    {
+        if (_appearanceDialogOpen) return;
+
+        // Keep native editing, text selection and interactive controls intact.
+        // Blank areas, message spacing and the weather display focus writing.
+        for (var element = e.OriginalSource as DependencyObject;
+            element is not null && !ReferenceEquals(element, sender);
+            element = VisualTreeHelper.GetParent(element))
+        {
+            if (element is ButtonBase or TextBox or RichEditBox or PasswordBox or Selector or
+                Slider or ScrollBar or Thumb or MenuFlyoutPresenter or MenuFlyoutItemBase or ContentDialog ||
+                element is TextBlock { IsTextSelectionEnabled: true })
+            {
+                return;
+            }
+        }
+
+        FocusComposer();
     }
 
     private void UpdateWritingLayout()
