@@ -17,9 +17,6 @@ public sealed class MainPage : Page
 {
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _timer;
     private readonly Grid _root = new();
-    private readonly Border _conversationCard = new();
-    private readonly Border _composerCard = new();
-    private readonly Border _statusPill = new();
     private readonly TextBlock StatusText = new();
     private readonly Ellipse StatusDot = new();
     private readonly TextBlock TitleText = new();
@@ -27,6 +24,7 @@ public sealed class MainPage : Page
     private readonly StackPanel Conversation = new();
     private readonly TextBox Composer = new();
     private readonly Button SendButton = new();
+    private readonly Button OverflowButton = new();
     private BridgeService? _bridge;
     private Preferences _preferences = Preferences.Load();
 
@@ -45,8 +43,8 @@ public sealed class MainPage : Page
 
     private void BuildInterface()
     {
-        _root.Padding = new Thickness(28, 18, 28, 26);
-        _root.RowSpacing = 14;
+        _root.Padding = new Thickness(30, 20, 30, 24);
+        _root.RowSpacing = 10;
         _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         _root.RowDefinitions.Add(new RowDefinition());
         _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -58,33 +56,26 @@ public sealed class MainPage : Page
         TitleText.Text = "HABITAT";
         TitleText.VerticalAlignment = VerticalAlignment.Center;
         TitleText.FontFamily = new FontFamily("Segoe UI Variable Display");
-        TitleText.FontSize = 24;
+        TitleText.FontSize = 20;
         TitleText.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
         header.Children.Add(TitleText);
 
-        StatusDot.Width = 7;
-        StatusDot.Height = 7;
+        StatusDot.Width = 6;
+        StatusDot.Height = 6;
         StatusText.Text = "Iniciando puente…";
         StatusText.FontSize = 12;
         StatusText.VerticalAlignment = VerticalAlignment.Center;
         var statusRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 7 };
         statusRow.Children.Add(StatusDot);
         statusRow.Children.Add(StatusText);
-        _statusPill.Padding = new Thickness(12, 7, 12, 7);
-        _statusPill.CornerRadius = new CornerRadius(14);
-        _statusPill.Child = statusRow;
-        Grid.SetColumn(_statusPill, 1);
-        header.Children.Add(_statusPill);
+        Grid.SetColumn(statusRow, 1);
+        header.Children.Add(statusRow);
 
-        var overflow = new Button
-        {
-            Content = "•••",
-            Width = 38,
-            Height = 38,
-            Padding = new Thickness(0),
-            BorderThickness = new Thickness(0),
-            CornerRadius = new CornerRadius(10)
-        };
+        OverflowButton.Content = "•••";
+        OverflowButton.Width = 34;
+        OverflowButton.Height = 34;
+        OverflowButton.Padding = new Thickness(0);
+        OverflowButton.BorderThickness = new Thickness(0);
         var menu = new MenuFlyout();
         var preferences = new MenuFlyoutItem { Text = "Preferencias…" };
         preferences.Click += ShowPreferences_Click;
@@ -96,25 +87,24 @@ public sealed class MainPage : Page
         var copy = new MenuFlyoutItem { Text = "Copiar código" };
         copy.Click += CopyPairingCode_Click;
         menu.Items.Add(copy);
-        overflow.Flyout = menu;
-        Grid.SetColumn(overflow, 2);
-        header.Children.Add(overflow);
+        OverflowButton.Flyout = menu;
+        Grid.SetColumn(OverflowButton, 2);
+        header.Children.Add(OverflowButton);
         _root.Children.Add(header);
 
-        Conversation.Spacing = 16;
+        Conversation.Spacing = 22;
         ConversationScroll.Content = Conversation;
-        ConversationScroll.Padding = new Thickness(22, 20, 22, 20);
+        ConversationScroll.Padding = new Thickness(2, 18, 8, 18);
         ConversationScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-        ConfigureCard(_conversationCard, ConversationScroll);
-        Grid.SetRow(_conversationCard, 1);
-        _root.Children.Add(_conversationCard);
+        Grid.SetRow(ConversationScroll, 1);
+        _root.Children.Add(ConversationScroll);
 
         var composerGrid = new Grid { ColumnSpacing = 12 };
         composerGrid.ColumnDefinitions.Add(new ColumnDefinition());
         composerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        Composer.MinHeight = 74;
+        Composer.MinHeight = 58;
         Composer.MaxHeight = 180;
-        Composer.Padding = new Thickness(10, 8, 10, 8);
+        Composer.Padding = new Thickness(0, 9, 0, 9);
         Composer.AcceptsReturn = true;
         Composer.TextWrapping = TextWrapping.Wrap;
         Composer.PlaceholderText = "Escribe a ChatGPT…";
@@ -125,27 +115,18 @@ public sealed class MainPage : Page
         Composer.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(Composer_KeyDown), true);
         composerGrid.Children.Add(Composer);
         SendButton.Content = "Enviar";
-        SendButton.Padding = new Thickness(20, 10, 20, 10);
-        SendButton.CornerRadius = new CornerRadius(10);
+        SendButton.Padding = new Thickness(12, 9, 0, 9);
+        SendButton.BorderThickness = new Thickness(0);
         SendButton.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
         SendButton.VerticalAlignment = VerticalAlignment.Bottom;
         SendButton.Click += SendButton_Click;
         Grid.SetColumn(SendButton, 1);
         composerGrid.Children.Add(SendButton);
-        ConfigureCard(_composerCard, composerGrid);
-        _composerCard.Padding = new Thickness(14);
-        Grid.SetRow(_composerCard, 2);
-        _root.Children.Add(_composerCard);
+        Grid.SetRow(composerGrid, 2);
+        _root.Children.Add(composerGrid);
 
         Content = _root;
         PaintSurface();
-    }
-
-    private static void ConfigureCard(Border card, UIElement child)
-    {
-        card.BorderThickness = new Thickness(1);
-        card.CornerRadius = new CornerRadius(18);
-        card.Child = child;
     }
 
     private void MainPage_Loaded(object sender, RoutedEventArgs e)
@@ -428,26 +409,44 @@ public sealed class MainPage : Page
     private void PaintSurface()
     {
         var dark = RequestedTheme == ElementTheme.Dark;
-        var surfaceAlpha = (int)Math.Clamp(Math.Round(_preferences.Opacity * 1.85), 0, 185);
         var canvas = new SolidColorBrush(Color(0, 0, 0, 0));
-        var surface = new SolidColorBrush(dark ? Color(surfaceAlpha, 0x19, 0x21, 0x31) : Color(surfaceAlpha, 0xF9, 0xFC, 0xFF));
-        var surfaceAlt = new SolidColorBrush(dark ? Color(surfaceAlpha, 0x22, 0x2C, 0x3D) : Color(surfaceAlpha, 0xED, 0xF2, 0xF8));
-        var border = new SolidColorBrush(dark ? Color(0xFF, 0x34, 0x41, 0x58) : Color(0xFF, 0xD7, 0xE0, 0xEA));
+        var transparent = new SolidColorBrush(Color(0, 0, 0, 0));
         var muted = new SolidColorBrush(dark ? Color(0xFF, 0xA1, 0xAE, 0xC1) : Color(0xFF, 0x6D, 0x7B, 0x91));
         var accent = new SolidColorBrush(dark ? Color(0xFF, 0x89, 0x95, 0xFF) : Color(0xFF, 0x66, 0x74, 0xF4));
 
         _root.Background = canvas;
-        _conversationCard.Background = surface;
-        _conversationCard.BorderBrush = border;
-        _composerCard.Background = surface;
-        _composerCard.BorderBrush = border;
-        _statusPill.Background = surfaceAlt;
         TitleText.Foreground = TextBrush();
         StatusText.Foreground = muted;
-        Composer.Background = new SolidColorBrush(Color(0, 0, 0, 0));
+        Composer.Background = transparent;
+        Composer.BorderBrush = transparent;
         Composer.Foreground = TextBrush();
-        SendButton.Background = accent;
-        SendButton.Foreground = new SolidColorBrush(Color(0xFF, 0xFF, 0xFF, 0xFF));
+        SendButton.Background = transparent;
+        SendButton.Foreground = accent;
+        OverflowButton.Background = transparent;
+        OverflowButton.Foreground = muted;
+
+        // Keep the controls visually absent in all pointer and focus states;
+        // typography and color provide the interaction affordance.
+        foreach(var key in new[] { "ButtonBackground", "ButtonBackgroundPointerOver", "ButtonBackgroundPressed", "ButtonBackgroundDisabled" })
+        {
+            _root.Resources[key] = transparent;
+        }
+        foreach(var key in new[]
+        {
+            "TextControlBackground", "TextControlBackgroundPointerOver", "TextControlBackgroundFocused",
+            "TextControlBorderBrush", "TextControlBorderBrushPointerOver", "TextControlBorderBrushFocused"
+        })
+        {
+            Composer.Resources[key] = transparent;
+        }
+        foreach(var key in new[]
+        {
+            "TextControlPlaceholderForeground", "TextControlPlaceholderForegroundPointerOver",
+            "TextControlPlaceholderForegroundFocused"
+        })
+        {
+            Composer.Resources[key] = muted;
+        }
 
         foreach(var child in Conversation.Children)
         {
