@@ -81,9 +81,35 @@
   function enabled(element) {
     return element && !element.disabled && element.getAttribute("aria-disabled")!=="true";
   }
+  function isInsideMessage(element) {
+    return Boolean(element.closest([
+      '[data-message-author-role]',
+      '[data-content-search-unit-key$=":assistant"]',
+      '[data-content-search-unit-key$=":user"]',
+      '[data-testid^="conversation-turn-"]'
+    ].join(", ")));
+  }
+  function findComposerBox() {
+    // Query each selector separately. querySelector("a, b, c") returns the
+    // first node in document order, so a textbox rendered inside an older
+    // assistant message could otherwise beat ChatGPT's real prompt box.
+    const selectors = [
+      '#prompt-textarea',
+      '[data-type="unified-composer"] [data-testid="prompt-textarea"]',
+      '[data-type="unified-composer"] [contenteditable="true"][role="textbox"]',
+      'main form [data-testid="prompt-textarea"]',
+      'main form [contenteditable="true"][role="textbox"]'
+    ];
+    for(const selector of selectors) {
+      const match=[...document.querySelectorAll(selector)].find(element =>
+        visible(element) && !isInsideMessage(element));
+      if(match)return match;
+    }
+    return null;
+  }
   function composerRoot(box) {
-    return box.closest("form") ||
-      box.closest('[data-type="unified-composer"]') ||
+    return box.closest('[data-type="unified-composer"]') ||
+      box.closest("form") ||
       box.closest('[data-testid*="composer"]') ||
       box.parentElement;
   }
@@ -100,7 +126,7 @@
     ];
     const root=composerRoot(box);
     for (const selector of selectors) {
-      const button=root?.querySelector(selector) || document.querySelector(selector);
+      const button=root?.querySelector(selector);
       if(button && visible(button))return button;
     }
 
@@ -164,7 +190,7 @@
     busy=true;
     const {id,text}=message;
     try {
-      const box=document.querySelector('#prompt-textarea, textarea[data-testid="prompt-textarea"], main [contenteditable="true"][role="textbox"]');
+      const box=findComposerBox();
       if (!box) throw Error("No encuentro el cuadro de ChatGPT. Abre una conversación normal.");
       const prior=assistantNodes();
       const oldLast=prior[prior.length-1];

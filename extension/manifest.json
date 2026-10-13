@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "HABITAT · ChatGPT bridge",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Connect a selected ChatGPT tab to the local HABITAT desktop app.",
   "permissions": [
     "storage",
