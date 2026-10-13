@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Windows.System;
 using Windows.UI.Core;
 
@@ -25,7 +26,7 @@ public sealed class MainPage : Page
     private readonly MenuFlyout OptionsMenu = new();
     private BridgeService? _bridge;
     private Preferences _preferences = Preferences.Load();
-    private string _activeModel = "MODEL";
+    private string _activeModel = "OpenAI model";
     private bool _hybridDark;
     private bool _appearanceDialogOpen;
     private DateTimeOffset _nextHybridProbe = DateTimeOffset.MinValue;
@@ -210,7 +211,7 @@ public sealed class MainPage : Page
         {
             if (!string.IsNullOrWhiteSpace(bridgeEvent.Model))
             {
-                _activeModel = bridgeEvent.Model.Trim();
+                _activeModel = NormalizeModelName(bridgeEvent.Model);
             }
             switch (bridgeEvent.Type)
             {
@@ -274,6 +275,38 @@ public sealed class MainPage : Page
     private void SetStatus(string text, StatusTone tone)
     {
         ((App)Application.Current).MainWindow?.SetStatusPresentation(text, tone.ToString());
+    }
+
+    private static string NormalizeModelName(string value)
+    {
+        var label = Regex.Replace(value ?? string.Empty, @"\s+", " ").Trim();
+        var family = Regex.Match(label, @"\b(Sol|Astra|Luna|Terra)\b", RegexOptions.IgnoreCase);
+        var version = Regex.Match(label, @"\b\d+(?:\.\d+)+\b");
+        var effort = Regex.Match(label, @"\b(minimal|low|medium|high|xhigh|max|ultra)\b", RegexOptions.IgnoreCase);
+        if (family.Success)
+        {
+            var familyName = char.ToUpperInvariant(family.Value[0]) + family.Value[1..].ToLowerInvariant();
+            return string.Join(" ", new[]
+            {
+                "OpenAI",
+                familyName,
+                version.Success ? version.Value : string.Empty,
+                effort.Success ? effort.Value.ToLowerInvariant() : string.Empty
+            }.Where(part => part.Length > 0));
+        }
+
+        var technical = Regex.Match(label, @"\b(?:GPT[- ]?\d+(?:\.\d+)*(?:[- ]?[a-z]+)?|o\d+(?:[- ]?[a-z]+)?)\b", RegexOptions.IgnoreCase);
+        if (technical.Success)
+        {
+            var name = Regex.Replace(technical.Value, @"\s+", "-");
+            if (name.StartsWith("gpt", StringComparison.OrdinalIgnoreCase))
+            {
+                name = "GPT" + name[3..];
+            }
+            return $"OpenAI {name}";
+        }
+
+        return "OpenAI model";
     }
 
     private Brush ToneBrush(MessageTone tone)

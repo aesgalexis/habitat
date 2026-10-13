@@ -48,7 +48,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 chrome.runtime.onInstalled.addListener(() => { void pairMostRecentChat(); });
 chrome.runtime.onStartup.addListener(() => { void pairMostRecentChat(); });
+void closeReloadTabs();
 void pairMostRecentChat();
+
+async function closeReloadTabs() {
+  try {
+    const tabs=await chrome.tabs.query({url:chrome.runtime.getURL("reload.html")});
+    const ids=tabs.map(tab=>tab.id).filter(id=>Number.isInteger(id));
+    if(ids.length)await chrome.tabs.remove(ids);
+  } catch (_) {}
+}
 
 async function pairMostRecentChat() {
   try {

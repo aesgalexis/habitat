@@ -83,8 +83,21 @@
     const label=String(value||"")
       .replace(/^(select|choose|seleccionar|elegir)\s+(a\s+)?(chatgpt\s+)?(model|modelo)\s*[:·-]?\s*/i,"")
       .replace(/\s+/g," ").trim();
-    if(!label || /^(chatgpt|model|modelo)$/i.test(label))return "";
-    return label.slice(0,48);
+    if(!label || /^(chatgpt|model|modelo|modelo de chatgpt)$/i.test(label))return "";
+
+    const family=label.match(/\b(sol|astra|luna|terra)\b/i);
+    if(family) {
+      const version=label.match(/\b\d+(?:\.\d+)+\b/)?.[0] || "";
+      const name=family[1][0].toUpperCase()+family[1].slice(1).toLowerCase();
+      return `OpenAI ${name}${version?" "+version:""}`;
+    }
+
+    const technical=label.match(/\b(?:gpt[- ]?\d+(?:\.\d+)*(?:[- ]?[a-z]+)?|o\d+(?:[- ]?[a-z]+)?)\b/i);
+    if(technical) {
+      const name=technical[0].replace(/\s+/g,"-").replace(/^gpt/i,"GPT");
+      return `OpenAI ${name}`;
+    }
+    return "";
   }
   function currentEffortLabel() {
     const selectors=[
@@ -133,13 +146,13 @@
         ];
         for(const value of values) {
           const label=normalizeModelLabel(value);
-          if(label && /sol|astra|luna|terra|gpt|o\d|medium|high|low|medio|alto|bajo|thinking|reasoning/i.test(label)) {
+        if(label) {
             return withEffort(label);
           }
         }
       }
     }
-    return withEffort("MODEL");
+    return withEffort("OpenAI model");
   }
   function enabled(element) {
     return element && !element.disabled && element.getAttribute("aria-disabled")!=="true";
@@ -252,7 +265,7 @@
   async function process(message) {
     busy=true;
     const {id,text}=message;
-    let model="MODEL";
+    let model="OpenAI model";
     try {
       const box=findComposerBox();
       if (!box) throw Error("Could not find the ChatGPT composer. Open a regular conversation.");
