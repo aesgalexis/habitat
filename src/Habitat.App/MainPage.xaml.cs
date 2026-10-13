@@ -16,6 +16,11 @@ namespace Habitat;
 
 public sealed class MainPage : Page
 {
+    private const string TextOnlyDirective =
+        "[HABITAT text mode: This message was sent from HABITAT. Reply in plain text only. " +
+        "Do not use Markdown tables or create images, files, canvases, interactive content, or other rich output " +
+        "unless the user's message explicitly requests it. Use simple paragraphs and plain-text lists when needed.]";
+
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _timer;
     private readonly Grid _root = new();
     private readonly ScrollViewer ConversationScroll = new();
@@ -164,7 +169,11 @@ public sealed class MainPage : Page
             return;
         }
 
-        if (!_bridge.TryQueueMessage(text, out var reason))
+        var outboundText = _preferences.TextOnly
+            ? $"{text}\n\n{TextOnlyDirective}"
+            : text;
+
+        if (!_bridge.TryQueueMessage(outboundText, out var reason))
         {
             SetStatus(reason, StatusTone.Warning);
             FocusComposer();
@@ -370,6 +379,19 @@ public sealed class MainPage : Page
         opacityHeader.Children.Add(opacityValue);
         panel.Children.Add(opacityHeader);
         panel.Children.Add(opacity);
+        var textOnly = new ToggleSwitch
+        {
+            Header = "Text-only replies",
+            IsOn = _preferences.TextOnly,
+            Margin = new Thickness(0, 8, 0, 0)
+        };
+        panel.Children.Add(textOnly);
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Tell ChatGPT that messages come from HABITAT and avoid tables, images, files and other rich output unless you explicitly request them.",
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.72
+        });
 
         var dialog = new ContentDialog
         {
@@ -387,7 +409,8 @@ public sealed class MainPage : Page
         _preferences = _preferences with
         {
             Theme = theme.SelectedIndex switch { 1 => "night", 2 => "hybrid", _ => "day" },
-            Opacity = opacity.Value
+            Opacity = opacity.Value,
+            TextOnly = textOnly.IsOn
         };
         _preferences.Save();
         ApplyPreferences();
@@ -640,6 +663,7 @@ public sealed class MainPage : Page
 
 internal sealed record Preferences(string Theme, double Opacity)
 {
+    public bool TextOnly { get; init; } = true;
     public int? WindowX { get; init; }
     public int? WindowY { get; init; }
     public int? WindowWidth { get; init; }

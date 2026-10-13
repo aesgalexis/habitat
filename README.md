@@ -13,6 +13,8 @@ La extensión se vuelve a emparejar automáticamente cuando HABITAT cambia su cl
 
 En el editor, Enter envía el mensaje y Shift+Enter inserta un salto de línea. Las respuestas de texto vuelven a HABITAT y permanecen también en la conversación original de ChatGPT.
 
+El modo **Text-only replies** está activado por defecto. Añade a cada envío una instrucción visible para que ChatGPT responda con texto simple y evite tablas, imágenes, archivos y otros contenidos enriquecidos, salvo que el propio mensaje los solicite expresamente. Se puede desactivar y su valor queda guardado desde **Preferences…**.
+
 ## Compilar
 
 Requisitos de desarrollo:
