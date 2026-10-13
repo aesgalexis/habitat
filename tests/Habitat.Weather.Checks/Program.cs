@@ -78,8 +78,22 @@ await testService.GetAsync("Palma de Mallorca, ES", CancellationToken.None);
 await testService.GetAsync("Palma de Mallorca, ES", CancellationToken.None);
 Check(requests.Count == 3 && requests[0].Query.Contains("name=Palma&") && requests[0].Query.Contains("countryCode=ES"),
     "Resolve the correct Palma in Spain and reuse its coordinates between refreshes.");
-Check(requests[1].Query.Contains("latitude=39.56939") && requests[1].Query.Contains("forecast_hours=7"),
+Check(requests[1].Query.Contains("latitude=39.569") && requests[1].Query.Contains("forecast_hours=7"),
     "Request a six-hour forecast with culture-independent coordinates.");
+
+var beforeDevice = requests.Count;
+var deviceWeather = await testService.GetAsync(39.56939, 2.65024, "Current location · GPS", CancellationToken.None);
+Check(requests.Count == beforeDevice + 1 && requests[^1].Host == "api.open-meteo.com" &&
+    deviceWeather.Location == "Current location · GPS",
+    "Device coordinates must go directly to the forecast without resolving or reusing the saved city.");
+Check(requests[^1].Query.Contains("latitude=39.569&longitude=2.65&"),
+    "The forecast should not transmit unnecessary device-coordinate precision.");
+foreach (var latitude in new[] { double.NaN, double.PositiveInfinity, 91d })
+{
+    try { await testService.GetAsync(latitude, 2.65, "Current location", CancellationToken.None); throw new Exception("Invalid device coordinates must be rejected."); }
+    catch (InvalidDataException) { checks++; }
+}
+Check(requests.Count == beforeDevice + 1, "Invalid device coordinates must not make an HTTP request.");
 
 using var failedClient = new HttpClient(new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)));
 using var failedService = new WeatherService(failedClient);

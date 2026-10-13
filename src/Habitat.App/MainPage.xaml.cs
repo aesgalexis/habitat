@@ -31,6 +31,7 @@ public sealed class MainPage : Page
     private readonly Button OverflowButton = new();
     private readonly MenuFlyout OptionsMenu = new();
     private readonly WeatherService _weather = new();
+    private readonly DeviceLocationService _deviceLocation = new();
     private readonly CancellationTokenSource _weatherCancellation = new();
     private readonly Grid WeatherBlock = new();
     private readonly Viewbox WeatherSymbol = new() { Width = 32, Height = 32 };
@@ -38,6 +39,7 @@ public sealed class MainPage : Page
     private readonly TextBlock WeatherLocation = new() { FontSize = 11, Opacity = 0.72 };
     private readonly TextBlock WeatherOutlook = new() { Text = "Loading weather…", FontSize = 12, Opacity = 0.8 };
     private WeatherSnapshot? _weatherSnapshot;
+    private bool _locationSettingsOpened;
     private bool _weatherRefreshing;
     private DateTimeOffset _nextWeatherRefresh = DateTimeOffset.MinValue;
     private BridgeService? _bridge;
@@ -83,7 +85,7 @@ public sealed class MainPage : Page
         WeatherSymbol.VerticalAlignment = VerticalAlignment.Center;
         WeatherBlock.Children.Add(WeatherSymbol);
         var weatherText = new StackPanel { Spacing = 2, MinWidth = 155, MaxWidth = 230 };
-        WeatherLocation.Text = _preferences.WeatherCity;
+        WeatherLocation.Text = _preferences.UseDeviceLocation ? "Current location" : _preferences.WeatherCity;
         WeatherLocation.TextTrimming = TextTrimming.CharacterEllipsis;
         weatherText.Children.Add(WeatherLocation);
         weatherText.Children.Add(WeatherTemperature);
@@ -279,16 +281,42 @@ public sealed class MainPage : Page
         _weatherRefreshing = true;
         _nextWeatherRefresh = DateTimeOffset.UtcNow.AddMinutes(15);
         var city = _preferences.WeatherCity;
+        var useDeviceLocation = _preferences.UseDeviceLocation;
         try
         {
-            var snapshot = await _weather.GetAsync(city, _weatherCancellation.Token);
-            if (_weatherCancellation.IsCancellationRequested || city != _preferences.WeatherCity) return;
+            WeatherSnapshot snapshot;
+            var locationDetails = "Saved city";
+            if (useDeviceLocation)
+            {
+                var result = await _deviceLocation.GetAsync(
+                    ((App)Application.Current).MainWindow?.IsActive == true, _weatherCancellation.Token);
+                if (_weatherCancellation.IsCancellationRequested || city != _preferences.WeatherCity ||
+                    useDeviceLocation != _preferences.UseDeviceLocation) return;
+                if (result.Position is DeviceLocation position)
+                {
+                    snapshot = await _weather.GetAsync(position.Latitude, position.Longitude,
+                        "Current location · " + position.Source, _weatherCancellation.Token);
+                    locationDetails = $"{position.Source} · accuracy {position.Accuracy:0} m";
+                }
+                else
+                {
+                    snapshot = await _weather.GetAsync(city, _weatherCancellation.Token);
+                    snapshot = snapshot with { Location = snapshot.Location + " · saved city" };
+                    locationDetails = result.Error ?? "Device location unavailable; using the saved city.";
+                }
+            }
+            else
+            {
+                snapshot = await _weather.GetAsync(city, _weatherCancellation.Token);
+            }
+            if (_weatherCancellation.IsCancellationRequested || city != _preferences.WeatherCity ||
+                useDeviceLocation != _preferences.UseDeviceLocation) return;
             _weatherSnapshot = snapshot;
             WeatherLocation.Text = snapshot.Location;
             WeatherTemperature.Text = $"{snapshot.Temperature:0}°C";
             WeatherOutlook.Text = $"{snapshot.Outlook} · {snapshot.PrecipitationChance}% · 6h";
             ToolTipService.SetToolTip(WeatherBlock,
-                $"{snapshot.Location}\n{snapshot.Condition} · next 6 hours\n" +
+                $"{snapshot.Location}\n{locationDetails}\n{snapshot.Condition} · next 6 hours\n" +
                 $"Peak hourly precipitation chance: {snapshot.PrecipitationChance}%\n" +
                 $"Updated {snapshot.UpdatedAt.ToLocalTime():HH:mm}\nWeather data: Open-Meteo");
             PaintWeather();
@@ -297,7 +325,8 @@ public sealed class MainPage : Page
         catch (Exception exception) when (exception is HttpRequestException or OperationCanceledException or
             JsonException or InvalidDataException or KeyNotFoundException or InvalidOperationException)
         {
-            if (_weatherCancellation.IsCancellationRequested || city != _preferences.WeatherCity) return;
+            if (_weatherCancellation.IsCancellationRequested || city != _preferences.WeatherCity ||
+                useDeviceLocation != _preferences.UseDeviceLocation) return;
             _nextWeatherRefresh = DateTimeOffset.UtcNow.AddMinutes(5);
             WeatherOutlook.Text = _weatherSnapshot is null ? "Weather unavailable" :
                 $"Offline · updated {_weatherSnapshot.UpdatedAt.ToLocalTime():HH:mm}";
@@ -308,6 +337,20 @@ public sealed class MainPage : Page
         finally
         {
             _weatherRefreshing = false;
+        }
+    }
+
+    public void OnWindowActivated()
+    {
+        if (_locationSettingsOpened)
+        {
+            _locationSettingsOpened = false;
+            _deviceLocation.ResetAccess();
+            if (_preferences.UseDeviceLocation) _nextWeatherRefresh = DateTimeOffset.MinValue;
+        }
+        else if (_preferences.UseDeviceLocation && _deviceLocation.NeedsPermission)
+        {
+            _nextWeatherRefresh = DateTimeOffset.MinValue;
         }
     }
 
@@ -499,15 +542,38 @@ public sealed class MainPage : Page
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.72
         });
+        var useDeviceLocation = new ToggleSwitch
+        {
+            Header = "Use current location (GPS / Windows)",
+            IsOn = _preferences.UseDeviceLocation,
+            Margin = new Thickness(0, 8, 0, 0)
+        };
+        panel.Children.Add(useDeviceLocation);
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Uses GPS when available. Windows asks for location permission. Coordinates are sent to Open-Meteo for the forecast; the saved city is used if location is unavailable.",
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.72
+        });
         var weatherCity = new TextBox
         {
-            Header = "Weather location",
+            Header = useDeviceLocation.IsOn ? "Fallback city" : "Weather location",
             Text = _preferences.WeatherCity,
             PlaceholderText = "City, country code (for example Palma, ES)",
             MaxLength = 100,
             Margin = new Thickness(0, 8, 0, 0)
         };
+        useDeviceLocation.Toggled += (_, _) => weatherCity.Header = useDeviceLocation.IsOn ? "Fallback city" : "Weather location";
         panel.Children.Add(weatherCity);
+        var locationSettings = new HyperlinkButton
+        {
+            Content = "Windows location settings",
+            NavigateUri = new Uri("ms-settings:privacy-location"),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Padding = new Thickness(0)
+        };
+        locationSettings.Click += (_, _) => _locationSettingsOpened = true;
+        panel.Children.Add(locationSettings);
         panel.Children.Add(new TextBlock
         {
             Text = "Weather data: Open-Meteo · refreshes every 15 minutes.",
@@ -528,20 +594,23 @@ public sealed class MainPage : Page
         await dialog.ShowAsync();
         _appearanceDialogOpen = false;
 
-        var locationChanged = _preferences.WeatherCity != weatherCity.Text.Trim();
+        var locationChanged = _preferences.WeatherCity != weatherCity.Text.Trim() ||
+            _preferences.UseDeviceLocation != useDeviceLocation.IsOn;
         _preferences = _preferences with
         {
             Theme = theme.SelectedIndex switch { 1 => "night", 2 => "hybrid", _ => "day" },
             Opacity = opacity.Value,
             TextOnly = textOnly.IsOn,
-            WeatherCity = weatherCity.Text.Trim()
+            WeatherCity = weatherCity.Text.Trim(),
+            UseDeviceLocation = useDeviceLocation.IsOn
         };
         _preferences.Save();
         ApplyPreferences();
         if (locationChanged)
         {
+            _deviceLocation.ResetAccess();
             _weatherSnapshot = null;
-            WeatherLocation.Text = _preferences.WeatherCity;
+            WeatherLocation.Text = _preferences.UseDeviceLocation ? "Current location" : _preferences.WeatherCity;
             WeatherTemperature.Text = "—";
             WeatherOutlook.Text = "Loading weather…";
             ToolTipService.SetToolTip(WeatherBlock, "Weather data: Open-Meteo");
@@ -801,6 +870,7 @@ internal sealed record Preferences(string Theme, double Opacity)
 {
     public bool TextOnly { get; init; } = true;
     public string WeatherCity { get; init; } = "Palma, ES";
+    public bool UseDeviceLocation { get; init; } = true;
     public int? WindowX { get; init; }
     public int? WindowY { get; init; }
     public int? WindowWidth { get; init; }

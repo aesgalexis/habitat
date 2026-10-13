@@ -27,14 +27,22 @@ internal sealed class WeatherService : IDisposable
             _locationQuery = city;
         }
 
-        var latitude = _location.Latitude.ToString(CultureInfo.InvariantCulture);
-        var longitude = _location.Longitude.ToString(CultureInfo.InvariantCulture);
-        var url = $"https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}" +
+        return await GetAsync(_location.Latitude, _location.Longitude, _location.Label, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<WeatherSnapshot> GetAsync(double latitude, double longitude, string location, CancellationToken cancellationToken)
+    {
+        if (!double.IsFinite(latitude) || !double.IsFinite(longitude) || Math.Abs(latitude) > 90 || Math.Abs(longitude) > 180)
+            throw new InvalidDataException("The weather location has invalid coordinates.");
+        // Weather forecasts do not need sub-meter device precision.
+        var latitudeText = latitude.ToString("0.###", CultureInfo.InvariantCulture);
+        var longitudeText = longitude.ToString("0.###", CultureInfo.InvariantCulture);
+        var url = $"https://api.open-meteo.com/v1/forecast?latitude={latitudeText}&longitude={longitudeText}" +
             "&current=temperature_2m,weather_code,is_day,rain,showers,snowfall" +
             "&hourly=precipitation_probability,rain,showers,snowfall" +
             "&forecast_hours=7&timeformat=unixtime&timezone=auto";
         using var document = await GetJsonAsync(url, cancellationToken).ConfigureAwait(false);
-        return ParseForecast(document.RootElement, _location.Label);
+        return ParseForecast(document.RootElement, location);
     }
 
     private async Task<WeatherLocation> ResolveLocationAsync(string city, CancellationToken cancellationToken)

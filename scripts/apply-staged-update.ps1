@@ -43,7 +43,7 @@ try {
     } while ($true)
 
     foreach ($process in $running) {
-        if (-not $process.CloseMainWindow() -or -not $process.WaitForExit(10000)) {
+        if (-not $process.CloseMainWindow() -or -not $process.WaitForExit(30000)) {
             throw "HABITAT did not close normally; no process was terminated."
         }
     }

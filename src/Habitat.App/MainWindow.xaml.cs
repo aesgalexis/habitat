@@ -20,6 +20,7 @@ public sealed class MainWindow : Window
     private readonly DesktopAcrylicController? _acrylic;
     private readonly SystemBackdropConfiguration? _backdropConfiguration;
     private string _statusIcon = string.Empty;
+    public bool IsActive { get; private set; }
 
     public MainWindow(BridgeService bridge)
     {
@@ -177,8 +178,10 @@ public sealed class MainWindow : Window
 
     private async void OnActivated(object sender, WindowActivatedEventArgs args)
     {
-        if (args.WindowActivationState != WindowActivationState.Deactivated)
+        IsActive = args.WindowActivationState != WindowActivationState.Deactivated;
+        if (IsActive)
         {
+            _page.OnWindowActivated();
             _page.RefreshHybridAppearance(force: true);
             await Task.Delay(80);
             _page.FocusComposer();
