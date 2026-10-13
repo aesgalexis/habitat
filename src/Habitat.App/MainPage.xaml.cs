@@ -413,13 +413,14 @@ public sealed class MainPage : Page
         var transparent = new SolidColorBrush(Color(0, 0, 0, 0));
         var muted = new SolidColorBrush(dark ? Color(0xFF, 0xA1, 0xAE, 0xC1) : Color(0xFF, 0x6D, 0x7B, 0x91));
         var accent = new SolidColorBrush(dark ? Color(0xFF, 0x89, 0x95, 0xFF) : Color(0xFF, 0x66, 0x74, 0xF4));
+        var text = TextBrush();
 
         _root.Background = canvas;
-        TitleText.Foreground = TextBrush();
+        TitleText.Foreground = text;
         StatusText.Foreground = muted;
         Composer.Background = transparent;
         Composer.BorderBrush = transparent;
-        Composer.Foreground = TextBrush();
+        Composer.Foreground = text;
         SendButton.Background = transparent;
         SendButton.Foreground = accent;
         OverflowButton.Background = transparent;
@@ -447,6 +448,15 @@ public sealed class MainPage : Page
         {
             Composer.Resources[key] = muted;
         }
+        foreach(var key in new[]
+        {
+            "TextControlForeground", "TextControlForegroundPointerOver",
+            "TextControlForegroundFocused"
+        })
+        {
+            Composer.Resources[key] = text;
+        }
+        Composer.Resources["TextControlForegroundDisabled"] = muted;
 
         foreach(var child in Conversation.Children)
         {
@@ -457,7 +467,7 @@ public sealed class MainPage : Page
             }
             if(group.Children.Count > 1 && group.Children[1] is TextBlock body)
             {
-                body.Foreground = TextBrush();
+                body.Foreground = text;
             }
         }
     }
