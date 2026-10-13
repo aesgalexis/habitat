@@ -18,6 +18,8 @@ public sealed class MainWindow : Window
     {
         _bridge = bridge;
         Title = "HABITAT";
+        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico");
+        if (File.Exists(iconPath)) AppWindow.SetIcon(iconPath);
         _page = new MainPage(bridge);
         Content = _page;
         if (DesktopAcrylicController.IsSupported())
@@ -34,12 +36,35 @@ public sealed class MainWindow : Window
     public void SetBackgroundAppearance(double percent, bool dark)
     {
         var opacity = (float)Math.Clamp(percent / 100d, 0, 1);
+        var tint = dark
+            ? Color.FromArgb(0xFF, 0x10, 0x16, 0x23)
+            : Color.FromArgb(0xFF, 0xF2, 0xF6, 0xFB);
+        var foreground = dark
+            ? Color.FromArgb(0xFF, 0xEE, 0xF3, 0xFB)
+            : Color.FromArgb(0xFF, 0x1B, 0x24, 0x34);
+        var transparent = Color.FromArgb(0, 0, 0, 0);
+        var hover = dark
+            ? Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)
+            : Color.FromArgb(0x22, 0, 0, 0);
+
+        var titleBar = AppWindow.TitleBar;
+        titleBar.BackgroundColor = tint;
+        titleBar.InactiveBackgroundColor = tint;
+        titleBar.ForegroundColor = foreground;
+        titleBar.InactiveForegroundColor = foreground;
+        titleBar.ButtonBackgroundColor = transparent;
+        titleBar.ButtonInactiveBackgroundColor = transparent;
+        titleBar.ButtonForegroundColor = foreground;
+        titleBar.ButtonInactiveForegroundColor = foreground;
+        titleBar.ButtonHoverBackgroundColor = hover;
+        titleBar.ButtonHoverForegroundColor = foreground;
+        titleBar.ButtonPressedBackgroundColor = hover;
+        titleBar.ButtonPressedForegroundColor = foreground;
+
         if (_acrylic is not null && _backdropConfiguration is not null)
         {
             _backdropConfiguration.Theme = dark ? SystemBackdropTheme.Dark : SystemBackdropTheme.Light;
-            _acrylic.TintColor = dark
-                ? Color.FromArgb(0xFF, 0x10, 0x16, 0x23)
-                : Color.FromArgb(0xFF, 0xF2, 0xF6, 0xFB);
+            _acrylic.TintColor = tint;
             _acrylic.FallbackColor = _acrylic.TintColor;
             _acrylic.TintOpacity = opacity;
             _acrylic.LuminosityOpacity = opacity;

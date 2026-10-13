@@ -13,17 +13,18 @@
   };
   window.__habitatBridge = controller;
   let busy = false;
+  let reportedModel = "";
   const pause = ms => new Promise(r=>setTimeout(r,ms));
   const bridge = payload => chrome.runtime.sendMessage(payload).catch(e=>({error:String(e)}));
-  async function event(type,id,text) {
+  async function event(type,id,text,model="") {
     let lastError="";
     for(let attempt=0;attempt<5;attempt++) {
-      const answer=await bridge({kind:"event",event:{type,id,text}});
+      const answer=await bridge({kind:"event",event:{type,id,text,model}});
       if(!answer?.error)return;
       lastError=answer.error;
       await pause(400*(attempt+1));
     }
-    throw Error("No se pudo entregar el evento a HABITAT: "+lastError);
+    throw Error("Could not deliver the event to HABITAT: "+lastError);
   }
   const assistantNodes = () => {
     const current=[...document.querySelectorAll('[data-content-search-unit-key$=":assistant"]')];
@@ -77,6 +78,68 @@
     if(!element)return false;
     const style=getComputedStyle(element), rect=element.getBoundingClientRect();
     return style.display!=="none" && style.visibility!=="hidden" && rect.width>0 && rect.height>0;
+  }
+  function normalizeModelLabel(value) {
+    const label=String(value||"")
+      .replace(/^(select|choose|seleccionar|elegir)\s+(a\s+)?(chatgpt\s+)?(model|modelo)\s*[:·-]?\s*/i,"")
+      .replace(/\s+/g," ").trim();
+    if(!label || /^(chatgpt|model|modelo)$/i.test(label))return "";
+    return label.slice(0,48);
+  }
+  function currentEffortLabel() {
+    const selectors=[
+      '[data-testid*="reasoning"]',
+      '[data-testid*="thinking"]',
+      'button[aria-label*="reasoning" i]',
+      'button[aria-label*="thinking" i]',
+      'button[aria-label*="effort" i]',
+      'button[aria-label*="razonamiento" i]'
+    ];
+    for(const selector of selectors) {
+      for(const element of document.querySelectorAll(selector)) {
+        if(!visible(element) || isInsideMessage(element))continue;
+        const value=[element.innerText,element.getAttribute("aria-label"),element.getAttribute("title")]
+          .filter(Boolean).join(" ");
+        const match=value.match(/\b(minimal|low|medium|high|xhigh|max|ultra|bajo|medio|alto)\b/i);
+        if(!match)continue;
+        const normalized={bajo:"low",medio:"medium",alto:"high"}[match[1].toLowerCase()] || match[1].toLowerCase();
+        return normalized;
+      }
+    }
+    return "";
+  }
+  function withEffort(model) {
+    const effort=currentEffortLabel();
+    return effort && !new RegExp(`\\b${effort}\\b`,"i").test(model) ? `${model} ${effort}` : model;
+  }
+  function currentModelLabel() {
+    const selectors=[
+      '[data-testid="model-switcher-dropdown-button"]',
+      '[data-testid*="model-picker"]',
+      '[data-testid*="model-switcher"]',
+      'header button[aria-label*="model" i]',
+      'header button[aria-label*="modelo" i]',
+      'main button[aria-label*="model" i]',
+      'main button[aria-label*="modelo" i]'
+    ];
+    for(const selector of selectors) {
+      for(const element of document.querySelectorAll(selector)) {
+        if(!visible(element) || isInsideMessage(element))continue;
+        const values=[
+          element.innerText,
+          element.getAttribute("data-value"),
+          element.getAttribute("title"),
+          element.getAttribute("aria-label")
+        ];
+        for(const value of values) {
+          const label=normalizeModelLabel(value);
+          if(label && /sol|astra|luna|terra|gpt|o\d|medium|high|low|medio|alto|bajo|thinking|reasoning/i.test(label)) {
+            return withEffort(label);
+          }
+        }
+      }
+    }
+    return withEffort("MODEL");
   }
   function enabled(element) {
     return element && !element.disabled && element.getAttribute("aria-disabled")!=="true";
@@ -182,16 +245,18 @@
     if(await confirmSent(box,priorUserCount,originalUrl))return;
 
     const detail=send
-      ? `${send.tagName.toLowerCase()}${send.id?"#"+send.id:""} (${send.getAttribute("aria-label")||send.getAttribute("data-testid")||"sin etiqueta"})`
-      : "ningún control de envío en el compositor";
-    throw Error("ChatGPT recibió el texto, pero no aceptó el envío. Detectado: "+detail+".");
+      ? `${send.tagName.toLowerCase()}${send.id?"#"+send.id:""} (${send.getAttribute("aria-label")||send.getAttribute("data-testid")||"unlabelled"})`
+      : "no send control in the composer";
+    throw Error("ChatGPT received the text but did not accept the send action. Detected: "+detail+".");
   }
   async function process(message) {
     busy=true;
     const {id,text}=message;
+    let model="MODEL";
     try {
       const box=findComposerBox();
-      if (!box) throw Error("No encuentro el cuadro de ChatGPT. Abre una conversación normal.");
+      if (!box) throw Error("Could not find the ChatGPT composer. Open a regular conversation.");
+      model=currentModelLabel();
       const prior=assistantNodes();
       const oldLast=prior[prior.length-1];
       const oldIdentity=oldLast ? assistantIdentity(oldLast) : "";
@@ -213,9 +278,9 @@
       // Confirm delivery to the desktop before interacting with the button.
       // This also prevents HABITAT from remaining indefinitely in
       // "Enviando a Chrome" when the page later changes context.
-      await event("received",id,"");
+      await event("received",id,"",model);
       await submitComposer(box);
-      await event("started",id,"");
+      await event("started",id,"",model);
       let stable=0,last="",started=false;
       const deadline=Date.now()+180000;
       while(Date.now()<deadline) {
@@ -234,13 +299,13 @@
         const complete=/^(complete|completed|finished|done)$/i.test(turnState);
         const settled=complete ? stable>=1 : stable>=5;
         if(started && !stop && settled) {
-          await event("response",id,last);
+          await event("response",id,last,model);
           return;
         }
       }
-      throw Error("No pude confirmar el final de la respuesta (3 min). Consulta la pestaña de ChatGPT.");
+      throw Error("Could not confirm the end of the response within 3 minutes. Check the ChatGPT tab.");
     } catch(e) {
-      try { await event("error",id,String(e.message||e)); } catch (_) {}
+      try { await event("error",id,String(e.message||e),model); } catch (_) {}
     } finally {busy=false;}
   }
   async function poll() {
@@ -249,6 +314,12 @@
       // The background validates and, for the active ChatGPT tab, establishes
       // or refreshes the loopback pairing before returning a message.
       const answer=await bridge({kind:"next"});
+      if(answer?.error)return;
+      const model=currentModelLabel();
+      if(model!==reportedModel) {
+        await event("model","","",model);
+        reportedModel=model;
+      }
       if(answer?.message)await process(answer.message);
     } catch (_) {
       // Reloading/updating an unpacked extension invalidates existing content

@@ -4,6 +4,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Ellipse = Microsoft.UI.Xaml.Shapes.Ellipse;
@@ -19,14 +20,16 @@ public sealed class MainPage : Page
     private readonly Grid _root = new();
     private readonly TextBlock StatusText = new();
     private readonly Ellipse StatusDot = new();
-    private readonly TextBlock TitleText = new();
+    private readonly TextBlock PromptGlyph = new();
     private readonly ScrollViewer ConversationScroll = new();
     private readonly StackPanel Conversation = new();
     private readonly TextBox Composer = new();
     private readonly Button SendButton = new();
     private readonly Button OverflowButton = new();
+    private readonly MenuFlyout OptionsMenu = new();
     private BridgeService? _bridge;
     private Preferences _preferences = Preferences.Load();
+    private string _activeModel = "MODEL";
 
     public MainPage(BridgeService bridge)
     {
@@ -52,23 +55,16 @@ public sealed class MainPage : Page
         var header = new Grid { ColumnSpacing = 12 };
         header.ColumnDefinitions.Add(new ColumnDefinition());
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        TitleText.Text = "HABITAT";
-        TitleText.VerticalAlignment = VerticalAlignment.Center;
-        TitleText.FontFamily = new FontFamily("Segoe UI Variable Display");
-        TitleText.FontSize = 20;
-        TitleText.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
-        header.Children.Add(TitleText);
 
         StatusDot.Width = 6;
         StatusDot.Height = 6;
-        StatusText.Text = "Iniciando puente…";
+        StatusText.Text = "Starting bridge…";
         StatusText.FontSize = 12;
         StatusText.VerticalAlignment = VerticalAlignment.Center;
         var statusRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 7 };
         statusRow.Children.Add(StatusDot);
         statusRow.Children.Add(StatusText);
-        Grid.SetColumn(statusRow, 1);
+        Grid.SetColumn(statusRow, 0);
         header.Children.Add(statusRow);
 
         OverflowButton.Content = "•••";
@@ -76,19 +72,19 @@ public sealed class MainPage : Page
         OverflowButton.Height = 34;
         OverflowButton.Padding = new Thickness(0);
         OverflowButton.BorderThickness = new Thickness(0);
-        var menu = new MenuFlyout();
-        var preferences = new MenuFlyoutItem { Text = "Preferencias…" };
+        OptionsMenu.Placement = FlyoutPlacementMode.BottomEdgeAlignedRight;
+        var preferences = new MenuFlyoutItem { Text = "Preferences…" };
         preferences.Click += ShowPreferences_Click;
-        menu.Items.Add(preferences);
-        menu.Items.Add(new MenuFlyoutSeparator());
-        var pairing = new MenuFlyoutItem { Text = "Código de vinculación…" };
+        OptionsMenu.Items.Add(preferences);
+        OptionsMenu.Items.Add(new MenuFlyoutSeparator());
+        var pairing = new MenuFlyoutItem { Text = "Pairing code…" };
         pairing.Click += ShowPairing_Click;
-        menu.Items.Add(pairing);
-        var copy = new MenuFlyoutItem { Text = "Copiar código" };
+        OptionsMenu.Items.Add(pairing);
+        var copy = new MenuFlyoutItem { Text = "Copy code" };
         copy.Click += CopyPairingCode_Click;
-        menu.Items.Add(copy);
-        OverflowButton.Flyout = menu;
-        Grid.SetColumn(OverflowButton, 2);
+        OptionsMenu.Items.Add(copy);
+        OverflowButton.Flyout = OptionsMenu;
+        Grid.SetColumn(OverflowButton, 1);
         header.Children.Add(OverflowButton);
         _root.Children.Add(header);
 
@@ -99,28 +95,34 @@ public sealed class MainPage : Page
         Grid.SetRow(ConversationScroll, 1);
         _root.Children.Add(ConversationScroll);
 
-        var composerGrid = new Grid { ColumnSpacing = 12 };
+        var composerGrid = new Grid { ColumnSpacing = 10 };
+        composerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         composerGrid.ColumnDefinitions.Add(new ColumnDefinition());
         composerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        PromptGlyph.Text = ">";
+        PromptGlyph.FontFamily = new FontFamily("Cascadia Mono");
+        PromptGlyph.FontSize = 18;
+        PromptGlyph.VerticalAlignment = VerticalAlignment.Center;
+        composerGrid.Children.Add(PromptGlyph);
         Composer.MinHeight = 58;
         Composer.MaxHeight = 180;
         Composer.Padding = new Thickness(0, 9, 0, 9);
         Composer.AcceptsReturn = true;
         Composer.TextWrapping = TextWrapping.Wrap;
-        Composer.PlaceholderText = "Escribe a ChatGPT…";
+        Composer.PlaceholderText = string.Empty;
         Composer.BorderThickness = new Thickness(0);
-        // TextBox handles Enter internally when AcceptsReturn is enabled.
-        // Listen to handled routed events as well so plain Enter always sends,
-        // while Shift+Enter is left to the TextBox to insert a line break.
-        Composer.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(Composer_KeyDown), true);
+        // Handle Enter before TextBox processes it. Plain Enter sends without
+        // adding a newline; Shift+Enter reaches TextBox and inserts one.
+        Composer.AddHandler(UIElement.PreviewKeyDownEvent, new KeyEventHandler(Composer_KeyDown), true);
+        Grid.SetColumn(Composer, 1);
         composerGrid.Children.Add(Composer);
-        SendButton.Content = "Enviar";
+        SendButton.Content = "Send";
         SendButton.Padding = new Thickness(12, 9, 0, 9);
         SendButton.BorderThickness = new Thickness(0);
         SendButton.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
         SendButton.VerticalAlignment = VerticalAlignment.Bottom;
         SendButton.Click += SendButton_Click;
-        Grid.SetColumn(SendButton, 1);
+        Grid.SetColumn(SendButton, 2);
         composerGrid.Children.Add(SendButton);
         Grid.SetRow(composerGrid, 2);
         _root.Children.Add(composerGrid);
@@ -132,7 +134,6 @@ public sealed class MainPage : Page
     private void MainPage_Loaded(object sender, RoutedEventArgs e)
     {
         ApplyPreferences();
-        AddMessage("HABITAT", "Conexión automática habilitada. Mantén abierta en Chrome la conversación deseada y espera a que aparezca ‘Extensión conectada’.", MessageTone.Muted);
         _timer.Start();
         Composer.Focus(FocusState.Programmatic);
     }
@@ -180,9 +181,9 @@ public sealed class MainPage : Page
             return;
         }
 
-        AddMessage("TÚ", text, MessageTone.User);
+        AddMessage("YOU", text, MessageTone.User);
         Composer.Text = string.Empty;
-        SetStatus("Enviando a Chrome…", StatusTone.Active);
+        SetStatus("Sending to Chrome…", StatusTone.Active);
         UpdateSendState();
     }
 
@@ -195,12 +196,12 @@ public sealed class MainPage : Page
 
         if (_bridge.TryExpireMessage(TimeSpan.FromMinutes(4)))
         {
-            AddMessage("HABITAT", "Se agotó el tiempo de espera. Revisa ChatGPT antes de volver a enviar.", MessageTone.Muted);
-            SetStatus("Tiempo agotado; revisa Chrome", StatusTone.Danger);
+            AddMessage("SYSTEM", "The request timed out. Check ChatGPT before sending it again.", MessageTone.Muted);
+            SetStatus("Timed out — check Chrome", StatusTone.Danger);
         }
         else if (!_bridge.HasMessageInFlight)
         {
-            SetStatus(_bridge.IsConnected ? "Extensión conectada" : "Reconectando con ChatGPT…",
+            SetStatus(_bridge.IsConnected ? "Extension connected" : "Reconnecting to ChatGPT…",
                 _bridge.IsConnected ? StatusTone.Success : StatusTone.Warning);
         }
 
@@ -211,25 +212,31 @@ public sealed class MainPage : Page
     {
         DispatcherQueue.TryEnqueue(() =>
         {
+            if (!string.IsNullOrWhiteSpace(bridgeEvent.Model))
+            {
+                _activeModel = bridgeEvent.Model.Trim();
+            }
             switch (bridgeEvent.Type)
             {
                 case "received":
-                    SetStatus("Chrome recibió el mensaje…", StatusTone.Active);
+                    SetStatus("Chrome received the message…", StatusTone.Active);
                     break;
                 case "started":
-                    SetStatus("ChatGPT está respondiendo…", StatusTone.Active);
+                    SetStatus($"{_activeModel} is responding…", StatusTone.Active);
                     break;
                 case "response":
-                    AddMessage("CHATGPT", bridgeEvent.Text ?? string.Empty, MessageTone.Assistant);
-                    SetStatus("Respuesta recibida", StatusTone.Success);
+                    AddMessage(_activeModel, bridgeEvent.Text ?? string.Empty, MessageTone.Assistant);
+                    SetStatus("Response received", StatusTone.Success);
                     break;
                 case "error":
-                    AddMessage("HABITAT", bridgeEvent.Text ?? "Error desconocido", MessageTone.Muted);
-                    SetStatus("Error en el puente", StatusTone.Danger);
+                    AddMessage("SYSTEM", bridgeEvent.Text ?? "Unknown error", MessageTone.Muted);
+                    SetStatus("Bridge error", StatusTone.Danger);
                     break;
                 case "status":
                     var text = bridgeEvent.Text ?? string.Empty;
                     SetStatus(text[..Math.Min(100, text.Length)], StatusTone.Active);
+                    break;
+                case "model":
                     break;
             }
             UpdateSendState();
@@ -240,8 +247,8 @@ public sealed class MainPage : Page
     {
         DispatcherQueue.TryEnqueue(() =>
         {
-            AddMessage("HABITAT", error, MessageTone.Muted);
-            SetStatus("No se pudo iniciar el puente", StatusTone.Danger);
+            AddMessage("SYSTEM", error, MessageTone.Muted);
+            SetStatus("Could not start the bridge", StatusTone.Danger);
         });
     }
 
@@ -319,7 +326,7 @@ public sealed class MainPage : Page
         var theme = new ComboBox
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            ItemsSource = new[] { "Día", "Noche" },
+            ItemsSource = new[] { "Day", "Night" },
             SelectedIndex = _preferences.Theme == "night" ? 1 : 0
         };
         theme.SelectionChanged += (_, _) =>
@@ -330,12 +337,12 @@ public sealed class MainPage : Page
         };
 
         var panel = new StackPanel { Spacing = 10, MinWidth = 360 };
-        panel.Children.Add(new TextBlock { Text = "Apariencia", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+        panel.Children.Add(new TextBlock { Text = "Appearance", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         panel.Children.Add(theme);
         var opacityHeader = new Grid();
         opacityHeader.ColumnDefinitions.Add(new ColumnDefinition());
         opacityHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        opacityHeader.Children.Add(new TextBlock { Text = "Opacidad", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+        opacityHeader.Children.Add(new TextBlock { Text = "Background opacity", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         Grid.SetColumn(opacityValue, 1);
         opacityHeader.Children.Add(opacityValue);
         panel.Children.Add(opacityHeader);
@@ -344,11 +351,12 @@ public sealed class MainPage : Page
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = "Preferencias",
+            Title = "Preferences",
             Content = panel,
-            CloseButtonText = "Cerrar",
+            CloseButtonText = "Close",
             DefaultButton = ContentDialogButton.Close
         };
+        StyleDialog(dialog);
         await dialog.ShowAsync();
 
         _preferences = new Preferences(theme.SelectedIndex == 1 ? "night" : "day", opacity.Value);
@@ -363,7 +371,7 @@ public sealed class MainPage : Page
         var panel = new StackPanel { Spacing = 12 };
         panel.Children.Add(new TextBlock
         {
-            Text = "Sólo se necesita como recuperación manual. La extensión se reconecta automáticamente al abrir HABITAT.",
+            Text = "Only needed for manual recovery. The extension reconnects automatically when HABITAT opens.",
             TextWrapping = TextWrapping.Wrap,
             MaxWidth = 440
         });
@@ -371,11 +379,12 @@ public sealed class MainPage : Page
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = "Código de vinculación",
+            Title = "Pairing code",
             Content = panel,
-            PrimaryButtonText = "Copiar código",
-            CloseButtonText = "Cerrar"
+            PrimaryButtonText = "Copy code",
+            CloseButtonText = "Close"
         };
+        StyleDialog(dialog);
         if (await dialog.ShowAsync() == ContentDialogResult.Primary)
         {
             CopyPairingCode();
@@ -390,7 +399,7 @@ public sealed class MainPage : Page
         var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
         package.SetText(_bridge.PairKey);
         Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
-        SetStatus("Código copiado", StatusTone.Active);
+        SetStatus("Code copied", StatusTone.Active);
     }
 
     private void ApplyPreferences()
@@ -414,10 +423,13 @@ public sealed class MainPage : Page
         var muted = new SolidColorBrush(dark ? Color(0xFF, 0xA1, 0xAE, 0xC1) : Color(0xFF, 0x6D, 0x7B, 0x91));
         var accent = new SolidColorBrush(dark ? Color(0xFF, 0x89, 0x95, 0xFF) : Color(0xFF, 0x66, 0x74, 0xF4));
         var text = TextBrush();
+        var popup = new SolidColorBrush(dark ? Color(0xF5, 0x16, 0x1D, 0x29) : Color(0xF7, 0xF7, 0xFA, 0xFE));
+        var popupBorder = new SolidColorBrush(dark ? Color(0xFF, 0x35, 0x40, 0x55) : Color(0xFF, 0xD6, 0xDF, 0xEA));
+        var hover = new SolidColorBrush(dark ? Color(0x33, 0xFF, 0xFF, 0xFF) : Color(0x12, 0, 0, 0));
 
         _root.Background = canvas;
-        TitleText.Foreground = text;
         StatusText.Foreground = muted;
+        PromptGlyph.Foreground = accent;
         Composer.Background = transparent;
         Composer.BorderBrush = transparent;
         Composer.Foreground = text;
@@ -425,6 +437,22 @@ public sealed class MainPage : Page
         SendButton.Foreground = accent;
         OverflowButton.Background = transparent;
         OverflowButton.Foreground = muted;
+
+        var menuStyle = new Style(typeof(MenuFlyoutPresenter));
+        menuStyle.Setters.Add(new Setter(Control.BackgroundProperty, popup));
+        menuStyle.Setters.Add(new Setter(Control.ForegroundProperty, text));
+        menuStyle.Setters.Add(new Setter(Control.BorderBrushProperty, popupBorder));
+        menuStyle.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(1)));
+        menuStyle.Setters.Add(new Setter(Control.CornerRadiusProperty, new CornerRadius(12)));
+        menuStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(6)));
+        OptionsMenu.MenuFlyoutPresenterStyle = menuStyle;
+        foreach(var item in OptionsMenu.Items.OfType<MenuFlyoutItem>())
+        {
+            item.Foreground = text;
+            item.Background = transparent;
+            item.Resources["MenuFlyoutItemBackgroundPointerOver"] = hover;
+            item.Resources["MenuFlyoutItemBackgroundPressed"] = hover;
+        }
 
         // Keep the controls visually absent in all pointer and focus states;
         // typography and color provide the interaction affordance.
@@ -470,6 +498,28 @@ public sealed class MainPage : Page
                 body.Foreground = text;
             }
         }
+    }
+
+    private void StyleDialog(ContentDialog dialog)
+    {
+        var dark = RequestedTheme == ElementTheme.Dark;
+        var text = TextBrush();
+        var popup = new SolidColorBrush(dark ? Color(0xFA, 0x16, 0x1D, 0x29) : Color(0xFA, 0xF7, 0xFA, 0xFE));
+        var border = new SolidColorBrush(dark ? Color(0xFF, 0x35, 0x40, 0x55) : Color(0xFF, 0xD6, 0xDF, 0xEA));
+        var accent = new SolidColorBrush(dark ? Color(0xFF, 0x89, 0x95, 0xFF) : Color(0xFF, 0x66, 0x74, 0xF4));
+
+        dialog.RequestedTheme = RequestedTheme;
+        dialog.Background = popup;
+        dialog.Foreground = text;
+        dialog.BorderBrush = border;
+        dialog.BorderThickness = new Thickness(1);
+        dialog.CornerRadius = new CornerRadius(16);
+        dialog.Resources["ContentDialogBackground"] = popup;
+        dialog.Resources["ContentDialogForeground"] = text;
+        dialog.Resources["ContentDialogBorderBrush"] = border;
+        dialog.Resources["AccentButtonBackground"] = accent;
+        dialog.Resources["AccentButtonBackgroundPointerOver"] = accent;
+        dialog.Resources["AccentButtonBackgroundPressed"] = accent;
     }
 
     private enum StatusTone { Active, Success, Warning, Danger }

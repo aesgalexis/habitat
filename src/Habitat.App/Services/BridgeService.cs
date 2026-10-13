@@ -89,15 +89,15 @@ public sealed class BridgeService : IAsyncDisposable
                     return Results.Json(new { error = "Invalid JSON" }, statusCode: StatusCodes.Status400BadRequest);
                 }
 
-                if (bridgeEvent is null || bridgeEvent.Type is not ("received" or "started" or "response" or "error" or "status"))
+                if (bridgeEvent is null || bridgeEvent.Type is not ("received" or "started" or "response" or "error" or "status" or "model"))
                 {
                     return Results.Json(new { error = "Invalid event" }, statusCode: StatusCodes.Status400BadRequest);
                 }
 
-                var accepted = bridgeEvent.Type == "status";
+                var accepted = bridgeEvent.Type is "status" or "model";
                 lock (_stateLock)
                 {
-                    if (bridgeEvent.Type != "status" && bridgeEvent.Id == _inflight?.Id)
+                    if (bridgeEvent.Type is not ("status" or "model") && bridgeEvent.Id == _inflight?.Id)
                     {
                         accepted = true;
                         if (bridgeEvent.Type is "received" or "started")
@@ -121,7 +121,7 @@ public sealed class BridgeService : IAsyncDisposable
         }
         catch (Exception exception)
         {
-            StartFailed?.Invoke(this, $"No se puede abrir el puerto {Port}: {exception.Message}");
+            StartFailed?.Invoke(this, $"Could not open port {Port}: {exception.Message}");
         }
     }
 
@@ -131,12 +131,12 @@ public sealed class BridgeService : IAsyncDisposable
         {
             if (DateTimeOffset.UtcNow - _lastPoll >= TimeSpan.FromSeconds(4))
             {
-                reason = "Reconectando con ChatGPT…";
+                reason = "Reconnecting to ChatGPT…";
                 return false;
             }
             if (_inflight is not null)
             {
-                reason = "Espera a que termine la respuesta";
+                reason = "Wait for the current response to finish";
                 return false;
             }
             _inflight = new OutgoingMessage(Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant(), text);

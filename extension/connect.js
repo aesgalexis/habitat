@@ -14,26 +14,26 @@ const compareChatTabs=(a,b)=>{
   try {
     const tabs=await chrome.tabs.query({url:"https://chatgpt.com/*"});
     const candidates=tabs.filter(tab=>tab.id && tab.url);
-    if(!candidates.length)throw Error("No hay ninguna pestaña de chatgpt.com abierta");
+    if(!candidates.length)throw Error("No chatgpt.com tab is open");
     candidates.sort(compareChatTabs);
     const tab=candidates[0];
     const response=await fetch("http://127.0.0.1:8765/pair",{
       headers:{"X-Habitat-Pair":"1"},cache:"no-store"
     });
-    if(!response.ok)throw Error("El servidor local respondió HTTP "+response.status);
+    if(!response.ok)throw Error("The local server returned HTTP "+response.status);
     const data=await response.json();
-    if(!data?.key)throw Error("La app local no devolvió una clave");
+    if(!data?.key)throw Error("The desktop app did not return a key");
     await chrome.storage.local.set({
       habitatKey:data.key,
       habitatTab:tab.id,
       habitatUrl:normalizeUrl(tab.url)
     });
     await chrome.scripting.executeScript({target:{tabId:tab.id},files:["content.js"]});
-    document.title="HABITAT conectado";
-    statusNode.textContent="HABITAT está conectado. Puedes cerrar esta pestaña.";
+    document.title="HABITAT connected";
+    statusNode.textContent="HABITAT is connected. You can close this tab.";
   } catch(error) {
     const message=String(error?.message||error);
     document.title="Error HABITAT";
-    statusNode.textContent="No se pudo conectar: "+message;
+    statusNode.textContent="Could not connect: "+message;
   }
 })();
