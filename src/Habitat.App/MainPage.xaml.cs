@@ -23,6 +23,7 @@ public sealed class MainPage : Page
 
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _timer;
     private readonly Grid _root = new();
+    private readonly Grid _header = new();
     private readonly ScrollViewer ConversationScroll = new();
     private readonly StackPanel Conversation = new();
     private readonly TextBox Composer = new();
@@ -61,18 +62,19 @@ public sealed class MainPage : Page
 
     private void BuildInterface()
     {
-        var surface = new Grid { Padding = new Thickness(30, 20, 30, 24), RowSpacing = 10 };
-        surface.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        surface.RowDefinitions.Add(new RowDefinition());
+        var surface = new Grid { Padding = new Thickness(30, 0, 30, 0) };
         // Stretch fills smaller windows; MaxWidth keeps the chat centered in
         // the available layout slot when the window is wider or maximized.
         _root.MaxWidth = 867;
         _root.HorizontalAlignment = HorizontalAlignment.Stretch;
-        _root.RowSpacing = 10;
-        _root.RowDefinitions.Add(new RowDefinition());
-        _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        _root.SizeChanged += (_, _) => UpdateWritingLayout();
 
-        var header = new Grid { ColumnSpacing = 18, HorizontalAlignment = HorizontalAlignment.Right };
+        var header = _header;
+        header.ColumnSpacing = 18;
+        header.HorizontalAlignment = HorizontalAlignment.Right;
+        header.VerticalAlignment = VerticalAlignment.Top;
+        header.Margin = new Thickness(0, 20, 0, 0);
+        header.SizeChanged += (_, _) => UpdateWritingLayout();
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         WeatherBlock.ColumnSpacing = 12;
@@ -112,21 +114,22 @@ public sealed class MainPage : Page
         OverflowButton.Flyout = OptionsMenu;
         Grid.SetColumn(OverflowButton, 1);
         header.Children.Add(OverflowButton);
-        surface.Children.Add(header);
 
         Conversation.Spacing = 22;
         ConversationScroll.Content = Conversation;
         ConversationScroll.Padding = new Thickness(2, 18, 8, 18);
         ConversationScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+        ConversationScroll.VerticalAlignment = VerticalAlignment.Top;
         _root.Children.Add(ConversationScroll);
 
-        var composerGrid = new Grid { ColumnSpacing = 10 };
-        composerGrid.ColumnDefinitions.Add(new ColumnDefinition());
-        composerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         Composer.MinHeight = 58;
         Composer.MaxHeight = 180;
         Composer.Padding = new Thickness(0, 9, 0, 9);
         Composer.FontFamily = new FontFamily("Cascadia Mono");
+        Composer.TextAlignment = TextAlignment.Center;
+        Composer.VerticalContentAlignment = VerticalAlignment.Center;
+        Composer.VerticalAlignment = VerticalAlignment.Top;
+        Composer.SizeChanged += (_, _) => UpdateWritingLayout();
         Composer.AcceptsReturn = true;
         Composer.TextWrapping = TextWrapping.Wrap;
         Composer.PlaceholderText = string.Empty;
@@ -135,23 +138,43 @@ public sealed class MainPage : Page
         // Handle Enter before TextBox processes it. Plain Enter sends without
         // adding a newline; Shift+Enter reaches TextBox and inserts one.
         Composer.AddHandler(UIElement.PreviewKeyDownEvent, new KeyEventHandler(Composer_KeyDown), true);
-        composerGrid.Children.Add(Composer);
+        _root.Children.Add(Composer);
         SendButton.Content = "Send";
         SendButton.IsTabStop = false;
-        SendButton.Padding = new Thickness(12, 9, 0, 9);
+        SendButton.Padding = new Thickness(12, 9, 12, 9);
         SendButton.BorderThickness = new Thickness(0);
         SendButton.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
-        SendButton.VerticalAlignment = VerticalAlignment.Bottom;
+        SendButton.HorizontalAlignment = HorizontalAlignment.Center;
+        SendButton.VerticalAlignment = VerticalAlignment.Top;
+        SendButton.SizeChanged += (_, _) => UpdateWritingLayout();
         SendButton.Click += SendButton_Click;
-        Grid.SetColumn(SendButton, 1);
-        composerGrid.Children.Add(SendButton);
-        Grid.SetRow(composerGrid, 1);
-        _root.Children.Add(composerGrid);
+        _root.Children.Add(SendButton);
 
-        Grid.SetRow(_root, 1);
         surface.Children.Add(_root);
+        surface.Children.Add(header);
         Content = surface;
         PaintSurface();
+    }
+
+    private void UpdateWritingLayout()
+    {
+        var height = _root.ActualHeight;
+        if (height <= 0) return;
+
+        var sendHeight = SendButton.ActualHeight > 0 ? SendButton.ActualHeight : 38;
+        // Reserve space between the midpoint and two-thirds anchor even when
+        // a multiline draft grows; longer drafts scroll inside the editor.
+        Composer.MaxHeight = Math.Clamp(height / 3 - sendHeight - 24, Composer.MinHeight, 180);
+        var composerHeight = Composer.ActualHeight > 0 ? Composer.ActualHeight : Composer.MinHeight;
+        var composerTop = Math.Max(0, (height - composerHeight) / 2);
+        var sendTop = Math.Max(height * 2 / 3 - sendHeight / 2, composerTop + composerHeight + 12);
+        sendTop = Math.Min(sendTop, Math.Max(0, height - sendHeight));
+        Composer.Margin = new Thickness(0, composerTop, 0, 0);
+        SendButton.Margin = new Thickness(0, sendTop, 0, 0);
+
+        var historyTop = _header.Margin.Top + _header.ActualHeight + 10;
+        ConversationScroll.Margin = new Thickness(0, historyTop, 0, 0);
+        ConversationScroll.Height = Math.Max(0, composerTop - historyTop - 16);
     }
 
     private void MainPage_Loaded(object sender, RoutedEventArgs e)
