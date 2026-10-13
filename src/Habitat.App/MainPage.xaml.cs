@@ -51,7 +51,11 @@ public sealed class MainPage : Page
 
     private void BuildInterface()
     {
-        _root.Padding = new Thickness(30, 20, 30, 24);
+        var surface = new Grid { Padding = new Thickness(30, 20, 30, 24) };
+        // Stretch fills smaller windows; MaxWidth keeps the chat centered in
+        // the available layout slot when the window is wider or maximized.
+        _root.MaxWidth = 867;
+        _root.HorizontalAlignment = HorizontalAlignment.Stretch;
         _root.RowSpacing = 10;
         _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         _root.RowDefinitions.Add(new RowDefinition());
@@ -119,7 +123,8 @@ public sealed class MainPage : Page
         Grid.SetRow(composerGrid, 2);
         _root.Children.Add(composerGrid);
 
-        Content = _root;
+        surface.Children.Add(_root);
+        Content = surface;
         PaintSurface();
     }
 
