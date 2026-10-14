@@ -2,6 +2,15 @@
 
 Aplicación de escritorio nativa para Windows que permite escribir en el chat activo de ChatGPT en Chrome y recibir sus respuestas dentro de HABITAT. No crea chats separados, no rota conversaciones ni cambia sus nombres. Usa la sesión real de Chrome, sin consumir la API de OpenAI. Una respuesta en curso termina en su chat original antes de seguir el chat activo.
 
+La aplicación actual está desarrollada en **C# y WinUI 3 sobre .NET 10**. Incluye una superficie de escritura con apariencia configurable, previsión del tiempo y un widget de Gmail. El prototipo Python/Tkinter pertenece a una etapa anterior; el punto de entrada actual es `HABITAT.vbs`.
+
+## Primera instalación
+
+1. Clona el repositorio en Windows y compila siguiendo la sección **Compilar**.
+2. Carga la carpeta `extension` en Chrome, versión 120 o posterior.
+3. Abre `HABITAT.vbs` y una conversación de ChatGPT en Chrome con tu sesión iniciada.
+4. Configura Gmail desde **Setup…** si quieres usar el widget de correo. Es opcional y no requiere un servicio de pago.
+
 ## Ejecutar
 
 1. Abre `HABITAT.vbs`. Inicia la aplicación sin mostrar una consola.
@@ -19,13 +28,32 @@ En el editor, Enter envía el mensaje y Shift+Enter inserta un salto de línea. 
 
 El modo **Text-only replies** está activado por defecto. Añade a cada envío una instrucción visible para que ChatGPT responda con texto simple y evite tablas, imágenes, archivos y otros contenidos enriquecidos, salvo que el propio mensaje los solicite expresamente. Se puede desactivar y su valor queda guardado desde **Preferences…**.
 
+## Apariencia y escritura
+
+Desde **Preferences…** puedes elegir **Day**, **Night** o **Hybrid** y ajustar la opacidad del fondo. Hybrid adapta el contraste al fondo de la ventana. La apariencia y la posición y tamaño de la ventana se conservan entre ejecuciones.
+
+El editor está centrado cuando no hay mensajes. Al empezar una conversación, pasa a la parte inferior y deja espacio al historial de texto. Pulsar en el fondo de la ventana devuelve el foco al editor.
+
+## Tiempo y ubicación
+
 El tiempo aparece en la esquina superior derecha, sin marco, con temperatura en °C y previsión de lluvia para las próximas seis horas. **Use current location (GPS / Windows)** está activado por defecto en Preferences: usa el servicio de ubicación de Windows, con GPS cuando está disponible. Solicita el permiso desde HABITAT y actualiza la posición junto al tiempo cada 15 minutos, sin seguimiento continuo. Las coordenadas se redondean a tres decimales y se envían a [Open-Meteo](https://open-meteo.com/en/docs) para obtener el pronóstico; no se guardan en disco ni se envían al chat.
 
 Si Windows no obtiene una posición o deniega el acceso, usa la ciudad guardada (inicialmente `Palma, ES`) e indica **saved city**; el motivo aparece al pasar el ratón. En **Preferences…** se puede desactivar la ubicación automática, cambiar **Fallback city / Weather location**, o abrir **Windows location settings**. En Windows: **Configuración → Privacidad y seguridad → Ubicación → Servicios de ubicación** y el permiso para aplicaciones de escritorio. El porcentaje mostrado es el máximo de las probabilidades horarias de precipitación de las próximas seis horas. Si falla la conexión, lo indica y reintenta automáticamente.
 
 ## Gmail
 
-El sobre de la esquina superior izquierda abre el lector de Gmail; también está en **••• → Gmail…**. Muestra los no leídos, permite abrir su texto sin marcarlos como leídos y actualiza la lista cada minuto. No envía correos ni comparte su contenido con ChatGPT. El proyecto **HABITAT Gmail** (`habitat-gmail-20261014`) tiene Gmail API habilitada y la facturación desactivada. El cliente **HABITAT Desktop** ya está creado e importado en este equipo. La cuenta ya está conectada: HABITAT recupera la sesión cifrada al abrirse y renueva el acceso automáticamente. En modo OAuth Testing, Google puede exigir una nueva autorización cada siete días. El uso estándar de la API es gratuito dentro de las cuotas de Google y no requiere ningún intermediario de pago. Las credenciales se cifran para el usuario de Windows y no se guardan en Git.
+El widget de la esquina superior izquierda muestra el contador de no leídos y tres líneas con remitente, asunto y fragmento del correo. Rota cada **8 segundos** entre los mensajes cargados; se pausa al pasar el ratón, enfocar el mensaje con el teclado o abrir el lector. En ventanas estrechas se reduce al icono y contador.
+
+- **Icono y contador:** abren el lector de HABITAT, también disponible en **••• → Gmail…**. Permite leer texto sin marcar mensajes como leídos, elegir **Inbox unread** o **All unread** y cargar más páginas.
+- **Remitente, asunto y fragmento:** abren Gmail en el navegador del sistema y en la cuenta conectada, buscando ese correo por su identificador original. Si no está disponible, se usa el enlace a la conversación.
+
+Las dos zonas tienen su propio marco al pasar el ratón, sin tooltips. La lista se actualiza cada minuto y la rotación no añade consultas a Google. Cada página carga hasta 25 mensajes. El contador de **All unread** es una estimación y aparece con `≈`.
+
+La conexión requiere un cliente OAuth de Google de tipo **Desktop app** con Gmail API habilitada. El uso estándar es gratuito dentro de las cuotas de Google; no necesitas alojar un servidor ni contratar intermediarios. Mantén el proyecto sin facturación vinculada.
+
+HABITAT recupera la sesión cifrada al abrirse y renueva el acceso automáticamente. Reimportar el mismo cliente conserva la sesión. En modo OAuth **Testing**, Google hace caducar los permisos de renovación a los siete días. **Disconnect** elimina la sesión local. Los tokens y el cliente se cifran con Windows DPAPI en `%LOCALAPPDATA%\HABITAT\gmail-account.bin`, fuera del repositorio.
+
+HABITAT no envía, elimina ni archiva correos, ni comparte su contenido con ChatGPT. Leer dentro de HABITAT no marca mensajes como leídos; abrirlos en Gmail sigue el comportamiento normal de Gmail. La vista de HABITAT usa texto, sin imágenes remotas ni adjuntos.
 
 Las instrucciones completas están en [docs/GMAIL_SETUP.md](docs/GMAIL_SETUP.md). Las comprobaciones sin cuenta real se ejecutan con `dotnet run --project tests\Habitat.Gmail.Checks`.
 
@@ -35,7 +63,8 @@ Requisitos de desarrollo:
 
 - Windows 10, versión 2004 o posterior.
 - SDK de .NET 10.
-- Plantillas oficiales `Microsoft.WindowsAppSDK.WinUI.CSharp.Templates`.
+
+Las dependencias del proyecto se restauran desde NuGet durante la compilación.
 
 Genera la versión autocontenida x64 con:
 
@@ -47,7 +76,19 @@ El resultado se guarda en `artifacts\win-x64`. Es una aplicación WinUI 3 sin pa
 
 Las comprobaciones del pronóstico, sin red ni dependencias de pruebas adicionales, se ejecutan con `dotnet run --project tests\Habitat.Weather.Checks`. Para comprobar la conexión real del servicio de tiempo para Palma: `dotnet run --project tests\Habitat.Weather.Checks -- --live`.
 
-Para comprobar el transporte en segundo plano: `node tests\extension-background.checks.cjs` y `dotnet run --project tests\Habitat.Bridge.Checks`. Usan páginas sintéticas y un puerto local aleatorio, nunca tu conversación real. El endpoint local `/status`, con la clave de vinculación, ofrece diagnóstico de solo lectura: consultarlo no crea un heartbeat ni consume mensajes.
+## Comprobaciones
+
+Con Node.js y el SDK de .NET instalados:
+
+```powershell
+node tests\extension-background.checks.cjs
+dotnet run --project tests\Habitat.Bridge.Checks
+dotnet run --project tests\Habitat.Gmail.Checks
+dotnet run --project tests\Habitat.Weather.Checks
+dotnet run --project tests\Habitat.Appearance.Checks
+```
+
+Las comprobaciones del transporte y Gmail usan páginas, respuestas y cuentas sintéticas, con puertos locales aleatorios cuando hace falta. No abren tu conversación ni consultan tu correo real. Las de Gmail incluyen cifrado, reapertura de sesión, renovación automática y construcción de enlaces al correo. El endpoint local `/status`, con la clave de vinculación, ofrece diagnóstico de solo lectura: consultarlo no crea un heartbeat ni consume mensajes.
 
 ## Seguridad y límites
 
@@ -67,3 +108,13 @@ Activa los hooks en un clon nuevo con:
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\instalar-autopush.ps1
 ```
+
+## Documentación y estructura
+
+- [Configuración de Gmail](docs/GMAIL_SETUP.md): OAuth, sesión persistente, coste, privacidad y utilidad de terminal.
+- [Estado y dirección del producto](docs/PRODUCT_STATE_AND_VISION.md): funcionalidad implementada, experiencia de uso e ideas pendientes.
+- `src/Habitat.App`: aplicación nativa, widgets y servicios locales.
+- `extension`: puente con la sesión de ChatGPT en Chrome.
+- `tests`: comprobaciones automatizadas sin depender de conversaciones o buzones reales.
+- `tools/Habitat.Gmail.Setup`: importación OAuth y comprobación de la cuenta desde terminal.
+- `scripts`: compilación, instalación de actualizaciones y checkpoints.
