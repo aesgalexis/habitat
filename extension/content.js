@@ -2,20 +2,32 @@
 // DOM selectors are inherently fragile as ChatGPT's frontend changes.
 (() => {
   let stopped = false;
-  let pollTimer = null;
   const previous = window.__habitatBridge;
-  if (previous && typeof previous.stop === "function") previous.stop();
+  try { if (previous?.protocol === 6 && previous.alive()) return; }
+  catch (_) { /* The previous extension context was invalidated by reload. */ }
+  if (previous && typeof previous.stop === "function") {
+    try { previous.stop(); } catch (_) {}
+  }
   const controller = {
+    protocol: 6,
+    alive() { try { return !stopped && Boolean(chrome.runtime?.id); } catch (_) { return false; } },
     stop() {
       stopped = true;
-      if (pollTimer !== null) clearInterval(pollTimer);
+      chrome.runtime.onMessage.removeListener(onCommand);
     }
   };
   window.__habitatBridge = controller;
   let busy = false;
-  let reportedModel = "";
-  const pause = ms => new Promise(r=>setTimeout(r,ms));
-  const bridge = payload => chrome.runtime.sendMessage(payload).catch(e=>({error:String(e)}));
+  const handledMessages = new Set();
+  const bridge = async payload => {
+    try { return await chrome.runtime.sendMessage(payload); }
+    catch(e) { return {error:String(e)}; }
+  };
+  const pause = async ms => {
+    if (stopped) throw Error("The ChatGPT bridge was replaced");
+    const answer = await bridge({kind:"delay",ms});
+    if (stopped || answer?.error) throw Error(answer?.error || "The ChatGPT bridge was replaced");
+  };
   async function event(type,id,text,model="") {
     let lastError="";
     for(let attempt=0;attempt<5;attempt++) {
@@ -173,6 +185,8 @@
       '#prompt-textarea',
       '[data-type="unified-composer"] [data-testid="prompt-textarea"]',
       '[data-type="unified-composer"] [contenteditable="true"][role="textbox"]',
+      '[data-type="unified-composer"] [contenteditable="true"]',
+      '[data-testid="prompt-textarea"]',
       'main form [data-testid="prompt-textarea"]',
       'main form [contenteditable="true"][role="textbox"]'
     ];
@@ -181,7 +195,37 @@
         visible(element) && !isInsideMessage(element));
       if(match)return match;
     }
+    // Some ChatGPT layouts omit the historical id or the form wrapper.
+    // Only accept a unique editable control outside messages and dialogs.
+    const candidates=[...document.querySelectorAll('main textarea, main [contenteditable="true"], main [role="textbox"]')]
+      .filter(element => visible(element) && enabled(element) && !element.readOnly &&
+        !isInsideMessage(element) && !element.closest('[role="dialog"], [role="menu"]'));
+    if(candidates.length===1)return candidates[0];
     return null;
+  }
+  function composerIssue() {
+    if(document.readyState==='loading')return 'ChatGPT is still loading.';
+    const editors=[...document.querySelectorAll('textarea, [contenteditable="true"], [role="textbox"]')];
+    const shown=editors.filter(visible).length;
+    const dialogs=[...document.querySelectorAll('[role="dialog"]')].filter(visible);
+    const heading=dialogs[0]?.querySelector('h1, h2, [role="heading"]')?.innerText?.trim() || dialogs[0]?.getAttribute('aria-label') || '';
+    const login=[...document.querySelectorAll('a[href]')].some(element => visible(element) && /\/(auth|login|log-in|signin)(\/|$)/i.test(element.getAttribute('href')||''));
+    const control=editors[0];
+    const description=control ? `${control.tagName.toLowerCase()}${control.id?'#'+control.id:''}` : 'none';
+    return `ChatGPT editor missing: ${description}, ${shown} visible, ${dialogs.length} dialogs${heading?' ('+heading.slice(0,60)+')':''}${login?', sign-in shown':''}.`;
+  }
+  function closeImagePreview() {
+    // Recover only the image viewer, never consent, login or other dialogs.
+    const dialog=[...document.querySelectorAll('[role="dialog"]')].find(element => {
+      if(!visible(element))return false;
+      const heading=element.querySelector('h1, h2, [role="heading"]')?.innerText?.trim() || element.getAttribute('aria-label') || '';
+      return /^(vista previa de imagen|image preview)$/i.test(heading);
+    });
+    if(!dialog)return;
+    const close=[...dialog.querySelectorAll('button')].find(button =>
+      /^(close|cerrar)(\b|$)/i.test(button.getAttribute('aria-label') || button.innerText?.trim() || ''));
+    if(close)close.click();
+    else dialog.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',code:'Escape',bubbles:true,cancelable:true}));
   }
   function composerRoot(box) {
     return box.closest('[data-type="unified-composer"]') ||
@@ -264,6 +308,8 @@
   }
   async function process(message) {
     busy=true;
+    handledMessages.add(message.id);
+    if (handledMessages.size > 64) handledMessages.delete(handledMessages.values().next().value);
     const {id,text}=message;
     let model="OpenAI model";
     try {
@@ -321,27 +367,30 @@
       try { await event("error",id,String(e.message||e),model); } catch (_) {}
     } finally {busy=false;}
   }
-  async function poll() {
-    if(stopped || busy || document.visibilityState==="prerender") return;
-    try {
-      // The background validates and, for the active ChatGPT tab, establishes
-      // or refreshes the loopback pairing before returning a message.
-      const answer=await bridge({kind:"next"});
-      if(answer?.error)return;
-      const model=currentModelLabel();
-      if(model!==reportedModel) {
-        await event("model","","",model);
-        reportedModel=model;
+  function onCommand(request, sender, sendResponse) {
+    if (sender.id !== chrome.runtime.id || stopped) return;
+    if (request.kind === "habitat:probe") {
+      if(!findComposerBox())closeImagePreview();
+      const box=findComposerBox();
+      sendResponse({protocol:6,userCount:userNodes().length,ready:busy || Boolean(box),busy:busy || Boolean(generationStopButton()),hasDraft:Boolean(box && composerText(box)),model:currentModelLabel(),url:location.href,
+        issue:box ? '' : composerIssue()});
+    } else if (request.kind === "habitat:deliver") {
+      const normalized = location.origin + location.pathname.replace(/\/$/, "");
+      if (request.expectedUrl !== normalized || typeof request.message?.id !== "string" || !request.message.id || typeof request.message.text !== "string") {
+        sendResponse({error:"The linked conversation changed"});
+        return;
       }
-      if(answer?.message)await process(answer.message);
-    } catch (_) {
-      // Reloading/updating an unpacked extension invalidates existing content
-      // script contexts. Stop this stale poller; a reinjection or page reload
-      // creates the replacement instance.
-      controller.stop();
+      if (busy || handledMessages.has(request.message.id)) {
+        sendResponse({accepted:false,busy});
+        return;
+      }
+      // Acknowledge receipt of the extension command immediately. Actual
+      // delivery and generation events are still sent separately to HABITAT.
+      void process(request.message);
+      sendResponse({accepted:true});
     }
   }
-  pollTimer=setInterval(poll,1200);
+  chrome.runtime.onMessage.addListener(onCommand);
   window.addEventListener("pagehide",()=>controller.stop(),{once:true});
-  void poll();
+  void bridge({kind:"hello"});
 })();

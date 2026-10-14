@@ -12,7 +12,7 @@ document.getElementById("bind").onclick = async () => {
   if (!tab?.url?.startsWith("https://chatgpt.com/")) { msg.textContent="Open a conversation on chatgpt.com first";return; }
   if (!key.value.trim()) {msg.textContent="Enter the pairing code";return;}
   const habitatUrl=normalizeUrl(tab.url);
-  await chrome.storage.local.set({habitatKey:key.value.trim(),habitatTab:tab.id,habitatUrl});
+  await chrome.storage.local.set({habitatKey:key.value.trim(),habitatTab:tab.id,habitatUrl,habitatDisabled:false});
   try {
     // Content scripts declared in the manifest are not added retroactively to
     // tabs that were already open when an unpacked extension was installed.
@@ -23,5 +23,5 @@ document.getElementById("bind").onclick = async () => {
   }
 };
 document.getElementById("unbind").onclick = async () => {
-  await chrome.storage.local.remove(["habitatTab","habitatUrl"]); msg.textContent="Disconnected.";
+  await chrome.storage.local.set({habitatDisabled:true}); msg.textContent="Disconnected.";
 };

@@ -1,7 +1,17 @@
-// Cross-origin bridge. Only one active ChatGPT tab is paired at a time.
+// Use Chrome’s active ChatGPT chat. Never create or rename a conversation.
+importScripts("transport.js");
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   (async () => {
+    if (request.kind === "connect" && sender.id === chrome.runtime.id &&
+        sender.url?.startsWith(chrome.runtime.getURL(""))) {
+      return await startTransport();
+    }
     if (!isChatGPT(sender.tab?.url)) return {error:"Not a ChatGPT tab"};
+    if (sender.frameId !== 0) return {error:"Not the top-level ChatGPT page"};
+    if (request.kind === "hello") {
+      void startTransport();
+      return {ok:true};
+    }
     let s = await chrome.storage.local.get(["habitatKey","habitatTab","habitatUrl"]);
     const senderUrl=normalizeUrl(sender.tab.url);
     const sameTab=sender.tab.id===s.habitatTab;
@@ -12,9 +22,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     const knownBinding=sameTab && (senderUrl===s.habitatUrl || newChatTransition);
     if (!knownBinding) {
-      if (!sender.tab.active) return {error:"Open the ChatGPT tab to pair it"};
-      s = await pairTab(sender.tab);
-      if (!s) return {error:"HABITAT desktop app is unavailable"};
+      return {error:"This is not the linked ChatGPT conversation"};
     } else if (!s.habitatKey) {
       // A known bound tab may recover the local key even while it is in the
       // background. This is what makes restarting HABITAT self-healing.
@@ -23,6 +31,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     if (senderUrl !== s.habitatUrl) {
       return {error:"The linked tab changed conversation"};
+    }
+    if (request.kind === "delay") {
+      // Page timers can be throttled to one wake-up per minute. These short
+      // editing/response waits run in the extension worker instead.
+      const ms = Number(request.ms);
+      if (!Number.isFinite(ms) || ms < 0 || ms > 5000) return {error:"Invalid delay"};
+      await new Promise(resolve => setTimeout(resolve, ms));
+      return {ok:true};
     }
     if (request.kind !== "next" && request.kind !== "event") return {error:"Invalid operation"};
     const run = async credentials => {
@@ -49,7 +65,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 chrome.runtime.onInstalled.addListener(() => { void pairMostRecentChat(); });
 chrome.runtime.onStartup.addListener(() => { void pairMostRecentChat(); });
 void closeReloadTabs();
-void pairMostRecentChat();
+void startTransport();
 
 async function closeReloadTabs() {
   try {
@@ -60,16 +76,7 @@ async function closeReloadTabs() {
 }
 
 async function pairMostRecentChat() {
-  try {
-    const tabs=await chrome.tabs.query({url:"https://chatgpt.com/*"});
-    const candidates=tabs.filter(tab=>tab.id && tab.url);
-    if(!candidates.length)return;
-    candidates.sort(compareChatTabs);
-    const tab=candidates[0];
-    const paired=await pairTab(tab);
-    if(!paired)return;
-    await chrome.scripting.executeScript({target:{tabId:tab.id},files:["content.js"]});
-  } catch (_) {}
+  return startTransport();
 }
 
 function compareChatTabs(a,b) {

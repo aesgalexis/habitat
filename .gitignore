@@ -22,6 +22,9 @@ artifacts/
 *.pem
 *.p12
 *.pfx
+client_secret*.json
+credentials.json
+gmail-account.bin*
 
 # Logs and temporary files
 *.log

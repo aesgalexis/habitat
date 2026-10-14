@@ -112,22 +112,16 @@ public sealed class MainWindow : Window
 
     public bool DetectBackdropIsDark(bool current)
     {
-        var position = AppWindow.Position;
-        var size = AppWindow.Size;
-        const int gap = 20;
-        var xs = new[] { position.X + size.Width / 5, position.X + size.Width / 2, position.X + size.Width * 4 / 5 };
-        var ys = new[] { position.Y + size.Height / 5, position.Y + size.Height / 2, position.Y + size.Height * 4 / 5 };
-        var points = new List<(int X, int Y)>();
-        foreach (var x in xs)
-        {
-            points.Add((x, position.Y - gap));
-            points.Add((x, position.Y + size.Height + gap));
-        }
-        foreach (var y in ys)
-        {
-            points.Add((position.X - gap, y));
-            points.Add((position.X + size.Width + gap, y));
-        }
+        var window = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        if (IsIconic(window) || !GetClientRect(window, out var client)) return current;
+        var origin = new NativePoint();
+        if (!ClientToScreen(window, ref origin)) return current;
+        var scale = _page.XamlRoot?.RasterizationScale ?? 1;
+        var points = BackdropThemeDetector.SamplePoints(client.Right, client.Bottom, scale);
+
+        // Read the visible acrylic itself. Pixels outside HABITAT may belong to
+        // a different background, especially with maximized or overlapping windows.
+        if (_page.HasAppearanceOverlay) return current;
 
         var virtualLeft = GetSystemMetrics(SmXVirtualScreen);
         var virtualTop = GetSystemMetrics(SmYVirtualScreen);
@@ -144,12 +138,18 @@ public sealed class MainWindow : Window
         {
             foreach (var point in points)
             {
-                if (point.X < virtualLeft || point.X >= virtualRight || point.Y < virtualTop || point.Y >= virtualBottom)
+                var location = new NativePoint { X = origin.X + point.X, Y = origin.Y + point.Y };
+                if (location.X < virtualLeft || location.X >= virtualRight || location.Y < virtualTop || location.Y >= virtualBottom)
+                {
+                    continue;
+                }
+                // Covered areas and flyouts must not decide the backdrop theme.
+                if (GetAncestor(WindowFromPoint(location), 2 /* GA_ROOT */) != window)
                 {
                     continue;
                 }
 
-                var pixel = GetPixel(screen, point.X, point.Y);
+                var pixel = GetPixel(screen, location.X, location.Y);
                 if (pixel == 0xFFFFFFFF)
                 {
                     continue;
@@ -166,14 +166,7 @@ public sealed class MainWindow : Window
             ReleaseDC(IntPtr.Zero, screen);
         }
 
-        if (luminances.Count == 0)
-        {
-            return current;
-        }
-
-        luminances.Sort();
-        var median = luminances[luminances.Count / 2];
-        return current ? median < 0.58 : median < 0.42;
+        return BackdropThemeDetector.IsDark(luminances, current);
     }
 
     private async void OnActivated(object sender, WindowActivatedEventArgs args)
@@ -191,6 +184,7 @@ public sealed class MainWindow : Window
     private async void OnClosed(object sender, WindowEventArgs args)
     {
         _page.SaveWindowPlacement(AppWindow);
+        _page.StopGmail();
         _acrylic?.Dispose();
         await _bridge.DisposeAsync();
     }
@@ -206,4 +200,28 @@ public sealed class MainWindow : Window
 
     [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int index);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint { public int X; public int Y; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect { public int Left; public int Top; public int Right; public int Bottom; }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetClientRect(IntPtr window, out NativeRect rect);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ClientToScreen(IntPtr window, ref NativePoint point);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsIconic(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr WindowFromPoint(NativePoint point);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetAncestor(IntPtr window, uint flags);
 }

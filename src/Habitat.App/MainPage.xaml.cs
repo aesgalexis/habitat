@@ -14,12 +14,10 @@ using Windows.UI.Core;
 
 namespace Habitat;
 
-public sealed class MainPage : Page
+public sealed partial class MainPage : Page
 {
     private const string TextOnlyDirective =
-        "[HABITAT text mode: This message was sent from HABITAT. Reply in plain text only. " +
-        "Do not use Markdown tables or create images, files, canvases, interactive content, or other rich output " +
-        "unless the user's message explicitly requests it. Use simple paragraphs and plain-text lists when needed.]";
+        "[HABITAT: Reply in plain text unless asked otherwise.]";
 
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _timer;
     private readonly Grid _root = new();
@@ -27,6 +25,7 @@ public sealed class MainPage : Page
     private readonly ScrollViewer ConversationScroll = new();
     private readonly StackPanel Conversation = new();
     private readonly TextBox Composer = new();
+    private Microsoft.UI.Xaml.Shapes.Shape? _composerCaret;
     private readonly Button SendButton = new();
     private readonly Button OverflowButton = new();
     private readonly MenuFlyout OptionsMenu = new();
@@ -48,6 +47,8 @@ public sealed class MainPage : Page
     private bool _hybridDark;
     private bool _appearanceDialogOpen;
     private DateTimeOffset _nextHybridProbe = DateTimeOffset.MinValue;
+
+    internal bool HasAppearanceOverlay => _appearanceDialogOpen || _gmailSettingsOpen;
 
     public MainPage(BridgeService bridge)
     {
@@ -112,6 +113,9 @@ public sealed class MainPage : Page
         var preferences = new MenuFlyoutItem { Text = "Preferences…" };
         preferences.Click += ShowPreferences_Click;
         OptionsMenu.Items.Add(preferences);
+        var gmail = new MenuFlyoutItem { Text = "Gmail…" };
+        gmail.Click += (_, _) => OpenGmail();
+        OptionsMenu.Items.Add(gmail);
         OptionsMenu.Items.Add(new MenuFlyoutSeparator());
         var pairing = new MenuFlyoutItem { Text = "Pairing code…" };
         pairing.Click += ShowPairing_Click;
@@ -139,6 +143,8 @@ public sealed class MainPage : Page
         Composer.VerticalContentAlignment = VerticalAlignment.Center;
         Composer.VerticalAlignment = VerticalAlignment.Top;
         Composer.SizeChanged += (_, _) => UpdateWritingLayout();
+        // WinUI creates/replaces its caret lazily (focus, layout and RTL input).
+        Composer.LayoutUpdated += (_, _) => PaintComposerCaret();
         Composer.AcceptsReturn = true;
         Composer.TextWrapping = TextWrapping.Wrap;
         Composer.PlaceholderText = string.Empty;
@@ -149,6 +155,8 @@ public sealed class MainPage : Page
         Composer.AddHandler(UIElement.PreviewKeyDownEvent, new KeyEventHandler(Composer_KeyDown), true);
         _root.Children.Add(Composer);
         SendButton.Content = "Send";
+        SendButton.MinWidth = 64;
+        SendButton.MinHeight = 38;
         SendButton.IsTabStop = false;
         SendButton.Padding = new Thickness(12, 9, 12, 9);
         SendButton.BorderThickness = new Thickness(0);
@@ -161,13 +169,14 @@ public sealed class MainPage : Page
 
         surface.Children.Add(_root);
         surface.Children.Add(header);
+        BuildGmailInterface(surface);
         Content = surface;
         PaintSurface();
     }
 
     private void Surface_Tapped(object sender, TappedRoutedEventArgs e)
     {
-        if (_appearanceDialogOpen) return;
+        if (_appearanceDialogOpen || _gmailPanelOpen || _gmailSettingsOpen) return;
 
         // Keep native editing, text selection and interactive controls intact.
         // Blank areas, message spacing and the weather display focus writing.
@@ -191,7 +200,7 @@ public sealed class MainPage : Page
         var height = _root.ActualHeight;
         if (height <= 0) return;
 
-        var historyTop = _header.Margin.Top + _header.ActualHeight + 10;
+        var historyTop = Math.Max(_header.Margin.Top + _header.ActualHeight, GmailWidget.Margin.Top + GmailWidget.ActualHeight) + 10;
         ConversationScroll.Margin = new Thickness(0, historyTop, 0, 0);
         if (Conversation.Children.Count > 0)
         {
@@ -248,6 +257,7 @@ public sealed class MainPage : Page
         _timer.Stop();
         _weatherCancellation.Cancel();
         _weather.Dispose();
+        StopGmail();
         if (_bridge is not null)
         {
             _bridge.EventReceived -= Bridge_EventReceived;
@@ -303,6 +313,7 @@ public sealed class MainPage : Page
 
     private void Timer_Tick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
     {
+        TickGmail();
         if (!_weatherRefreshing && !_appearanceDialogOpen && DateTimeOffset.UtcNow >= _nextWeatherRefresh)
         {
             _ = RefreshWeatherAsync();
@@ -325,7 +336,7 @@ public sealed class MainPage : Page
         }
         else if (!_bridge.HasMessageInFlight)
         {
-            SetStatus(_bridge.IsConnected ? "Extension connected" : "Reconnecting to ChatGPT…",
+            SetStatus(_bridge.IsConnected ? "Extension connected" : _bridge.ConnectionIssue,
                 _bridge.IsConnected ? StatusTone.Success : StatusTone.Warning);
         }
 
@@ -547,7 +558,9 @@ public sealed class MainPage : Page
 
     private void UpdateSendState()
     {
-        SendButton.IsEnabled = _bridge is { IsConnected: true, HasMessageInFlight: false };
+        // Keep Send visible and clickable while reconnecting. The bridge
+        // reports why it cannot send without dropping the user's draft.
+        SendButton.IsEnabled = _bridge is { HasMessageInFlight: false };
     }
 
     private async void ShowPreferences_Click(object sender, RoutedEventArgs e)
@@ -767,6 +780,7 @@ public sealed class MainPage : Page
     {
         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
         {
+            if (_appearanceDialogOpen || _gmailPanelOpen || _gmailSettingsOpen || _gmailCancellation.IsCancellationRequested) return;
             Composer.Focus(FocusState.Keyboard);
             Composer.Select(Composer.Text.Length, 0);
         });
@@ -828,11 +842,15 @@ public sealed class MainPage : Page
         Composer.Background = transparent;
         Composer.BorderBrush = transparent;
         Composer.Foreground = text;
+        PaintComposerCaret();
         SendButton.Background = transparent;
         SendButton.Foreground = accent;
+        foreach (var key in new[] { "ButtonForeground", "ButtonForegroundPointerOver", "ButtonForegroundPressed", "ButtonForegroundDisabled" })
+            SendButton.Resources[key] = accent;
         OverflowButton.Background = transparent;
         OverflowButton.Foreground = muted;
         PaintWeather();
+        PaintGmail();
 
         var menuStyle = new Style(typeof(MenuFlyoutPresenter));
         menuStyle.Setters.Add(new Setter(Control.BackgroundProperty, popup));
@@ -897,6 +915,36 @@ public sealed class MainPage : Page
         }
     }
 
+    private void PaintComposerCaret()
+    {
+        PaintCaret(Composer);
+
+        void PaintCaret(DependencyObject parent)
+        {
+            for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, index);
+                if (child is Microsoft.UI.Xaml.Shapes.Shape shape &&
+                    (ReferenceEquals(shape, _composerCaret) ||
+                     (shape.CompositeMode != ElementCompositeMode.Inherit &&
+                      shape.CompositeMode != ElementCompositeMode.SourceOver &&
+                      shape.CompositeMode != ElementCompositeMode.MinBlend)))
+                {
+                    // The native caret uses the internal DestInvert mode with a
+                    // white fill. Inversion cannot see through our transparent
+                    // surface to the desktop acrylic. Draw it in the text color
+                    // instead, preserving WinUI's positioning and blink animation.
+                    _composerCaret = shape;
+                    if (shape.CompositeMode != ElementCompositeMode.SourceOver)
+                        shape.CompositeMode = ElementCompositeMode.SourceOver;
+                    if (!ReferenceEquals(shape.Fill, Composer.Foreground))
+                        shape.Fill = Composer.Foreground;
+                }
+                PaintCaret(child);
+            }
+        }
+    }
+
     private void StyleDialog(ContentDialog dialog)
     {
         var dark = RequestedTheme == ElementTheme.Dark;
@@ -928,6 +976,7 @@ internal sealed record Preferences(string Theme, double Opacity)
     public bool TextOnly { get; init; } = true;
     public string WeatherCity { get; init; } = "Palma, ES";
     public bool UseDeviceLocation { get; init; } = true;
+    public bool GmailInboxOnly { get; init; } = true;
     public int? WindowX { get; init; }
     public int? WindowY { get; init; }
     public int? WindowWidth { get; init; }
