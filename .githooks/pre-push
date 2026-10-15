@@ -5,17 +5,4 @@ repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root"
 
 echo "HABITAT: validando antes de subir..."
-export DOTNET_CLI_HOME="$repo_root/.dotnet-local"
-export NUGET_PACKAGES="$repo_root/.nuget/packages"
-dotnet build Habitat.sln --configuration Release -p:Platform=x64 --no-restore
-node --check extension/background.js
-node --check extension/transport.js
-node --check extension/content.js
-node --check extension/connect.js
-node --check extension/finish.js
-node --check extension/popup.js
-node --check extension/reload.js
-node -e "JSON.parse(require('fs').readFileSync('extension/manifest.json', 'utf8'))"
-node tests/extension-background.checks.cjs
-dotnet run --project tests/Habitat.Bridge.Checks
-git diff --check
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1

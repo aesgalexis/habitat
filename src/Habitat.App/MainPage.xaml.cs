@@ -20,17 +20,24 @@ public sealed partial class MainPage : Page
         "[HABITAT: Reply in plain text unless asked otherwise.]";
 
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _timer;
+    private readonly ConversationSession _conversation = new();
     private readonly Grid _root = new();
     private readonly Grid _header = new();
     private readonly ScrollViewer ConversationScroll = new();
     private readonly StackPanel Conversation = new();
     private readonly TextBox Composer = new();
+    private readonly TextBlock ComposerHint = new()
+    {
+        FontSize = 12, MinHeight = 18, Opacity = 0.8, TextWrapping = TextWrapping.Wrap,
+        VerticalAlignment = VerticalAlignment.Top, IsHitTestVisible = false
+    };
     private Microsoft.UI.Xaml.Shapes.Shape? _composerCaret;
     private readonly Button SendButton = new();
     private readonly Button OverflowButton = new();
     private readonly MenuFlyout OptionsMenu = new();
-    private readonly WeatherService _weather = new();
-    private readonly DeviceLocationService _deviceLocation = new();
+    internal Button WindowMenuButton => OverflowButton;
+    private readonly AppServices _services;
+    private WeatherService _weather => _services.Weather;
     private readonly CancellationTokenSource _weatherCancellation = new();
     private readonly Grid WeatherBlock = new();
     private readonly Viewbox WeatherSymbol = new() { Width = 32, Height = 32 };
@@ -39,27 +46,42 @@ public sealed partial class MainPage : Page
     private readonly TextBlock WeatherOutlook = new() { Text = "Loading weather…", FontSize = 12, Opacity = 0.8 };
     private WeatherSnapshot? _weatherSnapshot;
     private bool _locationSettingsOpened;
-    private bool _weatherRefreshing;
-    private DateTimeOffset _nextWeatherRefresh = DateTimeOffset.MinValue;
+    private readonly WeatherSession _weatherSession;
+    private bool _weatherRefreshing => _weatherSession.IsRefreshing;
+    private DateTimeOffset _nextWeatherRefresh { get => _weatherSession.NextRefresh; set => _weatherSession.NextRefresh = value; }
     private BridgeService? _bridge;
-    private Preferences _preferences = Preferences.Load();
+    private Preferences _preferences;
     private string _activeModel = "OpenAI model";
     private bool _hybridDark;
     private bool _appearanceDialogOpen;
     private DateTimeOffset _nextHybridProbe = DateTimeOffset.MinValue;
 
-    internal bool HasAppearanceOverlay => _appearanceDialogOpen || _gmailSettingsOpen;
+    internal bool HasAppearanceOverlay => _appearanceDialogOpen || _gmailSettingsOpen || _terminalConfirmationOpen;
 
-    public MainPage(BridgeService bridge)
+    internal MainPage(AppServices services, IWindowHost? windowHost = null)
     {
-        _bridge = bridge;
+        _services = services;
+        _windowHost = windowHost;
+        _preferences = Preferences.Load(services.Paths.PreferencesPath);
+        _taskStore = services.Tasks;
+        _taskSession = services.TaskSession;
+        _weatherSession = new WeatherSession(services.Weather, services.GetLocationAsync);
+        _gmailSession = new GmailSession(services.CreateGmailAuth, services.CreateGmail, GmailError);
+        _gmailSession.Changed += () => { if (!_operations.IsStopping) RenderGmail(); };
+        _bridge = services.Bridge;
+        _launchBrowser = services.LaunchBrowser;
+        _launchNotepad = services.LaunchNotepad;
+        _launchCodex = services.LaunchCodex;
+        _powerShell = services.PowerShell;
         _bridge.EventReceived += Bridge_EventReceived;
         _bridge.StartFailed += Bridge_StartFailed;
         BuildInterface();
         _timer = DispatcherQueue.CreateTimer();
         _timer.Interval = TimeSpan.FromMilliseconds(250);
         _timer.Tick += Timer_Tick;
+#if !HABITAT_UI_CHECKS
         Loaded += MainPage_Loaded;
+#endif
         Unloaded += MainPage_Unloaded;
     }
 
@@ -67,7 +89,7 @@ public sealed partial class MainPage : Page
     {
         var surface = new Grid
         {
-            Padding = new Thickness(30, 0, 30, 0),
+            Padding = new Thickness(12, 0, 30, 0),
             // A transparent brush makes the full client area clickable,
             // including the space outside the centered chat column.
             Background = new SolidColorBrush(Color(0, 0, 0, 0))
@@ -86,13 +108,12 @@ public sealed partial class MainPage : Page
         header.Margin = new Thickness(0, 20, 0, 0);
         header.SizeChanged += (_, _) => UpdateWritingLayout();
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         WeatherBlock.ColumnSpacing = 12;
         WeatherBlock.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         WeatherBlock.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         WeatherSymbol.VerticalAlignment = VerticalAlignment.Center;
         WeatherBlock.Children.Add(WeatherSymbol);
-        var weatherText = new StackPanel { Spacing = 2, MinWidth = 155, MaxWidth = 230 };
+        var weatherText = new StackPanel { Spacing = 2, MaxWidth = 230 };
         WeatherLocation.Text = _preferences.UseDeviceLocation ? "Current location" : _preferences.WeatherCity;
         WeatherLocation.TextTrimming = TextTrimming.CharacterEllipsis;
         weatherText.Children.Add(WeatherLocation);
@@ -102,13 +123,15 @@ public sealed partial class MainPage : Page
         WeatherBlock.Children.Add(weatherText);
         header.Children.Add(WeatherBlock);
 
-        OverflowButton.Content = "•••";
-        OverflowButton.Width = 34;
-        OverflowButton.Height = 34;
-        OverflowButton.IsTabStop = false;
+        OverflowButton.Content = new FontIcon { Glyph = "\uE700", FontSize = 14 };
+        OverflowButton.Width = 40;
+        OverflowButton.Height = 32;
+        OverflowButton.IsTabStop = true;
+        ToolTipService.SetToolTip(OverflowButton, "HABITAT menu");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(OverflowButton, "HABITAT menu");
         OverflowButton.Padding = new Thickness(0);
         OverflowButton.BorderThickness = new Thickness(0);
-        OverflowButton.VerticalAlignment = VerticalAlignment.Top;
+        OverflowButton.VerticalAlignment = VerticalAlignment.Center;
         OptionsMenu.Placement = FlyoutPlacementMode.BottomEdgeAlignedRight;
         var preferences = new MenuFlyoutItem { Text = "Preferences…" };
         preferences.Click += ShowPreferences_Click;
@@ -116,6 +139,9 @@ public sealed partial class MainPage : Page
         var gmail = new MenuFlyoutItem { Text = "Gmail…" };
         gmail.Click += (_, _) => OpenGmail();
         OptionsMenu.Items.Add(gmail);
+        var tasks = new MenuFlyoutItem { Text = "Tasks…" };
+        tasks.Click += (_, _) => OpenTasks();
+        OptionsMenu.Items.Add(tasks);
         OptionsMenu.Items.Add(new MenuFlyoutSeparator());
         var pairing = new MenuFlyoutItem { Text = "Pairing code…" };
         pairing.Click += ShowPairing_Click;
@@ -125,8 +151,6 @@ public sealed partial class MainPage : Page
         OptionsMenu.Items.Add(copy);
         OptionsMenu.Closed += (_, _) => FocusComposer();
         OverflowButton.Flyout = OptionsMenu;
-        Grid.SetColumn(OverflowButton, 1);
-        header.Children.Add(OverflowButton);
 
         Conversation.Spacing = 22;
         ConversationScroll.Content = Conversation;
@@ -139,6 +163,9 @@ public sealed partial class MainPage : Page
         Composer.MaxHeight = 180;
         Composer.Padding = new Thickness(0, 9, 0, 9);
         Composer.FontFamily = new FontFamily("Cascadia Mono");
+        ComposerHint.FontFamily = Composer.FontFamily;
+        ComposerHint.SizeChanged += (_, _) => UpdateWritingLayout();
+        Composer.TextChanged += (_, _) => UpdateWritingLayout();
         Composer.TextAlignment = TextAlignment.Center;
         Composer.VerticalContentAlignment = VerticalAlignment.Center;
         Composer.VerticalAlignment = VerticalAlignment.Top;
@@ -154,6 +181,7 @@ public sealed partial class MainPage : Page
         // adding a newline; Shift+Enter reaches TextBox and inserts one.
         Composer.AddHandler(UIElement.PreviewKeyDownEvent, new KeyEventHandler(Composer_KeyDown), true);
         _root.Children.Add(Composer);
+        _root.Children.Add(ComposerHint);
         SendButton.Content = "Send";
         SendButton.MinWidth = 64;
         SendButton.MinHeight = 38;
@@ -169,14 +197,19 @@ public sealed partial class MainPage : Page
 
         surface.Children.Add(_root);
         surface.Children.Add(header);
-        BuildGmailInterface(surface);
+        BuildTaskInterface(surface);
+        BuildGmailInterface(_widgets);
+        surface.Children.Add(_widgets);
+        BuildDestinationInterface(surface);
+        surface.SizeChanged += (_, _) => SizeTopWidgets(surface);
+        header.SizeChanged += (_, _) => SizeTopWidgets(surface);
         Content = surface;
         PaintSurface();
     }
 
     private void Surface_Tapped(object sender, TappedRoutedEventArgs e)
     {
-        if (_appearanceDialogOpen || _gmailPanelOpen || _gmailSettingsOpen) return;
+        if (_appearanceDialogOpen || _gmailPanelOpen || _gmailSettingsOpen || _terminalConfirmationOpen) return;
 
         // Keep native editing, text selection and interactive controls intact.
         // Blank areas, message spacing and the weather display focus writing.
@@ -197,18 +230,23 @@ public sealed partial class MainPage : Page
 
     private void UpdateWritingLayout()
     {
+        if (Content is Grid surface) SizeTopWidgets(surface);
         var height = _root.ActualHeight;
         if (height <= 0) return;
+        ComposerHint.Visibility = Composer.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
 
-        var historyTop = Math.Max(_header.Margin.Top + _header.ActualHeight, GmailWidget.Margin.Top + GmailWidget.ActualHeight) + 10;
+        var historyTop = _header.Margin.Top + _header.ActualHeight + 10;
         ConversationScroll.Margin = new Thickness(0, historyTop, 0, 0);
         if (Conversation.Children.Count > 0)
         {
             const double bottomPadding = 24;
             var sendWidth = SendButton.ActualWidth > 0 ? SendButton.ActualWidth : 60;
+            // Match the single-line editor to Send; longer drafts keep their
+            // final line at the same bottom anchor as the button label.
+            Composer.MinHeight = SendButton.ActualHeight > 0 ? SendButton.ActualHeight : 38;
             Composer.MaxHeight = 180;
             Composer.TextAlignment = TextAlignment.Left;
-            Composer.VerticalContentAlignment = VerticalAlignment.Top;
+            Composer.VerticalContentAlignment = VerticalAlignment.Bottom;
             Composer.VerticalAlignment = VerticalAlignment.Bottom;
             Composer.Margin = new Thickness(0, 0, sendWidth + 10, bottomPadding);
             SendButton.HorizontalAlignment = HorizontalAlignment.Right;
@@ -217,13 +255,16 @@ public sealed partial class MainPage : Page
             SendButton.Margin = new Thickness(0, 0, 0, bottomPadding);
 
             var editorHeight = Composer.ActualHeight > 0 ? Composer.ActualHeight : Composer.MinHeight;
+            UpdateComposerHintLayout(height - bottomPadding - editorHeight);
+            var hintSpace = ComposerHint.Visibility == Visibility.Visible ? ComposerHintHeight + 16 : 0;
             ConversationScroll.Visibility = Visibility.Visible;
-            ConversationScroll.Height = Math.Max(0, height - bottomPadding - editorHeight - 10 - historyTop);
+            ConversationScroll.Height = Math.Max(0, height - bottomPadding - editorHeight - hintSpace - 10 - historyTop);
             return;
         }
 
         // The centered writing layout is only the welcome state. The first
         // message restores the bottom composer and gives the history space.
+        Composer.MinHeight = 58;
         Composer.TextAlignment = TextAlignment.Center;
         Composer.VerticalContentAlignment = VerticalAlignment.Center;
         Composer.VerticalAlignment = VerticalAlignment.Top;
@@ -240,9 +281,21 @@ public sealed partial class MainPage : Page
         var sendTop = Math.Max(height * 2 / 3 - sendHeight / 2, composerTop + composerHeight + 12);
         sendTop = Math.Min(sendTop, Math.Max(0, height - sendHeight));
         Composer.Margin = new Thickness(0, composerTop, 0, 0);
+        UpdateComposerHintLayout(composerTop);
         SendButton.Margin = new Thickness(0, sendTop, 0, 0);
 
     }
+
+    private double ComposerHintHeight => ComposerHint.ActualHeight > 0 ? ComposerHint.ActualHeight : ComposerHint.MinHeight;
+
+    private void UpdateComposerHintLayout(double editorTop)
+    {
+        ComposerHint.TextAlignment = Composer.TextAlignment;
+        ComposerHint.Margin = new Thickness(Composer.Margin.Left,
+            Math.Max(0, editorTop - ComposerHintHeight - 16), Composer.Margin.Right, 0);
+    }
+
+    private bool HasActiveConversation => _conversation.HasActiveConversation;
 
     private void MainPage_Loaded(object sender, RoutedEventArgs e)
     {
@@ -252,17 +305,10 @@ public sealed partial class MainPage : Page
         FocusComposer();
     }
 
-    private void MainPage_Unloaded(object sender, RoutedEventArgs e)
+    private async void MainPage_Unloaded(object sender, RoutedEventArgs e)
     {
-        _timer.Stop();
-        _weatherCancellation.Cancel();
-        _weather.Dispose();
-        StopGmail();
-        if (_bridge is not null)
-        {
-            _bridge.EventReceived -= Bridge_EventReceived;
-            _bridge.StartFailed -= Bridge_StartFailed;
-        }
+        try { await StopAsync(); }
+        catch (Exception exception) { _services.ReportError("Unload page", exception); }
     }
 
     private void SendButton_Click(object sender, RoutedEventArgs e) => SendCurrentMessage();
@@ -286,7 +332,15 @@ public sealed partial class MainPage : Page
 
     private void SendCurrentMessage()
     {
+        if (_operations.IsStopping) return;
         var text = Composer.Text.Trim();
+        if (_destination != ComposerDestination.OpenAI)
+        {
+            if (!_destinationLaunching && !string.IsNullOrWhiteSpace(text))
+                _ = LaunchDestinationAsync(_destination, Composer.Text);
+            else FocusComposer();
+            return;
+        }
         if (string.IsNullOrWhiteSpace(text) || _bridge is null)
         {
             FocusComposer();
@@ -314,6 +368,7 @@ public sealed partial class MainPage : Page
     private void Timer_Tick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
     {
         TickGmail();
+        TickTasks(DateTimeOffset.UtcNow);
         if (!_weatherRefreshing && !_appearanceDialogOpen && DateTimeOffset.UtcNow >= _nextWeatherRefresh)
         {
             _ = RefreshWeatherAsync();
@@ -329,7 +384,7 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        if (_bridge.TryExpireMessage(TimeSpan.FromMinutes(4)))
+        if (_bridge.TryExpireMessage(BridgeProtocol.RequestTimeout))
         {
             AddMessage("SYSTEM", "The request timed out. Check ChatGPT before sending it again.", MessageTone.Muted);
             SetStatus("Timed out — check Chrome", StatusTone.Danger);
@@ -343,49 +398,23 @@ public sealed partial class MainPage : Page
         UpdateSendState();
     }
 
-    private async Task RefreshWeatherAsync()
+    private Task RefreshWeatherAsync() => RunOperationAsync(RefreshWeatherCoreAsync);
+
+    private async Task RefreshWeatherCoreAsync()
     {
-        _weatherRefreshing = true;
-        _nextWeatherRefresh = DateTimeOffset.UtcNow.AddMinutes(15);
         var city = _preferences.WeatherCity;
         var useDeviceLocation = _preferences.UseDeviceLocation;
         try
         {
-            WeatherSnapshot snapshot;
-            var locationDetails = "Saved city";
-            if (useDeviceLocation)
-            {
-                var result = await _deviceLocation.GetAsync(
-                    ((App)Application.Current).MainWindow?.IsActive == true, _weatherCancellation.Token);
-                if (_weatherCancellation.IsCancellationRequested || city != _preferences.WeatherCity ||
-                    useDeviceLocation != _preferences.UseDeviceLocation) return;
-                if (result.Position is DeviceLocation position)
-                {
-                    snapshot = await _weather.GetAsync(position.Latitude, position.Longitude,
-                        "Current location · " + position.Source, _weatherCancellation.Token);
-                    locationDetails = $"{position.Source} · accuracy {position.Accuracy:0} m";
-                }
-                else
-                {
-                    snapshot = await _weather.GetAsync(city, _weatherCancellation.Token);
-                    snapshot = snapshot with { Location = snapshot.Location + " · saved city" };
-                    locationDetails = result.Error ?? "Device location unavailable; using the saved city.";
-                }
-            }
-            else
-            {
-                snapshot = await _weather.GetAsync(city, _weatherCancellation.Token);
-            }
-            if (_weatherCancellation.IsCancellationRequested || city != _preferences.WeatherCity ||
+            var snapshot = await _weatherSession.RefreshAsync(city, useDeviceLocation, _windowHost?.IsActive == true,
+                () => city == _preferences.WeatherCity && useDeviceLocation == _preferences.UseDeviceLocation,
+                _weatherCancellation.Token);
+            if (snapshot is null || _weatherCancellation.IsCancellationRequested || city != _preferences.WeatherCity ||
                 useDeviceLocation != _preferences.UseDeviceLocation) return;
             _weatherSnapshot = snapshot;
             WeatherLocation.Text = snapshot.Location;
             WeatherTemperature.Text = $"{snapshot.Temperature:0}°C";
             WeatherOutlook.Text = $"{snapshot.Outlook} · {snapshot.PrecipitationChance}% · 6h";
-            ToolTipService.SetToolTip(WeatherBlock,
-                $"{snapshot.Location}\n{locationDetails}\n{snapshot.Condition} · next 6 hours\n" +
-                $"Peak hourly precipitation chance: {snapshot.PrecipitationChance}%\n" +
-                $"Updated {snapshot.UpdatedAt.ToLocalTime():HH:mm}\nWeather data: Open-Meteo");
             PaintWeather();
         }
         catch (OperationCanceledException) when (_weatherCancellation.IsCancellationRequested) { }
@@ -397,13 +426,6 @@ public sealed partial class MainPage : Page
             _nextWeatherRefresh = DateTimeOffset.UtcNow.AddMinutes(5);
             WeatherOutlook.Text = _weatherSnapshot is null ? "Weather unavailable" :
                 $"Offline · updated {_weatherSnapshot.UpdatedAt.ToLocalTime():HH:mm}";
-            ToolTipService.SetToolTip(WeatherBlock,
-                "Could not update the weather. It will retry automatically.\n" +
-                "Check the location in Preferences.\nWeather data: Open-Meteo");
-        }
-        finally
-        {
-            _weatherRefreshing = false;
         }
     }
 
@@ -412,10 +434,10 @@ public sealed partial class MainPage : Page
         if (_locationSettingsOpened)
         {
             _locationSettingsOpened = false;
-            _deviceLocation.ResetAccess();
+            _services.ResetLocationAccess();
             if (_preferences.UseDeviceLocation) _nextWeatherRefresh = DateTimeOffset.MinValue;
         }
-        else if (_preferences.UseDeviceLocation && _deviceLocation.NeedsPermission)
+        else if (_preferences.UseDeviceLocation && _services.NeedsLocationPermission)
         {
             _nextWeatherRefresh = DateTimeOffset.MinValue;
         }
@@ -435,6 +457,7 @@ public sealed partial class MainPage : Page
     {
         DispatcherQueue.TryEnqueue(() =>
         {
+            if (_operations.IsStopping) return;
             if (!string.IsNullOrWhiteSpace(bridgeEvent.Model))
             {
                 _activeModel = NormalizeModelName(bridgeEvent.Model);
@@ -477,6 +500,7 @@ public sealed partial class MainPage : Page
 
     private void AddMessage(string author, string body, MessageTone tone)
     {
+        _conversation.Add(author, body, tone);
         var group = new StackPanel { Spacing = 5, Tag = tone };
         group.Children.Add(new TextBlock
         {
@@ -501,7 +525,7 @@ public sealed partial class MainPage : Page
 
     private void SetStatus(string text, StatusTone tone)
     {
-        ((App)Application.Current).MainWindow?.SetStatusPresentation(text, tone.ToString());
+        _windowHost?.SetStatusPresentation(text, tone.ToString());
     }
 
     private static string NormalizeModelName(string value)
@@ -560,17 +584,21 @@ public sealed partial class MainPage : Page
     {
         // Keep Send visible and clickable while reconnecting. The bridge
         // reports why it cannot send without dropping the user's draft.
-        SendButton.IsEnabled = _bridge is { HasMessageInFlight: false };
+        SendButton.IsEnabled = _destination == ComposerDestination.OpenAI
+            ? _bridge is { HasMessageInFlight: false }
+            : !_destinationLaunching;
     }
 
-    private async void ShowPreferences_Click(object sender, RoutedEventArgs e)
+    private async void ShowPreferences_Click(object sender, RoutedEventArgs e) => await RunOperationAsync(ShowPreferencesAsync);
+
+    private async Task ShowPreferencesAsync()
     {
         var opacityValue = new TextBlock { Text = $"{_preferences.Opacity:0}%", VerticalAlignment = VerticalAlignment.Center };
         var opacity = new Slider { Minimum = 0, Maximum = 100, Value = _preferences.Opacity, StepFrequency = 1 };
         opacity.ValueChanged += (_, args) =>
         {
             opacityValue.Text = $"{args.NewValue:0}%";
-            ((App)Application.Current).MainWindow?.SetBackgroundAppearance(
+            _windowHost?.SetBackgroundAppearance(
                 args.NewValue, RequestedTheme == ElementTheme.Dark);
         };
         var theme = new ComboBox
@@ -584,7 +612,7 @@ public sealed partial class MainPage : Page
             var dark = theme.SelectedIndex == 1 ||
                 (theme.SelectedIndex == 2 && DetectHybridTheme());
             RequestedTheme = dark ? ElementTheme.Dark : ElementTheme.Light;
-            ((App)Application.Current).MainWindow?.SetBackgroundAppearance(
+            _windowHost?.SetBackgroundAppearance(
                 opacity.Value, dark);
         };
 
@@ -661,8 +689,8 @@ public sealed partial class MainPage : Page
         };
         StyleDialog(dialog);
         _appearanceDialogOpen = true;
-        await dialog.ShowAsync();
-        _appearanceDialogOpen = false;
+        try { await ShowDialogAsync(dialog); }
+        finally { _appearanceDialogOpen = false; }
 
         var locationChanged = _preferences.WeatherCity != weatherCity.Text.Trim() ||
             _preferences.UseDeviceLocation != useDeviceLocation.IsOn;
@@ -674,23 +702,24 @@ public sealed partial class MainPage : Page
             WeatherCity = weatherCity.Text.Trim(),
             UseDeviceLocation = useDeviceLocation.IsOn
         };
-        _preferences.Save();
+        SavePreferences();
         ApplyPreferences();
         if (locationChanged)
         {
-            _deviceLocation.ResetAccess();
+            _services.ResetLocationAccess();
             _weatherSnapshot = null;
             WeatherLocation.Text = _preferences.UseDeviceLocation ? "Current location" : _preferences.WeatherCity;
             WeatherTemperature.Text = "—";
             WeatherOutlook.Text = "Loading weather…";
-            ToolTipService.SetToolTip(WeatherBlock, "Weather data: Open-Meteo");
             _nextWeatherRefresh = DateTimeOffset.MinValue;
             PaintWeather();
         }
         FocusComposer();
     }
 
-    private async void ShowPairing_Click(object sender, RoutedEventArgs e)
+    private async void ShowPairing_Click(object sender, RoutedEventArgs e) => await RunOperationAsync(ShowPairingAsync);
+
+    private async Task ShowPairingAsync()
     {
         if (_bridge is null) return;
         var code = new TextBox { Text = _bridge.PairKey, IsReadOnly = true, MinWidth = 400 };
@@ -711,7 +740,7 @@ public sealed partial class MainPage : Page
             CloseButtonText = "Close"
         };
         StyleDialog(dialog);
-        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+        if (await ShowDialogAsync(dialog) == ContentDialogResult.Primary)
         {
             CopyPairingCode();
         }
@@ -742,13 +771,13 @@ public sealed partial class MainPage : Page
         }
 
         RequestedTheme = _preferences.Theme == "night" ? ElementTheme.Dark : ElementTheme.Light;
-        ((App)Application.Current).MainWindow?.SetBackgroundAppearance(
+        _windowHost?.SetBackgroundAppearance(
             _preferences.Opacity, RequestedTheme == ElementTheme.Dark);
     }
 
     private bool DetectHybridTheme()
     {
-        var window = ((App)Application.Current).MainWindow;
+        var window = _windowHost;
         return window?.DetectBackdropIsDark(_hybridDark) ?? _hybridDark;
     }
 
@@ -767,7 +796,7 @@ public sealed partial class MainPage : Page
 
         _hybridDark = dark;
         RequestedTheme = dark ? ElementTheme.Dark : ElementTheme.Light;
-        ((App)Application.Current).MainWindow?.SetBackgroundAppearance(_preferences.Opacity, dark);
+        _windowHost?.SetBackgroundAppearance(_preferences.Opacity, dark);
     }
 
     public void SetBackgroundOpacity(double percent)
@@ -823,7 +852,7 @@ public sealed partial class MainPage : Page
             WindowWidth = size.Width,
             WindowHeight = size.Height
         };
-        _preferences.Save();
+        SavePreferences();
     }
 
     private void PaintSurface()
@@ -834,14 +863,19 @@ public sealed partial class MainPage : Page
         var muted = new SolidColorBrush(dark ? Color(0xFF, 0xA1, 0xAE, 0xC1) : Color(0xFF, 0x6D, 0x7B, 0x91));
         var accent = new SolidColorBrush(dark ? Color(0xFF, 0x89, 0x95, 0xFF) : Color(0xFF, 0x66, 0x74, 0xF4));
         var text = TextBrush();
-        var popup = new SolidColorBrush(dark ? Color(0xF5, 0x16, 0x1D, 0x29) : Color(0xF7, 0xF7, 0xFA, 0xFE));
-        var popupBorder = new SolidColorBrush(dark ? Color(0xFF, 0x35, 0x40, 0x55) : Color(0xFF, 0xD6, 0xDF, 0xEA));
+        // Match the opaque, neutral title bar rather than the acrylic content.
+        var menuBackground = new SolidColorBrush(dark ? Color(0xFF, 0, 0, 0) : Color(0xFF, 0xFF, 0xFF, 0xFF));
+        var menuText = new SolidColorBrush(dark ? Color(0xFF, 0xED, 0xED, 0xED) : Color(0xFF, 0x20, 0x20, 0x20));
+        var menuBorder = new SolidColorBrush(dark ? Color(0xFF, 0x28, 0x28, 0x28) : Color(0xFF, 0xD5, 0xD5, 0xD5));
+        var menuHover = new SolidColorBrush(dark ? Color(0xFF, 0x28, 0x28, 0x28) : Color(0xFF, 0xE8, 0xE8, 0xE8));
+        var menuPressed = new SolidColorBrush(dark ? Color(0xFF, 0x3A, 0x3A, 0x3A) : Color(0xFF, 0xD5, 0xD5, 0xD5));
         var hover = new SolidColorBrush(dark ? Color(0x33, 0xFF, 0xFF, 0xFF) : Color(0x12, 0, 0, 0));
 
         _root.Background = canvas;
         Composer.Background = transparent;
         Composer.BorderBrush = transparent;
         Composer.Foreground = text;
+        ComposerHint.Foreground = muted;
         PaintComposerCaret();
         SendButton.Background = transparent;
         SendButton.Foreground = accent;
@@ -849,31 +883,44 @@ public sealed partial class MainPage : Page
             SendButton.Resources[key] = accent;
         OverflowButton.Background = transparent;
         OverflowButton.Foreground = muted;
+        PaintDestinations();
         PaintWeather();
         PaintGmail();
+        PaintTasks();
 
         var menuStyle = new Style(typeof(MenuFlyoutPresenter));
-        menuStyle.Setters.Add(new Setter(Control.BackgroundProperty, popup));
-        menuStyle.Setters.Add(new Setter(Control.ForegroundProperty, text));
-        menuStyle.Setters.Add(new Setter(Control.BorderBrushProperty, popupBorder));
-        menuStyle.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(1)));
-        menuStyle.Setters.Add(new Setter(Control.CornerRadiusProperty, new CornerRadius(12)));
-        menuStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(6)));
+        menuStyle.Setters.Add(new Setter(Control.BackgroundProperty, menuBackground));
+        menuStyle.Setters.Add(new Setter(Control.ForegroundProperty, menuText));
+        menuStyle.Setters.Add(new Setter(Control.BorderBrushProperty, menuBorder));
+        menuStyle.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(1, 0, 1, 1)));
+        menuStyle.Setters.Add(new Setter(Control.CornerRadiusProperty, new CornerRadius(0)));
+        menuStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(0, 2, 0, 2)));
+        // Reduce the standard flyout gap so it reads as a title-bar dropdown.
+        menuStyle.Setters.Add(new Setter(UIElement.RenderTransformProperty, new TranslateTransform { Y = -6 }));
         OptionsMenu.MenuFlyoutPresenterStyle = menuStyle;
         foreach(var item in OptionsMenu.Items.OfType<MenuFlyoutItem>())
         {
-            item.Foreground = text;
+            item.Foreground = menuText;
             item.Background = transparent;
-            item.Resources["MenuFlyoutItemBackgroundPointerOver"] = hover;
-            item.Resources["MenuFlyoutItemBackgroundPressed"] = hover;
+            item.FontSize = 13;
+            item.MinHeight = 30;
+            item.Padding = new Thickness(10, 6, 10, 6);
+            item.CornerRadius = new CornerRadius(0);
+            item.Resources["MenuFlyoutItemThemePaddingNarrow"] = item.Padding;
+            item.Resources["MenuFlyoutItemBackgroundPointerOver"] = menuHover;
+            item.Resources["MenuFlyoutItemBackgroundPressed"] = menuPressed;
+            foreach (var key in new[] { "MenuFlyoutItemForeground", "MenuFlyoutItemForegroundPointerOver", "MenuFlyoutItemForegroundPressed" })
+                item.Resources[key] = menuText;
         }
+        foreach (var separator in OptionsMenu.Items.OfType<MenuFlyoutSeparator>())
+            separator.Resources["MenuFlyoutSeparatorBackground"] = menuBorder;
 
         // Keep the controls visually absent in all pointer and focus states;
         // typography and color provide the interaction affordance.
         foreach(var key in new[] { "ButtonBackground", "ButtonBackgroundPointerOver", "ButtonBackgroundPressed", "ButtonBackgroundDisabled" })
         {
             _root.Resources[key] = transparent;
-            OverflowButton.Resources[key] = transparent;
+            OverflowButton.Resources[key] = key is "ButtonBackgroundPointerOver" or "ButtonBackgroundPressed" ? hover : transparent;
         }
         foreach(var key in new[]
         {
@@ -968,47 +1015,4 @@ public sealed partial class MainPage : Page
     }
 
     private enum StatusTone { Active, Success, Warning, Danger }
-    private enum MessageTone { User, Assistant, Muted }
-}
-
-internal sealed record Preferences(string Theme, double Opacity)
-{
-    public bool TextOnly { get; init; } = true;
-    public string WeatherCity { get; init; } = "Palma, ES";
-    public bool UseDeviceLocation { get; init; } = true;
-    public bool GmailInboxOnly { get; init; } = true;
-    public int? WindowX { get; init; }
-    public int? WindowY { get; init; }
-    public int? WindowWidth { get; init; }
-    public int? WindowHeight { get; init; }
-
-    private static readonly string FilePath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HABITAT", "preferences.json");
-
-    public static Preferences Load()
-    {
-        try
-        {
-            var saved = JsonSerializer.Deserialize<Preferences>(File.ReadAllText(FilePath));
-            if (saved is not null && saved.Theme is "day" or "night" or "hybrid")
-            {
-                return saved with { Opacity = Math.Clamp(saved.Opacity, 0, 100) };
-            }
-        }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
-        catch (JsonException) { }
-        return new Preferences("day", 85);
-    }
-
-    public void Save()
-    {
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
-        }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
-    }
 }

@@ -77,4 +77,20 @@ await WaitUntil(() => bridge.IsConnected);
 await Task.Delay(4200);
 Check(!bridge.IsConnected, "A stale page heartbeat must expire even if the socket still receives ticks.");
 socket.Abort();
+var orphanEvents = 0;
+bridge.EventReceived += (_, data) => { if (data.Type == "response") orphanEvents++; };
+await http.PostAsJsonAsync("/event", new { type = "response", text = "Orphan response without an ID" });
+Check(orphanEvents == 0, "Events without an active request and ID cannot create responses.");
+using (var diagnostics = await Status()) Check(diagnostics.RootElement.GetProperty("protocolVersion").GetInt32() == 1 &&
+    diagnostics.RootElement.GetProperty("processId").GetInt32() == Environment.ProcessId,
+    "Updates identify bridge version and process without reading presentation text.");
+await using (var conflicting = new BridgeService(new Uri(address).Port))
+{
+    var failed = false;
+    conflicting.StartFailed += (_, _) => failed = true;
+    await conflicting.StartAsync();
+    Check(failed && conflicting.Address is null, "Failed bridge startup disposes its server.");
+    await conflicting.DisposeAsync();
+    await conflicting.DisposeAsync();
+}
 Console.WriteLine($"Bridge checks passed: {checks}. Only a random local port was used; no Chrome or ChatGPT requests.");

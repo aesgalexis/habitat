@@ -6,6 +6,6 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../src/Habitat.App/Services/BackdropThemeDetector.cs" Link="BackdropThemeDetector.cs" />
+    <ProjectReference Include="../../src/Habitat.Core/Habitat.Core.csproj" />
   </ItemGroup>
 </Project>

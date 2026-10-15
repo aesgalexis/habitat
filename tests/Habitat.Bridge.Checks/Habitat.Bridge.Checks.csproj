@@ -7,7 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <Compile Include="../../src/Habitat.App/Models/BridgeModels.cs" Link="BridgeModels.cs" />
-    <Compile Include="../../src/Habitat.App/Services/BridgeService.cs" Link="BridgeService.cs" />
+    <ProjectReference Include="../../src/Habitat.Core/Habitat.Core.csproj" />
   </ItemGroup>
 </Project>

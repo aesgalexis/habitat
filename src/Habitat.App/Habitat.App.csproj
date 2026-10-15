@@ -19,6 +19,7 @@
     <EnableWinAppRunSupport>false</EnableWinAppRunSupport>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <DefineConstants Condition="'$(HabitatUiChecks)' == 'true'">$(DefineConstants);HABITAT_UI_CHECKS</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
@@ -65,6 +66,7 @@
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="../Habitat.Core/Habitat.Core.csproj" />
   </ItemGroup>
 
   <!--

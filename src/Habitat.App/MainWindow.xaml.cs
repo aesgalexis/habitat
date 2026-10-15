@@ -2,34 +2,44 @@ using Habitat.Services;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using System.Runtime.InteropServices;
 using Windows.UI;
 using WinRT;
 
 namespace Habitat;
 
-public sealed class MainWindow : Window
+public sealed class MainWindow : Window, IWindowHost
 {
     private const int SmXVirtualScreen = 76;
     private const int SmYVirtualScreen = 77;
     private const int SmCxVirtualScreen = 78;
     private const int SmCyVirtualScreen = 79;
 
-    private readonly BridgeService _bridge;
+    private readonly AppServices _services;
+    private bool _closing;
+    private bool _closeReady;
+    public nint Handle => WinRT.Interop.WindowNative.GetWindowHandle(this);
     private readonly MainPage _page;
+    private readonly Grid _windowRoot = new();
+    private readonly Grid _titleSurface = new();
+    private readonly TextBlock _titleText = new() { Text = "HABITAT", FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+    private readonly Microsoft.UI.Xaml.Shapes.Ellipse _titleIcon = new() { Width = 6.4, Height = 6.4, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, Fill = new SolidColorBrush(Color.FromArgb(255, 0x89, 0x95, 0xFF)) };
+    private readonly ColumnDefinition _captionInset = new() { Width = new GridLength(138) };
     private readonly DesktopAcrylicController? _acrylic;
     private readonly SystemBackdropConfiguration? _backdropConfiguration;
     private string _statusIcon = string.Empty;
     public bool IsActive { get; private set; }
 
-    public MainWindow(BridgeService bridge)
+    internal MainWindow(AppServices services)
     {
-        _bridge = bridge;
+        _services = services;
         Title = "HABITAT";
         var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "HabitatDot.ico");
         if (File.Exists(iconPath)) AppWindow.SetIcon(iconPath);
-        _page = new MainPage(bridge);
-        Content = _page;
+        _page = new MainPage(services, this);
+        BuildWindowChrome();
         if (DesktopAcrylicController.IsSupported())
         {
             _backdropConfiguration = new SystemBackdropConfiguration { IsInputActive = true };
@@ -40,7 +50,54 @@ public sealed class MainWindow : Window
         AppWindow.Resize(new Windows.Graphics.SizeInt32(860, 720));
         _page.RestoreWindowPlacement(AppWindow);
         Activated += OnActivated;
-        Closed += OnClosed;
+        AppWindow.Closing += OnClosing;
+        Closed += (_, _) => _acrylic?.Dispose();
+    }
+
+    private void BuildWindowChrome()
+    {
+        _windowRoot.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        _windowRoot.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        _titleSurface.Height = 32;
+        _titleSurface.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        _titleSurface.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        _titleSurface.ColumnDefinitions.Add(_captionInset);
+
+        var dragArea = new Grid { Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0)), Padding = new Thickness(12, 0, 12, 0), ColumnSpacing = 8 };
+        dragArea.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        dragArea.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        var iconSlot = new Grid { Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center };
+        iconSlot.Children.Add(_titleIcon);
+        dragArea.Children.Add(iconSlot);
+        Grid.SetColumn(_titleText, 1);
+        dragArea.Children.Add(_titleText);
+        _titleSurface.Children.Add(dragArea);
+        Grid.SetColumn(_page.WindowMenuButton, 1);
+        _titleSurface.Children.Add(_page.WindowMenuButton);
+        _windowRoot.Children.Add(_titleSurface);
+        Grid.SetRow(_page, 1);
+        _windowRoot.Children.Add(_page);
+        Content = _windowRoot;
+        _page.RegisterDestinationWheel(_windowRoot);
+
+        ExtendsContentIntoTitleBar = true;
+        // Only this area is draggable; the menu remains an interactive control.
+        SetTitleBar(dragArea);
+        _titleSurface.Loaded += (_, _) => UpdateCaptionLayout();
+        _titleSurface.SizeChanged += (_, _) => UpdateCaptionLayout();
+        AppWindow.Changed += (_, _) => UpdateCaptionLayout();
+        _windowRoot.Loaded += (_, _) =>
+        {
+            if (_windowRoot.XamlRoot is { } root) root.Changed += (_, _) => UpdateCaptionLayout();
+        };
+    }
+
+    private void UpdateCaptionLayout()
+    {
+        var scale = _windowRoot.XamlRoot?.RasterizationScale ?? 1;
+        // Insets are physical pixels and change with DPI and window state.
+        _captionInset.Width = new GridLength(AppWindow.TitleBar.RightInset / scale);
+        _titleSurface.Height = AppWindow.TitleBar.Height > 0 ? AppWindow.TitleBar.Height / scale : 32;
     }
 
     public void SetBackgroundAppearance(double percent, bool dark)
@@ -63,6 +120,9 @@ public sealed class MainWindow : Window
             : Color.FromArgb(0xFF, 0xD5, 0xD5, 0xD5);
 
         var titleBar = AppWindow.TitleBar;
+        _windowRoot.RequestedTheme = dark ? ElementTheme.Dark : ElementTheme.Light;
+        _titleSurface.Background = new SolidColorBrush(titleBackground);
+        _titleText.Foreground = new SolidColorBrush(titleForeground);
         titleBar.BackgroundColor = titleBackground;
         titleBar.InactiveBackgroundColor = titleBackground;
         titleBar.ForegroundColor = titleForeground;
@@ -90,6 +150,7 @@ public sealed class MainWindow : Window
     public void SetStatusPresentation(string text, string status)
     {
         Title = string.IsNullOrWhiteSpace(text) ? "HABITAT" : $"HABITAT - {text}";
+        _titleText.Text = Title;
         var normalized = status switch
         {
             "Success" => "Success",
@@ -108,6 +169,13 @@ public sealed class MainWindow : Window
             AppWindow.SetIcon(iconPath);
             _statusIcon = normalized;
         }
+        _titleIcon.Fill = new SolidColorBrush(normalized switch
+        {
+            "Success" => Color.FromArgb(255, 0x55, 0xC7, 0x9C),
+            "Warning" => Color.FromArgb(255, 0xE2, 0xA0, 0x6B),
+            "Danger" => Color.FromArgb(255, 0xED, 0x71, 0x81),
+            _ => Color.FromArgb(255, 0x89, 0x95, 0xFF)
+        });
     }
 
     public bool DetectBackdropIsDark(bool current)
@@ -171,22 +239,31 @@ public sealed class MainWindow : Window
 
     private async void OnActivated(object sender, WindowActivatedEventArgs args)
     {
+        if (_closing) return;
         IsActive = args.WindowActivationState != WindowActivationState.Deactivated;
         if (IsActive)
         {
             _page.OnWindowActivated();
             _page.RefreshHybridAppearance(force: true);
             await Task.Delay(80);
-            _page.FocusComposer();
+            if (!_closing) _page.FocusComposer();
         }
     }
 
-    private async void OnClosed(object sender, WindowEventArgs args)
+    private async void OnClosing(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowClosingEventArgs args)
     {
-        _page.SaveWindowPlacement(AppWindow);
-        _page.StopGmail();
-        _acrylic?.Dispose();
-        await _bridge.DisposeAsync();
+        if (_closeReady) return;
+        args.Cancel = true;
+        if (_closing) return;
+        _closing = true;
+        try
+        {
+            _page.SaveWindowPlacement(AppWindow);
+            try { await _page.StopAsync(); }
+            finally { await _services.DisposeAsync(); }
+        }
+        catch (Exception exception) { _services.ReportError("Close application", exception); }
+        finally { _closeReady = true; Close(); }
     }
 
     [DllImport("user32.dll")]

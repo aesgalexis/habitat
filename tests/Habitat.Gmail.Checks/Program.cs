@@ -1,5 +1,6 @@
 using Habitat.Models;
 using Habitat.Services;
+using Habitat;
 using Microsoft.AspNetCore.WebUtilities;
 using System.Net;
 using System.Security.Cryptography;
@@ -100,6 +101,37 @@ Check(all.UnreadCount == 44 && all.CountIsEstimate && Uri.UnescapeDataString(req
 Check((await gmail.GetMessageAsync("abc123", CancellationToken.None)).Body == plain.Body && requests[^1].EndsWith("format=full"), "Fetch the body only when requested.");
 await Reject<InvalidDataException>(() => gmail.GetMessageAsync("../profile", CancellationToken.None), "Reject path injection in message ids.");
 Check(store.Saves == 0, "Fresh cached access tokens should not rewrite credentials.");
+using (var mailbox = new GmailSession(() => new GmailAuthService(new MemoryStore(freshAccount), apiClient),
+    account => new GmailService(account, apiClient), exception => exception.Message))
+{
+    mailbox.Initialize();
+    var renders = 0;
+    mailbox.Changed += () => renders++;
+    await mailbox.RefreshAsync(() => true, false, CancellationToken.None);
+    Check(!mailbox.IsBusy && mailbox.Messages.Count == 1 && mailbox.Inbox?.UnreadCount == 42 && renders == 2,
+        "Mailbox coordination exposes loading and committed state without controls.");
+    await mailbox.RefreshAsync(() => true, true, CancellationToken.None);
+    Check(mailbox.Messages.Count == 1, "Mailbox pagination deduplicates IDs.");
+    await mailbox.ReadAsync(mailbox.Messages[0], CancellationToken.None);
+    Check(mailbox.Selected?.Body == plain.Body, "Mailbox selection loads the requested body independently of UI.");
+    using var stopMailbox = new CancellationTokenSource();
+    stopMailbox.Cancel();
+    var previousRenders = renders;
+    await mailbox.RefreshAsync(() => true, false, stopMailbox.Token);
+    Check(renders == previousRenders && !mailbox.IsBusy, "Cancelled mailbox work does not update the view.");
+    await mailbox.DisconnectAsync(CancellationToken.None);
+    Check(mailbox.Messages.Count == 0 && mailbox.Inbox is null && mailbox.Auth?.IsSignedIn == false,
+        "Mailbox disconnect clears view state after authorization is saved.");
+}
+var lateStore = new MemoryStore(new GmailAccount(null, null, null));
+using var lateAuth = new GmailAuthService(lateStore, apiClient, _ => throw new Exception("Restoring credentials must not open Google."));
+Check(!await lateAuth.RestoreSavedSessionAsync(CancellationToken.None), "Missing saved credentials should not open a browser.");
+lateStore.Save(freshAccount);
+var lateSaves = lateStore.Saves;
+Check(await lateAuth.RestoreSavedSessionAsync(CancellationToken.None) && lateAuth.IsConfigured && lateAuth.Email == freshAccount.Email,
+    "Recover an account saved after this application instance started.");
+await lateAuth.SignInAsync(CancellationToken.None);
+Check(lateStore.Saves == lateSaves, "Restoring and reusing a saved session must not rewrite or clear it.");
 auth.Configure(clientConfig);
 Check(auth.IsSignedIn && store.Saves == 0, "Reimporting the same OAuth client must preserve the saved session.");
 await auth.SignInAsync(CancellationToken.None);
@@ -212,8 +244,16 @@ if (OperatingSystem.IsWindows())
 {
     var testDirectory = Path.Combine(Path.GetTempPath(), "habitat-gmail-checks-" + Guid.NewGuid().ToString("N"));
     var testPath = Path.Combine(testDirectory, "gmail-account.bin");
+    var testVault = "HABITAT/Gmail/Test/" + Guid.NewGuid().ToString("N");
     try
     {
+        Check(Path.IsPathFullyQualified(GmailCredentialStore.DefaultPath) &&
+            !GmailCredentialStore.DefaultPath.Contains("\\Packages\\", StringComparison.OrdinalIgnoreCase),
+            "Default Gmail storage uses the desktop profile, independent of package redirection.");
+        Check(new GmailCredentialStore(testPath).Load().Client is null, "A genuinely missing file represents an unconfigured account.");
+        Directory.CreateDirectory(testDirectory);
+        await Reject<UnauthorizedAccessException>(() => Task.Run(() => new GmailCredentialStore(testDirectory).Load()),
+            "An unreadable account path must not masquerade as a missing account.");
         var protectedStore = new GmailCredentialStore(testPath);
         protectedStore.Save(freshAccount);
         Check(protectedStore.Load() == freshAccount, "Round-trip credentials through Windows DPAPI.");
@@ -234,9 +274,29 @@ if (OperatingSystem.IsWindows())
             await reopenedAgain.SignInAsync(CancellationToken.None);
             Check(exchanges == callsBefore && reopenedAgain.IsSignedIn, "A second reopen reuses the persisted renewed access token.");
         }
+        protectedStore.Save(freshAccount);
+        var migratingStore = new GmailCredentialStore(testPath, testVault);
+        Check(migratingStore.Load() == freshAccount, "Migrate the existing DPAPI account into Windows Credential Manager.");
+        File.Delete(testPath);
+        var vaultAccount = new GmailCredentialStore(testPath, testVault).Load();
+        Check(vaultAccount.Client == freshAccount.Client && vaultAccount.Tokens!.RefreshToken == "refresh-test" &&
+            vaultAccount.Tokens.AccessToken == "" && vaultAccount.Tokens.ExpiresAt == DateTimeOffset.MinValue,
+            "Reopening reads persistent offline authorization from Windows even when the legacy file is absent.");
+        for (var reopen = 0; reopen < 3; reopen++)
+        {
+            using var vaultedAuth = new GmailAuthService(new GmailCredentialStore(testPath, testVault), refreshHttp,
+                _ => throw new Exception("Vault recovery must not open Google."));
+            await vaultedAuth.SignInAsync(CancellationToken.None);
+            Check(vaultedAuth.IsSignedIn && !File.Exists(testPath), "A fresh vault-backed instance renews silently without relying on an account file.");
+        }
+        using (var disconnectVault = new GmailAuthService(new GmailCredentialStore(testPath, testVault), refreshHttp))
+            await disconnectVault.DisconnectAsync(CancellationToken.None);
+        Check(new GmailCredentialStore(testPath, testVault).Load().Tokens is null,
+            "Explicit disconnect remains persisted in the Windows vault.");
     }
     finally
     {
+        GmailCredentialStore.DeleteTestVault(testVault);
         // Exact test-owned targets only; no profile or application storage.
         if (File.Exists(testPath)) File.Delete(testPath);
         if (Directory.Exists(testDirectory)) Directory.Delete(testDirectory);

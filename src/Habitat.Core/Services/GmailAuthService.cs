@@ -39,6 +39,21 @@ internal sealed class GmailAuthService : IDisposable
     public bool IsSignedIn => _account.Tokens is not null;
     public string? Email => _account.Email;
 
+    public async Task<bool> RestoreSavedSessionAsync(CancellationToken cancellationToken)
+    {
+        await _tokenLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (IsSignedIn) return true;
+            // A saved account may become available after startup (for example,
+            // after authorization completed in another HABITAT setup process).
+            var saved = _store.Load();
+            if (saved.Client is not null) _account = saved;
+            return IsSignedIn;
+        }
+        finally { _tokenLock.Release(); }
+    }
+
     public void Configure(GmailClientConfiguration client)
     {
         if (_account.Client == client) return;

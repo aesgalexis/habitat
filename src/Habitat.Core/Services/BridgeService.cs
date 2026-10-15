@@ -16,16 +16,20 @@ public sealed class BridgeService : IAsyncDisposable
     private readonly object _stateLock = new();
     private WebApplication? _server;
     private DateTimeOffset _lastPoll = DateTimeOffset.MinValue;
-    private OutgoingMessage? _inflight;
-    private DateTimeOffset? _inflightSince;
-    private bool _deliveryAcknowledged;
+    private readonly BridgeSession _session;
+    private readonly TimeProvider _time;
+    private readonly SemaphoreSlim _lifecycle = new(1);
+    private bool _disposed;
+    private DateTimeOffset UtcNow => _time.GetUtcNow();
     private object? _connectionOwner;
     private string _connectionIssue = "Reconnecting to ChatGPT…";
     private static readonly JsonSerializerOptions SocketJson = new(JsonSerializerDefaults.Web);
 
-    public BridgeService(int port = 8765)
+    public BridgeService(int port = 8765, TimeProvider? timeProvider = null)
     {
         _port = port;
+        _time = timeProvider ?? TimeProvider.System;
+        _session = new BridgeSession(_time);
         PairKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24))
             .TrimEnd('=').Replace('+', '-').Replace('/', '_');
     }
@@ -36,12 +40,12 @@ public sealed class BridgeService : IAsyncDisposable
 
     public bool IsConnected
     {
-        get { lock (_stateLock) return DateTimeOffset.UtcNow - _lastPoll < TimeSpan.FromSeconds(4); }
+        get { lock (_stateLock) return UtcNow - _lastPoll < BridgeProtocol.ConnectionLifetime; }
     }
 
     public bool HasMessageInFlight
     {
-        get { lock (_stateLock) return _inflight is not null; }
+        get { lock (_stateLock) return _session.Message is not null; }
     }
 
     public event EventHandler<BridgeEvent>? EventReceived;
@@ -49,8 +53,10 @@ public sealed class BridgeService : IAsyncDisposable
 
     public async Task StartAsync()
     {
+        await _lifecycle.WaitAsync();
         try
         {
+            if (_disposed || _server is not null) return;
             var builder = WebApplication.CreateSlimBuilder();
             builder.Logging.ClearProviders();
             builder.WebHost.UseUrls($"http://127.0.0.1:{_port}");
@@ -64,17 +70,19 @@ public sealed class BridgeService : IAsyncDisposable
                 {
                     // Read-only diagnostics: must not create a heartbeat or
                     // dequeue/acknowledge messages during verification.
-                    return Results.Json(new { connected = DateTimeOffset.UtcNow - _lastPoll < TimeSpan.FromSeconds(4),
-                        hasMessageInFlight = _inflight is not null,
+                    return Results.Json(new { connected = UtcNow - _lastPoll < BridgeProtocol.ConnectionLifetime,
+                        hasMessageInFlight = _session.Message is not null,
+                        protocolVersion = BridgeProtocol.Version, processId = Environment.ProcessId,
+                        deliveryPhase = _session.Phase.ToString(),
                         transport = _connectionOwner is null ? "page-http" : "worker-websocket",
-                        heartbeatAgeSeconds = _lastPoll == DateTimeOffset.MinValue ? (double?)null : (DateTimeOffset.UtcNow - _lastPoll).TotalSeconds,
+                        heartbeatAgeSeconds = _lastPoll == DateTimeOffset.MinValue ? (double?)null : (UtcNow - _lastPoll).TotalSeconds,
                         issue = _connectionIssue });
                 }
             });
 
             server.MapGet("/pair", (HttpRequest request) =>
                 request.Headers["X-Habitat-Pair"] == "1"
-                    ? Results.Json(new { key = PairKey })
+                    ? Results.Json(new { key = PairKey, protocolVersion = BridgeProtocol.Version })
                     : Results.Json(new { error = "Pairing denied" }, statusCode: StatusCodes.Status403Forbidden));
 
             server.MapGet("/next", (HttpRequest request) =>
@@ -86,14 +94,14 @@ public sealed class BridgeService : IAsyncDisposable
                 OutgoingMessage? message;
                 lock (_stateLock)
                 {
-                    _lastPoll = DateTimeOffset.UtcNow;
+                    _lastPoll = UtcNow;
                     _connectionOwner = null;
                     _connectionIssue = "Reconnecting to ChatGPT…";
                     // Keep offering an unacknowledged message. If Chrome
                     // reloads or invalidates the content script between this
                     // response and its acknowledgement, the replacement
                     // script can recover the same delivery.
-                    message = _deliveryAcknowledged ? null : _inflight;
+                    message = _session.PendingDelivery;
                 }
                 return Results.Json(new { message });
             });
@@ -120,24 +128,8 @@ public sealed class BridgeService : IAsyncDisposable
                     return Results.Json(new { error = "Invalid event" }, statusCode: StatusCodes.Status400BadRequest);
                 }
 
-                var accepted = bridgeEvent.Type is "status" or "model";
-                lock (_stateLock)
-                {
-                    if (bridgeEvent.Type is not ("status" or "model") && bridgeEvent.Id == _inflight?.Id)
-                    {
-                        accepted = true;
-                        if (bridgeEvent.Type is "received" or "started")
-                        {
-                            _deliveryAcknowledged = true;
-                        }
-                        if (bridgeEvent.Type is "response" or "error")
-                        {
-                            _inflight = null;
-                            _inflightSince = null;
-                            _deliveryAcknowledged = false;
-                        }
-                    }
-                }
+                bool accepted;
+                lock (_stateLock) accepted = _session.Accept(bridgeEvent);
                 if (accepted) EventReceived?.Invoke(this, bridgeEvent);
                 return Results.Json(new { ok = true });
             });
@@ -147,27 +139,26 @@ public sealed class BridgeService : IAsyncDisposable
         }
         catch (Exception exception)
         {
+            if (_server is not null) { await _server.DisposeAsync(); _server = null; }
             StartFailed?.Invoke(this, $"Could not open port {_port}: {exception.Message}");
         }
+        finally { _lifecycle.Release(); }
     }
 
     public bool TryQueueMessage(string text, out string reason)
     {
         lock (_stateLock)
         {
-            if (DateTimeOffset.UtcNow - _lastPoll >= TimeSpan.FromSeconds(4))
+            if (UtcNow - _lastPoll >= BridgeProtocol.ConnectionLifetime)
             {
                 reason = _connectionIssue;
                 return false;
             }
-            if (_inflight is not null)
+            if (!_session.TryQueue(text))
             {
                 reason = "Wait for the current response to finish";
                 return false;
             }
-            _inflight = new OutgoingMessage(Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant(), text);
-            _inflightSince = DateTimeOffset.UtcNow;
-            _deliveryAcknowledged = false;
             reason = string.Empty;
             return true;
         }
@@ -175,17 +166,7 @@ public sealed class BridgeService : IAsyncDisposable
 
     public bool TryExpireMessage(TimeSpan timeout)
     {
-        lock (_stateLock)
-        {
-            if (_inflight is null || _inflightSince is null || DateTimeOffset.UtcNow - _inflightSince <= timeout)
-            {
-                return false;
-            }
-            _inflight = null;
-            _inflightSince = null;
-            _deliveryAcknowledged = false;
-            return true;
-        }
+        lock (_stateLock) return _session.TryExpire(timeout);
     }
 
     private bool IsAuthorized(HttpRequest request)
@@ -225,8 +206,8 @@ public sealed class BridgeService : IAsyncDisposable
             while (!receive.IsCompleted && socket.State == WebSocketState.Open)
             {
                 OutgoingMessage? message;
-                lock (_stateLock) message = _deliveryAcknowledged ? null : _inflight;
-                var bytes = JsonSerializer.SerializeToUtf8Bytes(new { kind = "tick", message }, SocketJson);
+                lock (_stateLock) message = _session.PendingDelivery;
+                var bytes = JsonSerializer.SerializeToUtf8Bytes(new { kind = "tick", protocolVersion = BridgeProtocol.Version, message }, SocketJson);
                 await socket.SendAsync(bytes.AsMemory(), WebSocketMessageType.Text, true, lifetime.Token);
                 await Task.Delay(TimeSpan.FromMilliseconds(1200), lifetime.Token);
             }
@@ -267,7 +248,7 @@ public sealed class BridgeService : IAsyncDisposable
             {
                 // Socket traffic alone is NOT a connection. The worker must
                 // have received a fresh acknowledgement from the bound page.
-                _lastPoll = ready ? DateTimeOffset.UtcNow : DateTimeOffset.MinValue;
+                _lastPoll = ready ? UtcNow : DateTimeOffset.MinValue;
                 _connectionOwner = owner;
                 var issue = root.TryGetProperty("issue", out var reason) && reason.ValueKind == JsonValueKind.String ? reason.GetString() : null;
                 _connectionIssue = string.IsNullOrWhiteSpace(issue) ? "Reconnecting to ChatGPT…" : issue[..Math.Min(issue.Length, 160)];
@@ -302,10 +283,19 @@ public sealed class BridgeService : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        if (_server is null) return;
-        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-        await _server.StopAsync(cancellation.Token);
-        await _server.DisposeAsync();
-        _server = null;
+        await _lifecycle.WaitAsync();
+        try
+        {
+            if (_disposed) return;
+            _disposed = true;
+            var server = _server;
+            _server = null;
+            if (server is null) return;
+            using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            try { await server.StopAsync(cancellation.Token); }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+            finally { await server.DisposeAsync(); }
+        }
+        finally { _lifecycle.Release(); }
     }
 }

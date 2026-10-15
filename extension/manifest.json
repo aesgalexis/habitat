@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "HABITAT · ChatGPT bridge",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "minimum_chrome_version": "120",
-  "description": "Send and receive messages through the active ChatGPT chat in Chrome.",
+  "description": "Send and receive messages through the linked ChatGPT chat, including in the background.",
   "permissions": [
     "storage",
     "activeTab",

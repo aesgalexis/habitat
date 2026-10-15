@@ -5,7 +5,7 @@ using Habitat.Services;
 // No message content or tokens are printed by this setup utility.
 if (args.Length == 0 || args[0] is not ("connect" or "check"))
 {
-    Console.WriteLine("Usage: Habitat.Gmail.Setup connect <desktop-client.json> [authorization-url-file] | check");
+    Console.WriteLine("Usage: Habitat.Gmail.Setup connect <desktop-client.json> [authorization-url-file] | check [--refresh]");
     return 2;
 }
 using var cancellation = new CancellationTokenSource();
@@ -27,6 +27,8 @@ try
         auth.Configure(GmailClientConfiguration.FromJson(File.ReadAllText(file.FullName)));
         await auth.SignInAsync(cancellation.Token);
     }
+    if (args[0] == "check" && args.Contains("--refresh"))
+        await auth.GetAccessTokenAsync(cancellation.Token, forceRefresh: true);
     using var gmail = new GmailService(auth);
     var inbox = await gmail.GetUnreadAsync(true, null, cancellation.Token);
     Console.WriteLine($"Gmail connected. Inbox unread messages: {inbox.UnreadCount}. Credentials encrypted for this Windows user.");

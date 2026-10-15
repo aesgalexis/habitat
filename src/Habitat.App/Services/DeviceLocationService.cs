@@ -4,7 +4,7 @@ using Windows.Devices.Geolocation;
 
 namespace Habitat.Services;
 
-internal sealed class DeviceLocationService
+internal sealed class DeviceLocationService(AppDataPaths paths)
 {
     private Geolocator? _locator;
     private GeolocationAccessStatus? _access;
@@ -58,17 +58,17 @@ internal sealed class DeviceLocationService
         }
     }
 
-    private static DeviceLocationResult Failed(string message)
+    private DeviceLocationResult Failed(string message)
     {
         WriteStatus(message);
         return new DeviceLocationResult(null, message);
     }
 
-    private static void WriteStatus(string message)
+    private void WriteStatus(string message)
     {
         try
         {
-            var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HABITAT");
+            var directory = paths.LocalDirectory;
             Directory.CreateDirectory(directory);
             // Diagnostic status only: never write the user's coordinates.
             File.WriteAllText(Path.Combine(directory, "location-status.log"), $"{DateTimeOffset.Now:O}\n{message}\n");

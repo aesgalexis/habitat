@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 const extension = path.resolve(__dirname, '../extension');
+const wireFixture = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures/bridge-v1.json"), "utf8"));
 let checks = 0;
 function check(value, message) { assert.ok(value, message); checks++; }
 function signal() { const listeners = []; return {listeners,addListener(fn){listeners.push(fn);},removeListener(fn){const i=listeners.indexOf(fn);if(i>=0)listeners.splice(i,1);}}; }
@@ -47,6 +48,10 @@ async function workerChecks() {
   await tick();
   check(local.habitatTab===101,'Finish the current response in its original chat after a tab switch.');
   pageBusy=false;
+  const previousDeliveries=commands.filter(c=>c.request.kind==='habitat:deliver').length;
+  await tick({id:'queued-before-tab-switch',text:'test'});
+  check(local.habitatTab===101 && commands.filter(c=>c.request.kind==='habitat:deliver').length===previousDeliveries+1 &&
+    commands.at(-1).id===101,'A queued message keeps its original chat even if a different ChatGPT tab becomes active.');
   await tick();
   check(local.habitatTab===202,'Follow the newly active ChatGPT tab once the response has finished.');
   await tick({id:'two',text:'test'});
@@ -62,7 +67,27 @@ async function workerChecks() {
   second.active=false;
   const sent=commands.filter(c=>c.request.kind==='habitat:deliver').length;
   await tick({id:'blocked',text:'test'});
-  check(sockets.at(-1).sent.at(-1).ready===false && commands.filter(c=>c.request.kind==='habitat:deliver').length===sent,'Do not send to a background chat when no ChatGPT tab is active.');
+  check(sockets.at(-1).sent.at(-1).ready===true && commands.filter(c=>c.request.kind==='habitat:deliver').length===sent+1 &&
+    commands.at(-1).id===202,'Keep the linked background chat ready and send while no ChatGPT tab is active.');
+  await vm.runInContext('closeTransport()',context);await settled();
+  await vm.runInContext('startTransport()',context);await settled();
+  check(local.habitatTab===202 && sockets.at(-1).readyState===1,'Reconnect to the same background chat after the desktop/worker restarts.');
+  await tick({id:'background-reconnected',text:'test'});
+  check(commands.at(-1).id===202 && commands.at(-1).request.kind==='habitat:deliver',
+    'The reconnected background binding can deliver without activation.');
+  second.frozen=true;
+  const beforeFrozen=commands.filter(c=>c.request.kind==='habitat:deliver').length;
+  await tick({id:'frozen',text:'test'});
+  check(sockets.at(-1).sent.at(-1).ready===false && commands.filter(c=>c.request.kind==='habitat:deliver').length===beforeFrozen,
+    'A suspended tab is reported and never receives an ambiguous delivery.');
+  second.frozen=false;
+  local.habitatUrl='https://chatgpt.com/c/mismatched';
+  context.savedBinding=local;
+  check(await vm.runInContext('chooseBoundTab(savedBinding)',context)===null,'Do not reconnect a background tab that changed conversation.');
+  local.habitatUrl=second.url;
+  local.habitatTab=999;
+  check(await vm.runInContext('chooseBoundTab(savedBinding)',context)===null,'Do not substitute a random background chat when the linked tab is missing.');
+  local.habitatTab=202;
   local.habitatDisabled=true;await vm.runInContext('closeTransport()',context);await settled();
   check((await vm.runInContext('startTransport()',context)).error.includes('disconnected'),'Respect Disconnect.');
   check(first.autoDiscardable===true && second.autoDiscardable===true,'Restore tab protection on disconnect.');
@@ -115,12 +140,14 @@ async function hiddenPageChecks() {
   check(probe.ready===false && previewClosed===1,'Never dismiss unrelated account or permission dialogs during recovery.');
   previewOpen=false;
   let accepted;
-  listeners.listeners[0]({kind:'habitat:deliver',expectedUrl:'https://chatgpt.com/c/existing',message:{id:'synthetic-one',text:'local-only text'}},
+  listeners.listeners[0]({kind:'habitat:deliver',expectedUrl:'https://chatgpt.com/c/existing',message:wireFixture.message},
     {id:'test-extension'},result=>accepted=result);
   await settled();
   check(accepted.accepted===true && domFocus===box && clicks===1,'A background command edits and sends only through the actual composer.');
   check(events.map(e=>e.type).join(',')==='received,started,response' && events.at(-1).text==='Synthetic reply','The response returns in both directions with all page timers disabled.');
-  listeners.listeners[0]({kind:'habitat:deliver',expectedUrl:'https://chatgpt.com/c/existing',message:{id:'synthetic-one',text:'local-only text'}},
+  assert.deepEqual(JSON.parse(JSON.stringify(events)), wireFixture.events, 'Desktop and extension event fixtures agree.');
+  check(wireFixture.protocolVersion === 1, 'Desktop transport fixture remains compatible.');
+  listeners.listeners[0]({kind:'habitat:deliver',expectedUrl:'https://chatgpt.com/c/existing',message:wireFixture.message},
     {id:'test-extension'},result=>accepted=result);
   await settled();check(accepted.accepted===false && clicks===1,'Deduplicate commands across transport retries.');
   vm.runInContext(source,context,{filename:'content.js'});

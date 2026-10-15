@@ -6,7 +6,6 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../src/Habitat.App/Models/WeatherSnapshot.cs" Link="WeatherSnapshot.cs" />
-    <Compile Include="../../src/Habitat.App/Services/WeatherService.cs" Link="WeatherService.cs" />
+    <ProjectReference Include="../../src/Habitat.Core/Habitat.Core.csproj" />
   </ItemGroup>
 </Project>

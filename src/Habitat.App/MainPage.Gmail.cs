@@ -14,12 +14,12 @@ namespace Habitat;
 public sealed partial class MainPage
 {
     private readonly CancellationTokenSource _gmailCancellation = new();
-    private CancellationTokenSource? _gmailSignInCancellation;
-    private GmailAuthService? _gmailAuth;
-    private GmailService? _gmail;
-    private GmailInbox? _gmailInbox;
-    private readonly List<GmailMessage> _gmailMessages = [];
-    private GmailMessage? _gmailSelected;
+    private readonly GmailSession _gmailSession;
+    private CancellationTokenSource? _gmailSignInCancellation => _gmailSession.SignInCancellation;
+    private GmailAuthService? _gmailAuth => _gmailSession.Auth;
+    private GmailInbox? _gmailInbox { get => _gmailSession.Inbox; set => _gmailSession.Inbox = value; }
+    private List<GmailMessage> _gmailMessages => _gmailSession.Messages;
+    private GmailMessage? _gmailSelected { get => _gmailSession.Selected; set => _gmailSession.Selected = value; }
     private readonly Button GmailButton = new();
     private readonly Button GmailMessageButton = new();
     private readonly Grid GmailWidget = new();
@@ -29,11 +29,11 @@ public sealed partial class MainPage
     private readonly TextBlock GmailWidgetSender = new() { FontSize = 11, Opacity = 0.72, TextTrimming = TextTrimming.CharacterEllipsis };
     private readonly TextBlock GmailWidgetSubject = new() { FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis };
     private readonly TextBlock GmailWidgetPreview = new() { FontSize = 12, Opacity = 0.8, TextTrimming = TextTrimming.CharacterEllipsis };
-    private int _gmailPreviewIndex;
+    private int _gmailPreviewIndex { get => _gmailSession.PreviewIndex; set => _gmailSession.PreviewIndex = value; }
     private bool _gmailWidgetHovered;
     private DateTimeOffset _nextGmailRotation = DateTimeOffset.MinValue;
     private static readonly TimeSpan GmailRotationInterval = TimeSpan.FromSeconds(8);
-    private readonly Flyout GmailFlyout = new() { Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft };
+    private readonly Flyout GmailFlyout = new() { Placement = FlyoutPlacementMode.RightEdgeAlignedTop };
     private readonly StackPanel GmailContent = new() { Spacing = 14 };
     private readonly TextBlock GmailStatus = new() { FontSize = 12, TextWrapping = TextWrapping.Wrap, Opacity = 0.8 };
     private readonly Button GmailRefresh = new() { Content = "Refresh" };
@@ -42,35 +42,37 @@ public sealed partial class MainPage
     private readonly Button GmailDisconnect = new() { Content = "Disconnect" };
     private readonly Button GmailCancel = new() { Content = "Cancel sign-in", Visibility = Visibility.Collapsed };
     private readonly ComboBox GmailFilter = new() { ItemsSource = new[] { "Inbox unread", "All unread" } };
-    private bool _gmailBusy;
+    private bool _gmailBusy => _gmailSession.IsBusy;
     private bool _gmailPanelOpen;
     private bool _gmailSettingsOpen;
-    private DateTimeOffset _nextGmailRefresh = DateTimeOffset.MinValue;
-    private string? _gmailError;
+    private DateTimeOffset _nextGmailRefresh => _gmailSession.NextRefresh;
+    private DateTimeOffset _nextGmailRestore = DateTimeOffset.MinValue;
+    private string? _gmailError { get => _gmailSession.Error; set => _gmailSession.Error = value; }
+    private string? _gmailFailureKind;
+    private string? _lastGmailRecordedState;
 
     private void BuildGmailInterface(Grid surface)
     {
         try
         {
-            _gmailAuth = new GmailAuthService(new GmailCredentialStore());
-            _gmail = new GmailService(_gmailAuth);
+            _gmailSession.Initialize();
+            RecordGmailStartup();
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or Win32Exception)
         {
-            _gmailError = "Windows could not open the saved Gmail account. No account data was changed.";
+            _gmailError = GmailError(exception);
         }
 
         var indicator = GmailWidget;
         indicator.ColumnSpacing = 4;
         indicator.HorizontalAlignment = HorizontalAlignment.Left;
         indicator.VerticalAlignment = VerticalAlignment.Top;
-        indicator.Margin = new Thickness(0, 20, 0, 0);
         indicator.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         indicator.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var symbol = new StackPanel { Spacing = 3, MinWidth = 32, VerticalAlignment = VerticalAlignment.Center };
+        var symbol = new StackPanel { Spacing = 3, Width = 24, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         symbol.Children.Add(new FontIcon { Glyph = "\uE715", FontSize = 24, HorizontalAlignment = HorizontalAlignment.Center });
         GmailBadge.HorizontalAlignment = HorizontalAlignment.Center;
-        symbol.Children.Add(GmailBadge);
+        symbol.Children.Add(new Border { Height = 18, Child = GmailBadge });
         GmailButton.Content = symbol;
         indicator.Children.Add(GmailButton);
         var details = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
@@ -103,11 +105,12 @@ public sealed partial class MainPage
         };
         GmailButton.HorizontalAlignment = HorizontalAlignment.Left;
         GmailButton.VerticalAlignment = VerticalAlignment.Center;
-        GmailButton.Width = 48;
+        GmailButton.Width = 40;
+        GmailButton.Height = 78;
         GmailButton.Padding = new Thickness(8);
         GmailButton.MinWidth = 36;
         GmailButton.MinHeight = 36;
-        GmailButton.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+        GmailButton.HorizontalContentAlignment = HorizontalAlignment.Center;
         GmailButton.VerticalContentAlignment = VerticalAlignment.Center;
         GmailButton.BorderThickness = new Thickness(0);
         AutomationProperties.SetName(GmailButton, "Gmail unread emails");
@@ -120,19 +123,7 @@ public sealed partial class MainPage
             _nextGmailRotation = DateTimeOffset.UtcNow + GmailRotationInterval;
         };
         indicator.SizeChanged += (_, _) => UpdateWritingLayout();
-        surface.SizeChanged += (_, _) => SizeWidget();
-        _header.SizeChanged += (_, _) => SizeWidget();
         indicator.Width = 300;
-
-        void SizeWidget()
-        {
-            if (surface.ActualWidth <= 0) return;
-            var available = surface.ActualWidth - surface.Padding.Left - surface.Padding.Right - _header.ActualWidth - 24;
-            var showDetails = available >= 180;
-            GmailMessageButton.Visibility = showDetails ? Visibility.Visible : Visibility.Collapsed;
-            indicator.ColumnSpacing = showDetails ? 4 : 0;
-            indicator.Width = showDetails ? Math.Min(300, available) : 48;
-        }
 
         var title = new TextBlock { Text = "Gmail", FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
@@ -141,6 +132,9 @@ public sealed partial class MainPage
         GmailRefresh.Click += async (_, _) => await RefreshGmailAsync();
         GmailSignIn.Click += async (_, _) =>
         {
+            await RestoreGmailSessionAsync();
+            if (_gmailAuth is null) return;
+            if (_gmailAuth?.IsSignedIn == true) return;
             if (_gmailAuth?.IsConfigured != true) await ShowGmailSetupAsync();
             else await SignInGmailAsync();
         };
@@ -173,7 +167,7 @@ public sealed partial class MainPage
             var inboxOnly = GmailFilter.SelectedIndex == 0;
             if (_preferences.GmailInboxOnly == inboxOnly) return;
             _preferences = _preferences with { GmailInboxOnly = inboxOnly };
-            _preferences.Save();
+            SavePreferences();
             _gmailInbox = null;
             _gmailMessages.Clear();
             _gmailSelected = null;
@@ -197,6 +191,35 @@ public sealed partial class MainPage
         RenderGmail();
     }
 
+    private void RecordGmailStartup()
+    {
+        var state = $"Client configured: {_gmailAuth?.IsConfigured == true}; saved session loaded: {_gmailAuth?.IsSignedIn == true}; inbox loaded: {_gmailInbox is not null}; last sync: {_gmailInbox?.UpdatedAt:O}; error: {(_gmailError is null ? "none" : _gmailFailureKind ?? "local storage")}";
+        if (state == _lastGmailRecordedState) return;
+        string entry;
+        try
+        {
+            entry = $"{DateTimeOffset.Now:O} PID: {Environment.ProcessId}; executable: {Environment.ProcessPath}; build: {typeof(MainPage).Module.ModuleVersionId}; {state}; authorization store: Windows Credential Manager{Environment.NewLine}";
+        }
+        catch (Exception exception)
+        {
+            entry = $"{DateTimeOffset.Now:O} PID: {Environment.ProcessId}; {state}; folder error: {exception.GetType().Name} {exception.HResult:X8}{Environment.NewLine}";
+        }
+        // Keep an independent diagnostic when Windows denies access to the
+        // account directory. Neither log contains tokens or email content.
+        try { File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "gmail-startup.log"), entry); }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+        try
+        {
+            var directory = _services.Paths.DesktopDirectory;
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(Path.Combine(directory, "gmail-startup.log"), entry);
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+        _lastGmailRecordedState = state;
+    }
+
     private void OpenGmail()
     {
         _gmailPanelOpen = true;
@@ -205,6 +228,12 @@ public sealed partial class MainPage
 
     private void TickGmail()
     {
+        if (_gmailAuth?.IsSignedIn != true && !_gmailBusy && !_gmailSettingsOpen &&
+            DateTimeOffset.UtcNow >= _nextGmailRestore)
+        {
+            _nextGmailRestore = DateTimeOffset.UtcNow.AddSeconds(30);
+            _ = RestoreGmailSessionAsync();
+        }
         if (_gmailMessages.Count > 1 && !_gmailWidgetHovered && !_gmailWidgetFocused && !_gmailPanelOpen && !_gmailSettingsOpen && !_gmailBusy &&
             DateTimeOffset.UtcNow >= _nextGmailRotation)
         {
@@ -216,98 +245,32 @@ public sealed partial class MainPage
             _ = RefreshGmailAsync();
     }
 
-    private async Task RefreshGmailAsync(bool loadMore = false)
-    {
-        if (_gmailBusy || _gmailAuth?.IsSignedIn != true || _gmail is null || _gmailCancellation.IsCancellationRequested) return;
-        if (loadMore && _gmailInbox?.NextPageToken is null) return;
-        _gmailBusy = true;
-        _gmailError = null;
-        _nextGmailRefresh = DateTimeOffset.UtcNow.AddMinutes(1);
-        RenderGmail();
-        var inboxOnly = _preferences.GmailInboxOnly;
-        try
-        {
-            var inbox = await _gmail.GetUnreadAsync(inboxOnly, loadMore ? _gmailInbox?.NextPageToken : null, _gmailCancellation.Token);
-            if (_gmailCancellation.IsCancellationRequested || inboxOnly != _preferences.GmailInboxOnly) return;
-            var previewId = _gmailMessages.ElementAtOrDefault(_gmailPreviewIndex)?.Id;
-            if (!loadMore) _gmailMessages.Clear();
-            foreach (var message in inbox.Messages)
-                if (_gmailMessages.All(existing => existing.Id != message.Id)) _gmailMessages.Add(message);
-            _gmailInbox = inbox;
-            _gmailPreviewIndex = Math.Max(0, _gmailMessages.FindIndex(message => message.Id == previewId));
-            if (previewId is null) _nextGmailRotation = DateTimeOffset.UtcNow + GmailRotationInterval;
-        }
-        catch (OperationCanceledException) when (_gmailCancellation.IsCancellationRequested) { }
-        catch (Exception exception) { _gmailError = GmailError(exception); }
-        finally
-        {
-            _gmailBusy = false;
-            if (!_gmailCancellation.IsCancellationRequested) RenderGmail();
-        }
-    }
+    private Task RestoreGmailSessionAsync() => RunOperationAsync(() =>
+        _gmailSession.RestoreAsync(() => _preferences.GmailInboxOnly, _gmailCancellation.Token));
 
-    private async Task ReadGmailMessageAsync(GmailMessage message)
-    {
-        if (_gmailBusy || _gmail is null) return;
-        _gmailBusy = true;
-        _gmailSelected = message;
-        _gmailError = null;
-        RenderGmail();
-        try { _gmailSelected = await _gmail.GetMessageAsync(message.Id, _gmailCancellation.Token); }
-        catch (OperationCanceledException) when (_gmailCancellation.IsCancellationRequested) { }
-        catch (Exception exception) { _gmailError = GmailError(exception); }
-        finally { _gmailBusy = false; if (!_gmailCancellation.IsCancellationRequested) RenderGmail(); }
-    }
+    private Task RefreshGmailAsync(bool loadMore = false) => RunOperationAsync(() =>
+        _gmailSession.RefreshAsync(() => _preferences.GmailInboxOnly, loadMore, _gmailCancellation.Token));
 
-    private async Task SignInGmailAsync()
-    {
-        if (_gmailBusy || _gmailAuth is null) return;
-        _gmailBusy = true;
-        _gmailError = null;
-        _gmailSignInCancellation = CancellationTokenSource.CreateLinkedTokenSource(_gmailCancellation.Token);
-        RenderGmail();
-        try
-        {
-            await _gmailAuth.SignInAsync(_gmailSignInCancellation.Token);
-            _nextGmailRefresh = DateTimeOffset.MinValue;
-        }
-        catch (OperationCanceledException) { _gmailError = "Sign-in cancelled or timed out. You can try again."; }
-        catch (Exception exception) { _gmailError = GmailError(exception); }
-        finally
-        {
-            _gmailSignInCancellation.Dispose();
-            _gmailSignInCancellation = null;
-            _gmailBusy = false;
-            if (!_gmailCancellation.IsCancellationRequested)
-            {
-                RenderGmail();
-                if (_gmailAuth.IsSignedIn && _gmailError is null) await RefreshGmailAsync();
-            }
-        }
-    }
+    private Task ReadGmailMessageAsync(GmailMessage message) => RunOperationAsync(() =>
+        _gmailSession.ReadAsync(message, _gmailCancellation.Token));
 
-    private async Task DisconnectGmailAsync()
-    {
-        if (_gmailBusy || _gmailAuth is null) return;
-        _gmailBusy = true;
-        try
-        {
-            await _gmailAuth.DisconnectAsync(_gmailCancellation.Token);
-            _gmailInbox = null;
-            _gmailMessages.Clear();
-            _gmailSelected = null;
-            _gmailError = null;
-        }
-        catch (Exception exception) { _gmailError = GmailError(exception); }
-        finally { _gmailBusy = false; RenderGmail(); }
-    }
+    private Task SignInGmailAsync() => RunOperationAsync(() =>
+        _gmailSession.SignInAsync(() => _preferences.GmailInboxOnly, _gmailCancellation.Token));
+
+    private Task DisconnectGmailAsync() => RunOperationAsync(() => _gmailSession.DisconnectAsync(_gmailCancellation.Token));
 
     private void RenderGmail()
     {
+        if (_gmailSession.ResetRotation)
+        {
+            _gmailSession.ResetRotation = false;
+            _nextGmailRotation = DateTimeOffset.UtcNow + GmailRotationInterval;
+        }
+        RecordGmailStartup();
         var signedIn = _gmailAuth?.IsSignedIn == true;
         GmailBadge.Text = !signedIn ? "" : _gmailInbox is null ? "…" :
             (_gmailInbox.CountIsEstimate ? "≈" : "") + _gmailInbox.UnreadCount;
-        GmailBadge.Visibility = signedIn ? Visibility.Visible : Visibility.Collapsed;
+        GmailBadge.Visibility = signedIn && _sidebarExpanded ? Visibility.Visible : Visibility.Collapsed;
         RenderGmailWidget();
         GmailStatus.Text = _gmailError ?? (_gmailSignInCancellation is not null ? "Finish sign-in in your browser. HABITAT never asks for your Google password." :
             _gmailBusy ? "Loading…" : signedIn ? $"{_gmailAuth!.Email}\n" +
@@ -320,7 +283,8 @@ public sealed partial class MainPage
         GmailFilter.Visibility = signedIn ? Visibility.Visible : Visibility.Collapsed;
         GmailFilter.IsEnabled = !_gmailBusy;
         GmailSignIn.Visibility = !signedIn && _gmailSignInCancellation is null ? Visibility.Visible : Visibility.Collapsed;
-        GmailSignIn.IsEnabled = !_gmailBusy && _gmailAuth is not null;
+        GmailSignIn.Content = _gmailAuth is null ? "Retry saved account" : "Sign in with Google";
+        GmailSignIn.IsEnabled = !_gmailBusy;
         GmailCancel.Visibility = _gmailSignInCancellation is null ? Visibility.Collapsed : Visibility.Visible;
         GmailMore.Visibility = signedIn && _gmailSelected is null && _gmailInbox?.NextPageToken is not null ? Visibility.Visible : Visibility.Collapsed;
         GmailMore.IsEnabled = !_gmailBusy;
@@ -362,11 +326,31 @@ public sealed partial class MainPage
         FontWeight = bold ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal
     };
 
-    private async Task ShowGmailSetupAsync()
+    private Task ShowGmailSetupAsync() => RunOperationAsync(ShowGmailSetupCoreAsync);
+
+    private async Task ShowGmailSetupCoreAsync()
     {
         if (_gmailSettingsOpen || _gmailBusy || _appearanceDialogOpen) return;
+        await RestoreGmailSessionAsync();
+        if (_gmailCancellation.IsCancellationRequested) return;
+        if (_gmailAuth is null) { OpenGmail(); return; }
         _gmailSettingsOpen = true;
         GmailFlyout.Hide();
+        if (_gmailAuth?.IsSignedIn == true)
+        {
+            try
+            {
+                var connectedDialog = new ContentDialog
+                {
+                    XamlRoot = XamlRoot, Title = "Gmail connected", CloseButtonText = "Close",
+                    Content = MailText($"{_gmailAuth.Email}\n\nYour saved session is restored automatically when HABITAT opens. No JSON import or sign-in is needed.\n\nTo change the account or OAuth client, use Disconnect in the Gmail reader first.", 14)
+                };
+                StyleDialog(connectedDialog);
+                await ShowDialogAsync(connectedDialog);
+            }
+            finally { _gmailSettingsOpen = false; FocusComposer(); }
+            return;
+        }
         var state = MailText(_gmailAuth?.IsConfigured == true ? "Desktop OAuth client configured. You can sign in." : "Import your Google Desktop app OAuth client to connect Gmail.", 14);
         var panel = new StackPanel { Spacing = 14, MaxWidth = 400 };
         panel.Children.Add(state);
@@ -387,7 +371,7 @@ public sealed partial class MainPage
             try
             {
                 var picker = new FileOpenPicker();
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(((App)Application.Current).MainWindow!));
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, _windowHost?.Handle ?? 0);
                 picker.FileTypeFilter.Add(".json");
                 var file = await picker.PickSingleFileAsync();
                 if (file is null) return;
@@ -407,7 +391,7 @@ public sealed partial class MainPage
         };
         try
         {
-            var result = await dialog.ShowAsync();
+            var result = await ShowDialogAsync(dialog);
             _gmailSettingsOpen = false;
             if (result == ContentDialogResult.Primary)
             {
@@ -423,13 +407,14 @@ public sealed partial class MainPage
         var signedIn = _gmailAuth?.IsSignedIn == true;
         _gmailPreviewIndex = _gmailMessages.Count == 0 ? 0 : Math.Clamp(_gmailPreviewIndex, 0, _gmailMessages.Count - 1);
         var message = signedIn ? _gmailMessages.ElementAtOrDefault(_gmailPreviewIndex) : null;
+        var storageUnavailable = _gmailAuth is null && _gmailError is not null;
         _gmailWidgetMessage = message;
         GmailWidgetSender.Text = message is null ? "Gmail" : WidgetLine(message.Sender);
         GmailWidgetSubject.Text = message is not null ? WidgetLine(message.Subject) :
-            !signedIn ? "Connect your account" : _gmailError is not null ? "Refresh unavailable" :
+            storageUnavailable ? "Saved account unavailable" : !signedIn ? "Connect your account" : _gmailError is not null ? "Refresh unavailable" :
             _gmailInbox is null ? "Loading unread emails…" : "No unread emails";
         GmailWidgetPreview.Text = message is not null ? WidgetLine(message.Preview) :
-            !signedIn ? "Click to sign in" : _gmailError is not null ? "Click for details" :
+            storageUnavailable ? "Click to retry" : !signedIn ? "Click to sign in" : _gmailError is not null ? "Click for details" :
             _gmailInbox is null ? "Restoring your saved session" : "Your inbox is up to date";
         AutomationProperties.SetName(GmailButton, $"Open Gmail reader in HABITAT, {GmailBadge.Text} unread emails");
         AutomationProperties.SetName(GmailMessageButton, message is null ? "Open Gmail reader in HABITAT" :
@@ -477,6 +462,7 @@ public sealed partial class MainPage
         }
         void StyleMailButton(Button button)
         {
+            UseStableWidgetButton(button);
             button.Foreground = text;
             button.Background = transparent;
             button.BorderThickness = new Thickness(0);
@@ -491,8 +477,13 @@ public sealed partial class MainPage
         }
     }
 
-    private static string GmailError(Exception exception) => exception switch
+    private string GmailError(Exception exception)
     {
+        _gmailFailureKind = exception.GetType().Name + $" HRESULT {exception.HResult:X8}" +
+            (exception is Win32Exception native ? $" native {native.NativeErrorCode}" : "") +
+            (exception is HttpRequestException http && http.StatusCode is not null ? $" ({(int)http.StatusCode})" : "");
+        return exception switch
+        {
         GmailSignInRequiredException => exception.Message,
         InvalidDataException => exception.Message,
         InvalidOperationException => exception.Message,
@@ -501,17 +492,7 @@ public sealed partial class MainPage
         OperationCanceledException => "Gmail did not respond in time. Please try again.",
         IOException or UnauthorizedAccessException or Win32Exception => "Windows could not securely save or read the Gmail account. No passwords are stored by HABITAT.",
         _ => "Could not connect Gmail. Check the setup and try again."
-    };
-
-    internal void StopGmail()
-    {
-        if (_gmailCancellation.IsCancellationRequested) return;
-        _gmailCancellation.Cancel();
-        _gmailSignInCancellation?.Cancel();
-        _gmailMessages.Clear();
-        _gmailSelected = null;
-        _gmailInbox = null;
-        _gmail?.Dispose();
-        _gmailAuth?.Dispose();
+        };
     }
+
 }

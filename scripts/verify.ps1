@@ -1,0 +1,35 @@
+param([switch]$SkipBuild, [switch]$NoRestore)
+$ErrorActionPreference = 'Stop'
+$verifyRoot = Split-Path -Parent $PSScriptRoot
+$env:DOTNET_CLI_HOME = Join-Path $verifyRoot '.dotnet-local'
+$env:NUGET_PACKAGES = Join-Path $verifyRoot '.nuget\packages'
+$verifyOutput = Join-Path $verifyRoot 'artifacts\verification'
+Push-Location $verifyRoot
+try {
+    if (-not $NoRestore) {
+        dotnet restore Habitat.sln -p:Platform=x64
+        if ($LASTEXITCODE -ne 0) { throw 'Dependency restore failed.' }
+    }
+    foreach ($script in Get-ChildItem -LiteralPath (Join-Path $verifyRoot 'extension') -Filter '*.js') {
+        node --check $script.FullName
+        if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax check failed: $($script.Name)" }
+    }
+    node -e "JSON.parse(require('fs').readFileSync('extension/manifest.json', 'utf8'))"
+    if ($LASTEXITCODE -ne 0) { throw 'Invalid extension manifest.' }
+    node tests/extension-background.checks.cjs
+    if ($LASTEXITCODE -ne 0) { throw 'Extension checks failed.' }
+    foreach ($suite in 'Appearance', 'Bridge', 'Core', 'Destination', 'Gmail', 'Tasks', 'Weather') {
+        dotnet run --project "tests/Habitat.$suite.Checks" --configuration Release --no-restore `
+            "-p:BaseOutputPath=$verifyOutput/$suite/"
+        if ($LASTEXITCODE -ne 0) { throw "$suite checks failed." }
+    }
+    & (Join-Path $verifyRoot 'tests\release.checks.ps1')
+    if (-not $SkipBuild) {
+        dotnet build Habitat.sln --configuration Release --no-restore -p:Platform=x64 -p:HabitatUiChecks=false `
+            "-p:BaseOutputPath=$verifyOutput/build/"
+        if ($LASTEXITCODE -ne 0) { throw 'Release build failed.' }
+    }
+    git diff --check
+    if ($LASTEXITCODE -ne 0) { throw 'Whitespace checks failed.' }
+    Write-Host 'All HABITAT checks passed. Production binaries and user data were not used.'
+} finally { Pop-Location }

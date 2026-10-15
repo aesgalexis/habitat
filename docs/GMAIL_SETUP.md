@@ -6,7 +6,17 @@ Gmail está integrado en la aplicación WinUI 3 mediante la API oficial de Googl
 
 HABITAT carga automáticamente la cuenta cifrada al abrirse y renueva el acceso con el refresh token cuando hace falta. Cerrar la ventana, reiniciar Windows o actualizar HABITAT conserva la sesión. Volver a importar el mismo cliente OAuth también conserva la cuenta. Los errores de red o configuración no eliminan el consentimiento guardado; una autorización caducada o revocada sí requiere volver a entrar. **Disconnect** desconecta expresamente la cuenta.
 
-La persistencia se comprueba con un archivo DPAPI de prueba: guardar la cuenta, crear una nueva instancia, renovar un access token caducado sin navegador y crear una tercera instancia que reutiliza el token renovado. Esto es independiente de la caducidad de siete días que Google impone a los refresh tokens emitidos en modo **Testing**.
+Si la cuenta no estaba disponible al arrancar, HABITAT vuelve a buscarla cada 30 segundos mientras no haya sesión y antes de abrir el inicio de sesión. Esto permite recuperar una autorización terminada desde la utilidad de terminal sin reimportar JSON.
+
+La autorización se conserva en el **Administrador de credenciales de Windows**, con persistencia para este usuario en este equipo. No depende de la carpeta de datos que seleccione el lanzador. Al abrirse, HABITAT carga el cliente y el refresh token de la entrada `HABITAT/Gmail/DesktopAccount/v1` y obtiene un access token nuevo sin abrir Google. Los access tokens temporales no se guardan en esa entrada.
+
+Las instalaciones anteriores migran automáticamente su archivo DPAPI de cuenta cuando es accesible y todavía no existe la entrada de Windows. El archivo anterior permanece cifrado como compatibilidad; después de migrar, el almacén de Windows es el principal, incluso si el archivo desaparece. Un error de acceso se presenta como **Saved account unavailable**, con opción de reintentar.
+
+`gmail-startup.log`, en la carpeta local de HABITAT y junto al ejecutable, registra el proceso, la compilación, el tipo de almacén, si el cliente y la sesión se cargaron y si se obtuvo la lista del buzón. No contiene tokens, direcciones de correo ni mensajes.
+
+Con una sesión cargada, **Setup…** muestra el estado conectado, sin volver a pedir importación de JSON ni inicio de sesión. Para cambiar de cuenta o cliente, usa **Disconnect** primero. El registro `gmail-startup.log` se actualiza también si cambia el estado de sesión o aparece un error; solo incluye banderas y el tipo de error, sin contenido de correos ni credenciales.
+
+Las pruebas comprueban tanto el archivo DPAPI anterior como la migración a una entrada temporal del Administrador de credenciales de Windows: eliminar el archivo de prueba y reabrir tres instancias que renuevan sin navegador. Esto es independiente de la caducidad de siete días que Google impone a los refresh tokens emitidos en modo **Testing**.
 
 ## Coste
 
@@ -20,7 +30,7 @@ Consulta las [cuotas y precios oficiales](https://developers.google.com/workspac
 2. Activa **Gmail API** en **APIs & Services → Library**.
 3. Configura **Google Auth Platform**: nombre de la aplicación, correo de asistencia y contacto, y público externo para una cuenta Gmail personal. En **Testing**, pulsa **Agregar usuarios**, añade la dirección de Gmail que vas a conectar y guarda. Comprueba que aparece en la tabla de usuarios de prueba después de cerrar el formulario. Usa únicamente el permiso `https://www.googleapis.com/auth/gmail.readonly`.
 4. Crea un cliente OAuth de tipo **Desktop app** y descarga su JSON. No elijas **Web application** ni una cuenta de servicio.
-5. Pulsa el sobre de HABITAT o **••• → Gmail… → Setup… → Import client JSON…** y selecciona el archivo.
+5. Pulsa el sobre de HABITAT o **☰ → Gmail… → Setup… → Import client JSON…** y selecciona el archivo.
 6. Pulsa **Sign in with Google**. Google abrirá el navegador del sistema para que tú elijas la cuenta y concedas permiso. HABITAT no recoge tu contraseña. Si aparece una advertencia de aplicación no verificada, revisa que el proyecto y el cliente sean los tuyos; no concedas acceso a un cliente desconocido.
 7. Regresa a HABITAT. Verás la cuenta, el contador de no leídos y su lista. Puedes elegir **Inbox unread** o **All unread**. Usa **Load more** para otras páginas.
 
@@ -41,7 +51,7 @@ Si Google indica que la aplicación está en pruebas y solo admite testers aprob
 - La lista se actualiza cada 60 segundos mientras HABITAT está abierto. Cada página muestra hasta 25 mensajes; el contador de **All unread** es una estimación de Google y se señala con `≈`.
 - El cuerpo se obtiene al seleccionar un mensaje. Se presenta exclusivamente como texto, sin ejecutar HTML ni cargar imágenes remotas. No se descargan adjuntos.
 - Ningún correo se envía a ChatGPT, ni se trata como una instrucción para la aplicación.
-- El cliente OAuth y los tokens se guardan cifrados mediante Windows DPAPI en `%LOCALAPPDATA%\HABITAT\gmail-account.bin`, vinculados al usuario de Windows. Los correos solo se conservan en memoria durante esa ejecución.
+- Windows protege el cliente OAuth y el refresh token en su Administrador de credenciales, vinculados al usuario y equipo. El archivo DPAPI `%LOCALAPPDATA%\HABITAT\gmail-account.bin` solo se usa para migrar instalaciones anteriores. Los access tokens y los correos se mantienen en memoria durante la ejecución.
 - **Disconnect** elimina los tokens del almacenamiento local y limpia la vista. Mantiene el cliente OAuth para reconectar. Para revocar el consentimiento en Google, usa la sección de conexiones de tu cuenta de Google.
 - No guardes el JSON de Google en Git. Los nombres habituales están ignorados, pero cualquier archivo de credenciales debe mantenerse fuera del repositorio.
 - En proyectos externos en **Testing**, Google puede caducar el refresh token a los siete días. Si ocurre, vuelve a iniciar sesión. Distribuir la aplicación a otros usuarios puede requerir verificación de Google por el permiso Gmail de alcance restringido.
@@ -58,7 +68,7 @@ Las pruebas usan respuestas HTTP sintéticas y un callback local. No abren Googl
 
 ## Configuración desde terminal
 
-La utilidad `tools/Habitat.Gmail.Setup` utiliza los mismos servicios OAuth y almacenamiento DPAPI que HABITAT. Para importar un cliente e iniciar sesión sin automatizar la interfaz de escritorio:
+La utilidad `tools/Habitat.Gmail.Setup` utiliza los mismos servicios OAuth y Administrador de credenciales de Windows que HABITAT. Para importar un cliente e iniciar sesión sin automatizar la interfaz de escritorio:
 
 ```powershell
 dotnet run --project tools\Habitat.Gmail.Setup -- connect C:\ruta\client_secret.json
@@ -68,6 +78,12 @@ Para verificar una cuenta ya conectada y mostrar solo el contador de no leídos:
 
 ```powershell
 dotnet run --project tools\Habitat.Gmail.Setup -- check
+```
+
+Para comprobar también la renovación real del permiso guardado, sin abrir Google:
+
+```powershell
+dotnet run --project tools\Habitat.Gmail.Setup -- check --refresh
 ```
 
 La utilidad no imprime tokens ni contenido de correos. Si HABITAT estaba abierto durante la configuración desde terminal, reinícialo para cargar la cuenta cifrada.

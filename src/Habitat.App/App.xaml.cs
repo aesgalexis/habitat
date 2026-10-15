@@ -10,7 +10,7 @@ public partial class App : Application
     private readonly Mutex _singleInstance;
     private readonly bool _ownsInstance;
 
-    public BridgeService Bridge { get; } = new();
+    private AppServices? _services;
     public MainWindow? MainWindow { get; private set; }
 
     public App()
@@ -21,24 +21,36 @@ public partial class App : Application
         InitializeComponent();
     }
 
-    protected override void OnLaunched(LaunchActivatedEventArgs args)
+    protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
+#if HABITAT_UI_CHECKS
+        _services = new AppServices(AppDataPaths.Isolated(Path.Combine(AppContext.BaseDirectory, "tasks-ui-data", Guid.NewGuid().ToString("N"))));
+        await _services.TaskSession.LoadAsync();
+        var page = new MainPage(_services);
+        var window = new Window { Content = page };
+        page.Loaded += async (_, _) => await page.CheckTasksUiAsync(window);
+        window.Activate();
+        return;
+#else
         if (!_ownsInstance)
         {
             Exit();
             return;
         }
 
-        MainWindow = new MainWindow(Bridge);
+        _services = new AppServices(AppDataPaths.Production);
+        await _services.TaskSession.LoadAsync();
+        MainWindow = new MainWindow(_services);
         MainWindow.Activate();
-        _ = Bridge.StartAsync();
+        _ = _services.StartAsync();
+#endif
     }
 
-    private static void LogUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs args)
+    private void LogUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs args)
     {
         try
         {
-            var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HABITAT");
+            var directory = _services?.Paths.LocalDirectory ?? Path.Combine(AppContext.BaseDirectory, "startup-diagnostics");
             Directory.CreateDirectory(directory);
             File.AppendAllText(Path.Combine(directory, "crash.log"), $"{DateTimeOffset.Now:O}{Environment.NewLine}{args.Exception}{Environment.NewLine}{Environment.NewLine}");
         }

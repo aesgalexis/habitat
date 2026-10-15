@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <!-- Standalone checks keep synthetic data under artifacts too. -->
+    <BaseOutputPath Condition="'$(BaseOutputPath)' == ''">$(MSBuildThisFileDirectory)..\artifacts\checks\$(MSBuildProjectName)\</BaseOutputPath>
+  </PropertyGroup>
+</Project>

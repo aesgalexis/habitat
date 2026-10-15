@@ -7,10 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <Compile Include="../../src/Habitat.App/Models/GmailModels.cs" Link="GmailModels.cs" />
-    <Compile Include="../../src/Habitat.App/Services/GmailCredentialStore.cs" Link="GmailCredentialStore.cs" />
-    <Compile Include="../../src/Habitat.App/Services/GmailAuthService.cs" Link="GmailAuthService.cs" />
-    <Compile Include="../../src/Habitat.App/Services/GmailMessageParser.cs" Link="GmailMessageParser.cs" />
-    <Compile Include="../../src/Habitat.App/Services/GmailService.cs" Link="GmailService.cs" />
+    <ProjectReference Include="../../src/Habitat.Core/Habitat.Core.csproj" />
   </ItemGroup>
 </Project>

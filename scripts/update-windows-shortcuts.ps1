@@ -1,8 +1,12 @@
 $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$executable = (Resolve-Path (Join-Path $projectRoot "artifacts\win-x64\HABITAT.exe")).Path
-$icon = (Resolve-Path (Join-Path $projectRoot "artifacts\win-x64\Assets\HabitatDot.ico")).Path
+Import-Module (Join-Path $PSScriptRoot 'Habitat.Release.psm1') -Force
+$releaseDirectory = Get-HabitatActiveDirectory (Join-Path $projectRoot 'artifacts')
+$executable = Join-Path $releaseDirectory 'HABITAT.exe'
+$icon = Join-Path $releaseDirectory 'Assets\HabitatDot.ico'
+$launcher = Join-Path $env:WINDIR 'System32\wscript.exe'
+$launcherArguments = '"' + (Join-Path $projectRoot 'HABITAT.vbs') + '"'
 $appId = "HABITAT.Desktop"
 
 if (-not ("Habitat.ShellLinkIdentity" -as [type])) {
@@ -124,13 +128,22 @@ $locations = @(
 )
 
 $updated = @()
+$shortcutBackupRoot = Join-Path $projectRoot ('artifacts\shortcut-backups\' + [guid]::NewGuid().ToString('N'))
+$projectArtifacts = [IO.Path]::GetFullPath((Join-Path $projectRoot 'artifacts')).TrimEnd('\') + '\'
+
 foreach ($location in $locations) {
     if (-not (Test-Path -LiteralPath $location)) { continue }
     foreach ($file in Get-ChildItem -LiteralPath $location -Filter "*.lnk") {
         $shortcut = $shell.CreateShortcut($file.FullName)
-        if ($file.Name -notlike "*HABITAT*" -and $shortcut.TargetPath -ne $executable) { continue }
-        $shortcut.TargetPath = $executable
-        $shortcut.WorkingDirectory = Split-Path -Parent $executable
+        $isProjectExecutable = [IO.Path]::GetFileName($shortcut.TargetPath) -eq 'HABITAT.exe' -and
+            $shortcut.TargetPath.StartsWith($projectArtifacts, [StringComparison]::OrdinalIgnoreCase)
+        $isStableLauncher = $shortcut.TargetPath -eq $launcher -and $shortcut.Arguments -eq $launcherArguments
+        if (-not $isProjectExecutable -and -not $isStableLauncher -and $shortcut.TargetPath -ne (Join-Path $projectRoot 'HABITAT.vbs')) { continue }
+        New-Item -ItemType Directory -Path $shortcutBackupRoot -Force | Out-Null
+        Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $shortcutBackupRoot ([guid]::NewGuid().ToString('N') + '.lnk'))
+        $shortcut.TargetPath = $launcher
+        $shortcut.Arguments = $launcherArguments
+        $shortcut.WorkingDirectory = $projectRoot
         $shortcut.IconLocation = "$icon,0"
         $shortcut.Save()
         $savedIcon = $shortcut.IconLocation

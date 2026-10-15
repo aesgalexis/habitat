@@ -76,9 +76,20 @@ async function connectTransport() {
   return {ok:true};
 }
 
-async function chooseBoundTab() {
+async function chooseBoundTab(saved) {
   const tabs = await chrome.tabs.query({active:true,lastFocusedWindow:true});
-  return tabs.find(tab => Number.isInteger(tab.id) && isChatGPT(tab.url)) || null;
+  const active = tabs.find(tab => Number.isInteger(tab.id) && isChatGPT(tab.url));
+  if (active) return active;
+  // Selecting another website must not disable the already-linked chat.
+  // Recover the same binding after a desktop/worker restart without activating
+  // its tab or silently choosing an unrelated background conversation.
+  if (!Number.isInteger(saved?.habitatTab)) return null;
+  try {
+    const bound = await chrome.tabs.get(saved.habitatTab);
+    if (!bound || !isChatGPT(bound.url)) return null;
+    const url = normalizeUrl(bound.url);
+    return url === saved.habitatUrl || (!isConversationUrl(saved.habitatUrl) && isConversationUrl(url)) ? bound : null;
+  } catch (_) { return null; }
 }
 
 async function transportTick(socket, message) {
@@ -104,20 +115,17 @@ async function transportTick(socket, message) {
     }
     const page = await contactPage(tab.id, {kind:"habitat:probe"});
     if (socket !== habitatSocket) return;
-    // Finish a response in its original chat, then follow Chrome's active tab.
-    if (!page?.busy) {
-      const active = await chooseBoundTab();
-      if (!active) {
-        heartbeat(socket, false, "Select a ChatGPT tab in Chrome");
-        return;
-      }
-      if (active.id !== tab.id || normalizeUrl(active.url) !== url) {
+    // Follow a deliberately selected ChatGPT chat between requests. A queued
+    // message or active response stays in its original bound conversation.
+    if (!page?.busy && !message) {
+      const active = await chooseBoundTab(saved);
+      if (active && (active.id !== tab.id || normalizeUrl(active.url) !== url)) {
         await pairTab(active);
         return;
       }
     }
     const ready = page?.ready === true && normalizeUrl(page.url) === url;
-    heartbeat(socket, ready, ready ? "Active ChatGPT chat connected" : (page?.issue || "Waiting for the linked ChatGPT page…"), page?.model);
+    heartbeat(socket, ready, ready ? "Linked ChatGPT chat connected" : (page?.issue || "Waiting for the linked ChatGPT page…"), page?.model);
     if (ready && message && !page.busy) {
       // Re-check the stored binding immediately before dispatch. Activation
       // of another chat or worker retries must not route a message elsewhere.

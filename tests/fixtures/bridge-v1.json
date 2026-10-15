@@ -1,0 +1,9 @@
+{
+  "protocolVersion": 1,
+  "message": { "id": "0011223344556677", "text": "Synthetic café\n雪" },
+  "events": [
+    { "type": "received", "id": "0011223344556677", "text": "", "model": "OpenAI model" },
+    { "type": "started", "id": "0011223344556677", "text": "", "model": "OpenAI model" },
+    { "type": "response", "id": "0011223344556677", "text": "Synthetic reply", "model": "OpenAI model" }
+  ]
+}
