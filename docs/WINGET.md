@@ -5,6 +5,11 @@ El objetivo es `winget install --exact --id aesgalexis.HABITAT` y, después,
 están disponibles en el catálogo público.** El identificador es la propuesta
 para la primera solicitud a `microsoft/winget-pkgs`.
 
+El repositorio y la [release 0.9.1](https://github.com/aesgalexis/habitat/releases/tag/v0.9.1)
+son públicos desde el 18 de octubre de 2026. La solicitud de alta está abierta
+en [microsoft/winget-pkgs#455544](https://github.com/microsoft/winget-pkgs/pull/455544),
+pendiente de la validación y aceptación de Microsoft.
+
 ## Preparación incluida
 
 - Licencia MIT en `LICENSE`, elegida por el propietario del proyecto.
@@ -68,34 +73,42 @@ inseguras o sin versión y protección contra sobrescritura, con archivos sinté
 La suite Hotkey comprueba el cierre del componente con canales aislados; una
 desinstalación no detiene el componente de otra instalación del proyecto.
 
-## Publicación pendiente
+## Publicación pública y envío
 
-Al preparar esta integración el 18 de octubre de 2026, `aesgalexis/habitat` es
-privado. Una release de ese repositorio o un artefacto privado de GitHub Actions
-no sirve como descarga pública de WinGet. Se necesita una release pública o
-un alojamiento HTTPS público; se puede usar un repositorio separado de
-distribución sin cambiar la visibilidad del código fuente.
+La descarga del instalador oficial de 0.9.1 se ha comprobado sin autenticación,
+con SHA-256 coincidente, y sus manifiestos públicos pasan `winget validate`.
+La instalación, reinstalación y desinstalación silenciosas del EXE se han
+verificado localmente y en CI. La prueba local mediante `winget install --manifest`
+no se ha ejecutado: `LocalManifestFiles` está deshabilitado y el proceso no tiene
+permisos de administrador. Esta limitación está declarada en la solicitud.
+
+Antes de abrir el repositorio se revisaron las ramas y etiquetas remotas,
+47 commits, 818 archivos históricos distintos, los diez logs de Actions y el
+contenido de los paquetes ZIP y EXE, sin detectar secretos. Los archivos de
+datos del usuario y sus credenciales no aparecen en los paquetes. GitHub tiene
+activadas la detección de secretos y la protección de subidas.
+
+Para reproducir el proceso en futuras publicaciones:
 
 1. Revisa y prueba la candidata, la identidad del editor y las licencias de
    terceros. Prueba también una actualización desde una versión anterior y
    el arranque en un Windows limpio antes de solicitar el alta.
 2. Publica el instalador final en una URL estable con su versión y una página
    pública del producto. No reemplaces el archivo de esa versión.
-3. Genera los manifiestos usando esos datos reales. Ejemplo de ruta pública
-   **solo si se crea un repositorio de distribución con ese nombre**:
+3. Genera los manifiestos usando esos datos reales. Para la release actual:
 
 ```powershell
 ./scripts/new-winget-manifest.ps1 -Version 0.9.1 `
-  -InstallerPath 'artifacts/distribution/0.9.1/HABITAT-0.9.1-x64-setup.exe' `
-  -InstallerUrl 'https://github.com/aesgalexis/habitat-releases/releases/download/v0.9.1/HABITAT-0.9.1-x64-setup.exe' `
-  -PackageUrl 'https://github.com/aesgalexis/habitat-releases' `
+  -InstallerPath 'artifacts/distribution/v0.9.1/HABITAT-0.9.1-x64-setup.exe' `
+  -InstallerUrl 'https://github.com/aesgalexis/habitat/releases/download/v0.9.1/HABITAT-0.9.1-x64-setup.exe' `
+  -PackageUrl 'https://github.com/aesgalexis/habitat' `
   -OutputDirectory 'artifacts/winget-public' -VerifyDownload
 ```
 
 `-VerifyDownload` descarga sin autenticación y compara el SHA-256 antes de
 escribir los YAML. Sin esa opción, el resultado es solo un candidato local.
-La URL de producto predeterminada también apunta al repositorio privado;
-debe sustituirse por la página pública al preparar el envío.
+La URL de producto predeterminada apunta al repositorio público de HABITAT.
+Usa un directorio de salida nuevo para no sobrescribir candidatos anteriores.
 
 4. Ejecuta `winget validate --manifest <directorio-de-la-version>`.
 5. En Windows Sandbox, habilita `LocalManifestFiles` desde una consola
@@ -106,8 +119,9 @@ debe sustituirse por la página pública al preparar el envío.
    automática y la revisión de Microsoft. El comando por identificador estará
    disponible cuando se acepte y publique el manifiesto.
 
-No se ha cambiado la visibilidad del repositorio, publicado binarios ni enviado
-la solicitud a Microsoft como parte de esta preparación.
+La solicitud actual contiene exclusivamente los tres manifiestos de 0.9.1.
+Su aceptación y la aparición del paquete en el catálogo dependen de Microsoft;
+el enlace de descarga directa ya está disponible públicamente.
 
 Referencias: [crear manifiestos](https://learn.microsoft.com/en-us/windows/package-manager/package/manifest),
 [presentar el paquete](https://learn.microsoft.com/en-us/windows/package-manager/package/repository),

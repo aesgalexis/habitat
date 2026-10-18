@@ -11,6 +11,9 @@ La aplicación actual está desarrollada en **C# y WinUI 3 sobre .NET 10**. Incl
 Se está preparando la distribución mediante WinGet. El instalador, los
 manifiestos y el proceso de publicación están descritos en [docs/WINGET.md](docs/WINGET.md).
 HABITAT todavía no está disponible en el catálogo público de WinGet.
+La solicitud de alta de **0.9.1** está abierta en
+[microsoft/winget-pkgs#455544](https://github.com/microsoft/winget-pkgs/pull/455544).
+Mientras se revisa, puedes descargar el instalador directamente de GitHub Releases.
 
 1. Descarga el ZIP y su SHA-256 desde [GitHub Releases](https://github.com/aesgalexis/habitat/releases/latest), comprueba el hash y extrae todo el paquete.
 2. Ejecuta `Install-HABITAT.cmd` desde tu sesión normal de Windows. Instala en `%LOCALAPPDATA%\Programs\HABITAT`, añade HABITAT al menú Inicio y lo abre. No requiere SDK ni permisos de administrador.
