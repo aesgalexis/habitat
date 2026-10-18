@@ -6,7 +6,9 @@ $dotnetHome = Join-Path $projectRoot ".dotnet-local"
 $nugetPackages = Join-Path $projectRoot ".nuget\packages"
 $project = Join-Path $projectRoot "src\Habitat.App\Habitat.App.csproj"
 $artifactsRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'artifacts'))
-$output = if ($OutputDirectory) { [IO.Path]::GetFullPath((Join-Path $projectRoot $OutputDirectory)) }
+$output = if ($OutputDirectory) {
+    [IO.Path]::GetFullPath($(if ([IO.Path]::IsPathRooted($OutputDirectory)) { $OutputDirectory } else { Join-Path $projectRoot $OutputDirectory }))
+}
     else { Join-Path $artifactsRoot ("staged\build-" + [guid]::NewGuid().ToString("N")) }
 if (-not $output.StartsWith($artifactsRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
     throw 'Build output must stay inside this project artifacts directory.'
