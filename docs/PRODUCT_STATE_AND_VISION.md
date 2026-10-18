@@ -1,6 +1,6 @@
 # HABITAT — Product state and direction
 
-_Last updated: 18 October 2026 · desktop release 0.9.0 · living project note_
+_Last updated: 18 October 2026 · desktop release 0.9.1 · living project note_
 
 ## What Habitat is
 

@@ -1,6 +1,6 @@
 # HABITAT — WinUI 3
 
-[Descargar HABITAT 0.9.0 para Windows x64](https://github.com/aesgalexis/habitat/releases/tag/v0.9.0) · [Historial de versiones](CHANGELOG.md) · [Instalación y publicaciones](docs/RELEASING.md)
+[Descargar HABITAT 0.9.1 para Windows x64](https://github.com/aesgalexis/habitat/releases/tag/v0.9.1) · [Historial de versiones](CHANGELOG.md) · [Instalación y publicaciones](docs/RELEASING.md)
 
 Aplicación de escritorio nativa para Windows que permite escribir en el chat activo de ChatGPT en Chrome y recibir sus respuestas dentro de HABITAT. No crea chats separados, no rota conversaciones ni cambia sus nombres. Usa la sesión real de Chrome, sin consumir la API de OpenAI. Una respuesta en curso termina en su chat original antes de seguir el chat activo.
 
@@ -19,7 +19,7 @@ HABITAT todavía no está disponible en el catálogo público de WinGet.
 
 El paquete incluye browser bridge **0.8.0** y el VSIX **HABITAT Terminal 0.2.0**. Para actualizar, instala la nueva publicación en la misma ruta; se conserva la versión anterior y los datos de usuario. Consulta [instalación, actualización y límites](docs/RELEASING.md). Si prefieres trabajar desde el código fuente, clona el repositorio y sigue **Compilar**.
 
-También está disponible `HABITAT-0.9.0-x64-setup.exe`, un instalador por usuario con desinstalación registrada en Windows. Usa siempre el mismo formato para actualizar: EXE y ZIP mantienen disposiciones distintas y rechazan sobrescribirse entre sí. La preparación para WinGet se documenta en [WINGET.md](docs/WINGET.md); HABITAT todavía no está publicado en el catálogo público.
+También está disponible `HABITAT-0.9.1-x64-setup.exe`, un instalador por usuario con desinstalación registrada en Windows. Usa siempre el mismo formato para actualizar: EXE y ZIP mantienen disposiciones distintas y rechazan sobrescribirse entre sí. La preparación para WinGet se documenta en [WINGET.md](docs/WINGET.md); HABITAT todavía no está publicado en el catálogo público.
 
 ## Ejecutar
 

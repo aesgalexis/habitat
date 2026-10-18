@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to build (must match VERSION, currently 0.9.0)'
+        description: 'Version to build (must match VERSION)'
         required: true
       installer_url:
         description: 'Final versioned HTTPS URL for the installer (not latest)'

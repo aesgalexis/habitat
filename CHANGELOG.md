@@ -1,8 +1,15 @@
 # Changelog
 
+## 0.9.1 — 2026-10-18
+
+Primera distribución instalable del escritorio WinUI 3 / .NET 10, con todas las funciones descritas en 0.9.0, ZIP y EXE autocontenidos, extensiones y SHA-256.
+
+- Corregida la comprobación del changelog para aceptar los finales de línea CRLF de un clon nuevo de Windows.
+- Conservada la etiqueta histórica `v0.9.0`, cuya publicación automatizada se detuvo antes de distribuir paquetes. Esta corrección incrementa PATCH y mantiene las etiquetas inmutables.
+
 ## 0.9.0 — 2026-10-18
 
-Primera publicación versionada del escritorio WinUI 3 / .NET 10 para Windows x64.
+Primera instantánea versionada del escritorio WinUI 3 / .NET 10 para Windows x64. La publicación de paquetes se detuvo por la comprobación CRLF corregida en 0.9.1.
 
 - ChatGPT en la sesión de Chrome, con reconexión y protección del chat de una respuesta pendiente.
 - Destinos OpenAI, Google, YouTube, Notepad, Translate, Gmail, Google Maps, Codex, VS Code, Terminal y Run.

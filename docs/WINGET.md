@@ -30,13 +30,13 @@ para la primera solicitud a `microsoft/winget-pkgs`.
 Se necesita .NET SDK 10 e Inno Setup 6.7.1. Desde PowerShell en el repositorio:
 
 ```powershell
-./scripts/build-installer.ps1 -Version 0.9.0
+./scripts/build-installer.ps1 -Version 0.9.1
 # Si ISCC.exe no está instalado en su ubicación habitual:
-./scripts/build-installer.ps1 -Version 0.9.0 -InnoCompilerPath 'C:\tools\inno\ISCC.exe'
+./scripts/build-installer.ps1 -Version 0.9.1 -InnoCompilerPath 'C:\tools\inno\ISCC.exe'
 ```
 
-La versión se lee de VERSION y debe coincidir con ese archivo. La candidata inicial es 0.9.0.
-La salida es `artifacts/distribution/0.9.0/HABITAT-0.9.0-x64-setup.exe` y su
+La versión se lee de VERSION y debe coincidir con ese archivo. La candidata inicial es 0.9.1.
+La salida es `artifacts/distribution/0.9.1/HABITAT-0.9.1-x64-setup.exe` y su
 archivo `.sha256`. La carga verificada queda en un directorio nuevo bajo
 `artifacts/packaging`. No se modifica la instalación de desarrollo ni se abre
 la aplicación. Para repetir una compilación ya existente, indica un
@@ -52,7 +52,7 @@ Las licencias de los componentes de terceros incluidos siguen siendo aplicables.
 En una cuenta de prueba limpia, Windows Sandbox o un runner de CI:
 
 ```powershell
-./scripts/test-installer.ps1 -InstallerPath 'artifacts/distribution/0.9.0/HABITAT-0.9.0-x64-setup.exe'
+./scripts/test-installer.ps1 -InstallerPath 'artifacts/distribution/0.9.1/HABITAT-0.9.1-x64-setup.exe'
 ```
 
 La comprobación instala bajo un directorio único de `artifacts/installer-smoke`,
@@ -85,9 +85,9 @@ distribución sin cambiar la visibilidad del código fuente.
    **solo si se crea un repositorio de distribución con ese nombre**:
 
 ```powershell
-./scripts/new-winget-manifest.ps1 -Version 0.9.0 `
-  -InstallerPath 'artifacts/distribution/0.9.0/HABITAT-0.9.0-x64-setup.exe' `
-  -InstallerUrl 'https://github.com/aesgalexis/habitat-releases/releases/download/v0.9.0/HABITAT-0.9.0-x64-setup.exe' `
+./scripts/new-winget-manifest.ps1 -Version 0.9.1 `
+  -InstallerPath 'artifacts/distribution/0.9.1/HABITAT-0.9.1-x64-setup.exe' `
+  -InstallerUrl 'https://github.com/aesgalexis/habitat-releases/releases/download/v0.9.1/HABITAT-0.9.1-x64-setup.exe' `
   -PackageUrl 'https://github.com/aesgalexis/habitat-releases' `
   -OutputDirectory 'artifacts/winget-public' -VerifyDownload
 ```

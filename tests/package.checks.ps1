@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $version = (Get-Content -LiteralPath (Join-Path $repo 'VERSION') -Raw).Trim()
 if ($version -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') { throw 'Invalid desktop version.' }
-if ((Get-Content -LiteralPath (Join-Path $repo 'CHANGELOG.md') -Raw -Encoding UTF8) -notmatch "(?m)^## $([regex]::Escape($version)) \u2014 \d{4}-\d{2}-\d{2}$") {
+if ((Get-Content -LiteralPath (Join-Path $repo 'CHANGELOG.md') -Raw -Encoding UTF8) -notmatch "(?m)^## $([regex]::Escape($version)) \u2014 \d{4}-\d{2}-\d{2}\r?$") {
     throw 'Current version is missing from CHANGELOG.md.'
 }
 foreach ($file in @((Join-Path $repo 'Install-HABITAT.ps1')) + @(Get-ChildItem -LiteralPath (Join-Path $repo 'scripts') -Filter '*.ps1' | Select-Object -ExpandProperty FullName)) {
