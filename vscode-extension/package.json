@@ -1,0 +1,16 @@
+{
+  "name": "habitat-terminal",
+  "displayName": "HABITAT Terminal",
+  "description": "Run commands from HABITAT in a fresh integrated terminal in the selected local project.",
+  "version": "0.2.0",
+  "publisher": "habitat-local",
+  "engines": { "vscode": "^1.96.0" },
+  "categories": ["Other"],
+  "main": "./extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "extensionKind": ["ui"],
+  "capabilities": {
+    "untrustedWorkspaces": { "supported": "limited", "description": "Project discovery is available; terminal commands require workspace trust." },
+    "virtualWorkspaces": { "supported": false }
+  }
+}

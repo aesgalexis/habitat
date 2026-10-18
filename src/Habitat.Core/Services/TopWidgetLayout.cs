@@ -2,9 +2,9 @@ namespace Habitat.Services;
 
 internal sealed record TopWidgetLayout(bool Expanded, double WidgetWidth, double ContentInset, double TaskLeft, double TaskWidth)
 {
-    public static TopWidgetLayout Calculate(double contentWidth, bool conversationActive, bool tasksOpen, bool? manuallyExpanded = null)
+    public static TopWidgetLayout Calculate(double contentWidth, bool tasksOpen, bool? manuallyExpanded = null)
     {
-        var expanded = (manuallyExpanded ?? (!conversationActive && contentWidth >= 620)) && contentWidth >= 272;
+        var expanded = manuallyExpanded == true && contentWidth >= 272;
         var widgetWidth = expanded ? 240 : 40;
         var taskWidth = Math.Min(240, Math.Max(0, contentWidth - 64));
         var taskLeft = expanded ? 0 : widgetWidth + 16;

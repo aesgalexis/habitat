@@ -139,24 +139,22 @@ try
 
     foreach (var width in new[] { 320d, 440, 600, 800, 1200, 1920 })
     {
-        foreach (var active in new[] { false, true })
+        foreach (bool? expanded in new bool?[] { null, false, true })
         foreach (var open in new[] { false, true })
         {
-            var layout = TopWidgetLayout.Calculate(width, active, open);
+            var layout = TopWidgetLayout.Calculate(width, open, expanded);
             Check(layout.ContentInset <= width && layout.WidgetWidth <= layout.ContentInset &&
                 (!open || layout.TaskLeft + layout.TaskWidth <= layout.ContentInset),
-                $"Sidebar and task drawer reserve space at width {width}, conversation={active}, tasks={open}");
-            if (active) Check(!layout.Expanded && layout.WidgetWidth == 40, "Conversation keeps an icon-only rail");
+                $"Sidebar and task drawer reserve space at width {width}, expanded={expanded}, tasks={open}");
+            if (expanded != true) Check(!layout.Expanded && layout.WidgetWidth == 40, "Sidebar stays collapsed until manually expanded");
         }
     }
-    Check(TopWidgetLayout.Calculate(800, false, false).Expanded, "Welcome screen has an expanded sidebar");
-    Check(!TopWidgetLayout.Calculate(440, false, false).Expanded, "Narrow windows retain an icon rail");
-    Check(TopWidgetLayout.Calculate(800, true, false).ContentInset < TopWidgetLayout.Calculate(800, false, false).ContentInset,
-        "Conversation releases sidebar width to the chat");
-    Check(TopWidgetLayout.Calculate(800, true, false, true).Expanded,
-        "Manual expansion is available during a conversation");
-    Check(!TopWidgetLayout.Calculate(800, false, false, false).Expanded,
-        "Manual collapse is available on the welcome screen");
+    Check(!TopWidgetLayout.Calculate(800, false).Expanded, "Welcome screen starts with a collapsed sidebar");
+    Check(TopWidgetLayout.Calculate(800, false).ContentInset < TopWidgetLayout.Calculate(800, false, true).ContentInset,
+        "Collapsed sidebar releases width to the content");
+    Check(TopWidgetLayout.Calculate(800, false, true).Expanded, "Manual expansion remains available");
+    Check(!TopWidgetLayout.Calculate(800, false, false).Expanded, "Manual collapse remains available");
+    Check(!TopWidgetLayout.Calculate(240, false, true).Expanded, "Very narrow windows keep icons even when expansion is requested");
 }
 finally
 {

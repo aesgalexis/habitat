@@ -10,6 +10,7 @@ internal sealed record Preferences(string Theme, double Opacity)
     public string WeatherCity { get; init; } = "Palma, ES";
     public bool UseDeviceLocation { get; init; } = true;
     public bool GmailInboxOnly { get; init; } = true;
+    public string[] VSCodeFolders { get; init; } = [];
     public int? WindowX { get; init; }
     public int? WindowY { get; init; }
     public int? WindowWidth { get; init; }
@@ -24,7 +25,10 @@ internal sealed record Preferences(string Theme, double Opacity)
             var saved = JsonSerializer.Deserialize<Preferences>(File.ReadAllText(storagePath ?? FilePath));
             if (saved is not null && saved.Theme is "day" or "night" or "hybrid")
             {
-                return saved with { Opacity = Math.Clamp(saved.Opacity, 0, 100), Destination = ComposerDestinations.Normalize(saved.Destination) };
+                return saved with
+                {
+                    Opacity = Math.Clamp(saved.Opacity, 0, 100), Destination = ComposerDestinations.Normalize(saved.Destination)
+                };
             }
         }
         catch (IOException) { }

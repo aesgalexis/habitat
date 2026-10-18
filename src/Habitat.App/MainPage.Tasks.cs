@@ -177,7 +177,7 @@ public sealed partial class MainPage
             _sidebarConversationActive = active;
             _sidebarManualExpanded = null;
         }
-        var layout = TopWidgetLayout.Calculate(contentWidth, active, _tasksPanelOpen, _sidebarManualExpanded);
+        var layout = TopWidgetLayout.Calculate(contentWidth, _tasksPanelOpen, _sidebarManualExpanded);
         _sidebarExpanded = layout.Expanded;
         _widgets.Margin = new Thickness(0, 20, 0, 0);
         var expanded = layout.Expanded;

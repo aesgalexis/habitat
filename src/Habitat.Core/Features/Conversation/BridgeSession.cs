@@ -14,10 +14,10 @@ internal sealed class BridgeSession(TimeProvider time)
     private DateTimeOffset _queuedAt;
     public OutgoingMessage? PendingDelivery => Phase == DeliveryPhase.Queued ? Message : null;
 
-    public bool TryQueue(string text)
+    public bool TryQueue(string text, bool openExternally = false)
     {
         if (Message is not null) return false;
-        Message = new(Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant(), text);
+        Message = new(Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant(), text, openExternally);
         _queuedAt = time.GetUtcNow();
         Phase = DeliveryPhase.Queued;
         return true;

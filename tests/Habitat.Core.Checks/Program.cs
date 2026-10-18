@@ -64,14 +64,18 @@ try { await weatherSession.RefreshAsync("Saved city", false, false, () => true, 
 Check(weatherSession.NextRefresh == weatherClock.GetUtcNow().AddMinutes(5) && !weatherSession.IsRefreshing,
     "Weather failures retain the existing five-minute retry and release the operation.");
 
-var preferences = new Preferences("night", 35) { Destination = ComposerDestination.Translate, TextOnly = false };
+var preferences = new Preferences("night", 35)
+    { Destination = ComposerDestination.Translate, TextOnly = false, VSCodeFolders = [Path.Combine(root, "sample project")] };
 Check(preferences.Save(paths.PreferencesPath), "Preferences save succeeds.");
 var original = File.ReadAllText(paths.PreferencesPath);
 var reported = false;
 using (var locked = new FileStream(paths.PreferencesPath, FileMode.Open, FileAccess.Read, FileShare.Read))
     Check(!(preferences with { Opacity = 50 }).Save(paths.PreferencesPath, _ => reported = true), "A locked replacement reports failure.");
 Check(reported && File.ReadAllText(paths.PreferencesPath) == original && !Directory.EnumerateFiles(root, "*.tmp").Any(), "Failed preference writes preserve the original and clean up.");
-Check(Preferences.Load(paths.PreferencesPath) == preferences, "All existing preference values survive atomic storage.");
+var storedPreferences = Preferences.Load(paths.PreferencesPath);
+Check((storedPreferences with { VSCodeFolders = preferences.VSCodeFolders }) == preferences &&
+    storedPreferences.VSCodeFolders.SequenceEqual(preferences.VSCodeFolders),
+    "All existing preference values and remembered project folders survive atomic storage.");
 var replacement = Path.Combine(root, "prepared.json");
 File.WriteAllText(replacement, "replacement");
 var replaceAttempts = 0;

@@ -27,9 +27,13 @@ internal sealed class PowerShellLauncher
             UseShellExecute = true,
             WorkingDirectory = WorkingDirectory
         };
-        foreach (var argument in new[] { "-NoLogo", "-NoProfile", "-NoExit", "-EncodedCommand",
-            Convert.ToBase64String(Encoding.Unicode.GetBytes(command)) })
+        foreach (var argument in new[] { "-NoLogo", "-NoProfile", "-NoExit" })
             info.ArgumentList.Add(argument);
+        if (!string.IsNullOrWhiteSpace(command))
+        {
+            info.ArgumentList.Add("-EncodedCommand");
+            info.ArgumentList.Add(Convert.ToBase64String(Encoding.Unicode.GetBytes(command)));
+        }
         return _start(info);
     }
 }

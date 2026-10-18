@@ -10,7 +10,7 @@ using System.Net.WebSockets;
 
 namespace Habitat.Services;
 
-public sealed class BridgeService : IAsyncDisposable
+public sealed partial class BridgeService : IAsyncDisposable
 {
     private readonly int _port;
     private readonly object _stateLock = new();
@@ -30,6 +30,9 @@ public sealed class BridgeService : IAsyncDisposable
         _port = port;
         _time = timeProvider ?? TimeProvider.System;
         _session = new BridgeSession(_time);
+        Translation = new Features.Translation.BrowserTranslationService(_time);
+        Search = new Features.Search.BrowserSearchService(_time);
+        YouTubeSearch = new Features.Search.BrowserSearchService(_time, ComposerDestination.YouTube);
         PairKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24))
             .TrimEnd('=').Replace('+', '-').Replace('/', '_');
     }
@@ -63,6 +66,9 @@ public sealed class BridgeService : IAsyncDisposable
             var server = builder.Build();
             server.UseWebSockets();
             server.Map("/bridge", HandleSocketAsync);
+            server.Map("/translate-bridge", HandleTranslationSocketAsync);
+            server.Map("/search-bridge", HandleSearchSocketAsync);
+            server.Map("/youtube-bridge", context => HandleSearchSocketAsync(context, YouTubeSearch));
             server.MapGet("/status", (HttpRequest request) =>
             {
                 if (!IsAuthorized(request)) return Results.Json(new { error = "Unauthorized" }, statusCode: 403);
@@ -71,7 +77,9 @@ public sealed class BridgeService : IAsyncDisposable
                     // Read-only diagnostics: must not create a heartbeat or
                     // dequeue/acknowledge messages during verification.
                     return Results.Json(new { connected = UtcNow - _lastPoll < BridgeProtocol.ConnectionLifetime,
-                        hasMessageInFlight = _session.Message is not null,
+                        hasMessageInFlight = _session.Message is not null, translationConnected = Translation.IsConnected,
+                        searchConnected = Search.IsConnected,
+                        youtubeConnected = YouTubeSearch.IsConnected,
                         protocolVersion = BridgeProtocol.Version, processId = Environment.ProcessId,
                         deliveryPhase = _session.Phase.ToString(),
                         transport = _connectionOwner is null ? "page-http" : "worker-websocket",
@@ -145,7 +153,7 @@ public sealed class BridgeService : IAsyncDisposable
         finally { _lifecycle.Release(); }
     }
 
-    public bool TryQueueMessage(string text, out string reason)
+    public bool TryQueueMessage(string text, out string reason, bool openExternally = false)
     {
         lock (_stateLock)
         {
@@ -154,7 +162,12 @@ public sealed class BridgeService : IAsyncDisposable
                 reason = _connectionIssue;
                 return false;
             }
-            if (!_session.TryQueue(text))
+            if (openExternally && (_connectionOwner is null || !_supportsExternalOpen))
+            {
+                reason = "Reload the HABITAT browser extension to send and open ChatGPT.";
+                return false;
+            }
+            if (!_session.TryQueue(text, openExternally))
             {
                 reason = "Wait for the current response to finish";
                 return false;
@@ -206,8 +219,9 @@ public sealed class BridgeService : IAsyncDisposable
             while (!receive.IsCompleted && socket.State == WebSocketState.Open)
             {
                 OutgoingMessage? message;
-                lock (_stateLock) message = _session.PendingDelivery;
-                var bytes = JsonSerializer.SerializeToUtf8Bytes(new { kind = "tick", protocolVersion = BridgeProtocol.Version, message }, SocketJson);
+                string? openChatId;
+                lock (_stateLock) { message = _session.PendingDelivery; openChatId = _openChatId; }
+                var bytes = JsonSerializer.SerializeToUtf8Bytes(new { kind = "tick", protocolVersion = BridgeProtocol.Version, message, openChatId }, SocketJson);
                 await socket.SendAsync(bytes.AsMemory(), WebSocketMessageType.Text, true, lifetime.Token);
                 await Task.Delay(TimeSpan.FromMilliseconds(1200), lifetime.Token);
             }
@@ -217,9 +231,11 @@ public sealed class BridgeService : IAsyncDisposable
         finally
         {
             lifetime.Cancel();
-            socket.Abort();
             if (receive is not null)
             {
+                // Cancel an active reader without discarding an authentication
+                // rejection's already-sent close frame.
+                socket.Abort();
                 try { await receive; }
                 catch (Exception exception) when (exception is WebSocketException or OperationCanceledException or JsonException or InvalidDataException or InvalidOperationException) { }
             }
@@ -229,6 +245,7 @@ public sealed class BridgeService : IAsyncDisposable
                 {
                     _lastPoll = DateTimeOffset.MinValue;
                     _connectionOwner = null;
+                    _supportsExternalOpen = false;
                 }
             }
         }
@@ -242,7 +259,15 @@ public sealed class BridgeService : IAsyncDisposable
             using var data = await ReadSocketJsonAsync(socket, cancellationToken);
             if (data is null) return;
             var root = data.RootElement;
-            if (!root.TryGetProperty("kind", out var kind) || kind.GetString() != "heartbeat") continue;
+            if (!root.TryGetProperty("kind", out var kind)) continue;
+            if (kind.GetString() == "chat-opened")
+            {
+                lock (_stateLock)
+                    if (root.TryGetProperty("id", out var openedId) && openedId.GetString() == _openChatId)
+                        _openChatCompletion?.TrySetResult(root.TryGetProperty("opened", out var opened) && opened.ValueKind == JsonValueKind.True);
+                continue;
+            }
+            if (kind.GetString() != "heartbeat") continue;
             var ready = root.TryGetProperty("ready", out var value) && value.ValueKind == JsonValueKind.True;
             lock (_stateLock)
             {
@@ -250,6 +275,7 @@ public sealed class BridgeService : IAsyncDisposable
                 // have received a fresh acknowledgement from the bound page.
                 _lastPoll = ready ? UtcNow : DateTimeOffset.MinValue;
                 _connectionOwner = owner;
+                _supportsExternalOpen = root.TryGetProperty("supportsExternalOpen", out var supportsOpen) && supportsOpen.ValueKind == JsonValueKind.True;
                 var issue = root.TryGetProperty("issue", out var reason) && reason.ValueKind == JsonValueKind.String ? reason.GetString() : null;
                 _connectionIssue = string.IsNullOrWhiteSpace(issue) ? "Reconnecting to ChatGPT…" : issue[..Math.Min(issue.Length, 160)];
             }
@@ -265,7 +291,7 @@ public sealed class BridgeService : IAsyncDisposable
         }
     }
 
-    private static async Task<JsonDocument?> ReadSocketJsonAsync(WebSocket socket, CancellationToken cancellationToken)
+    private static async Task<JsonDocument?> ReadSocketJsonAsync(WebSocket socket, CancellationToken cancellationToken, int maximumBytes = 8192)
     {
         var bytes = new byte[1024];
         using var buffer = new MemoryStream();
@@ -274,7 +300,7 @@ public sealed class BridgeService : IAsyncDisposable
         {
             result = await socket.ReceiveAsync(bytes.AsMemory(), cancellationToken);
             if (result.MessageType == WebSocketMessageType.Close) return null;
-            if (result.MessageType != WebSocketMessageType.Text || buffer.Length + result.Count > 8192)
+            if (result.MessageType != WebSocketMessageType.Text || buffer.Length + result.Count > maximumBytes)
                 throw new InvalidDataException("Invalid bridge frame.");
             buffer.Write(bytes, 0, result.Count);
         } while (!result.EndOfMessage);

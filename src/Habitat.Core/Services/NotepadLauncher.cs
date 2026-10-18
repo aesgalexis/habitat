@@ -11,7 +11,8 @@ internal sealed class NotepadLauncher
 
     public NotepadLauncher(Func<Task<nint>>? openBlankDocument = null, Func<nint, string, bool>? insertText = null)
     {
-        _openBlankDocument = openBlankDocument ?? OpenBlankDocumentAsync;
+        // UI Automation runs on a worker, away from HABITAT's UI apartment.
+        _openBlankDocument = openBlankDocument ?? (() => Task.Run(OpenBlankDocument));
         _insertText = insertText ?? InsertText;
     }
 
@@ -24,7 +25,7 @@ internal sealed class NotepadLauncher
 
     internal static ProcessStartInfo StartInfo() => new("notepad.exe") { UseShellExecute = true };
 
-    private static async Task<nint> OpenBlankDocumentAsync()
+    private static nint OpenBlankDocument()
     {
         // Reuse the first Notepad window in Z order instead of launching a process
         // that may open another window.
@@ -37,43 +38,50 @@ internal sealed class NotepadLauncher
         }
         // Launch only when Notepad has no open window. Never pass a file path.
         using var process = windowToReuse == 0 ? Process.Start(StartInfo()) : null;
+        var openedClassicWindow = false;
         var deadline = Stopwatch.StartNew();
         while (deadline.Elapsed < TimeSpan.FromSeconds(10))
         {
-            var window = windowToReuse != 0 ? windowToReuse : GetForegroundWindow();
+            var window = windowToReuse != 0 ? windowToReuse :
+                NotepadWindows().FirstOrDefault(handle => !existingWindows.Contains(handle));
             if (!IsNotepadWindow(window))
             {
                 if (windowToReuse != 0) return 0;
                 var newWindow = NotepadWindows().FirstOrDefault(handle => !existingWindows.Contains(handle));
                 if (newWindow != 0) SetForegroundWindow(newWindow);
-                await Task.Delay(100);
+                Thread.Sleep(100);
                 continue;
             }
-            if (GetForegroundWindow() != window) { await Task.Delay(100); continue; }
+            if (windowToReuse == 0) SetForegroundWindow(window);
             var editor = FindEditor(window);
-            if (editor == 0) { await Task.Delay(100); continue; }
+            if (editor == 0) { Thread.Sleep(100); continue; }
             if (ClassName(editor).Equals("Edit", StringComparison.OrdinalIgnoreCase))
             {
                 // Classic Notepad starts a separate window. Never replace a previous document.
-                return !existingWindows.Contains(window) && TextLength(editor) == 0 ? editor : 0;
+                if (!existingWindows.Contains(window)) return TextLength(editor) == 0 ? editor : 0;
+                if (!openedClassicWindow)
+                {
+                    using var classicProcess = Process.Start(StartInfo());
+                    openedClassicWindow = true;
+                }
+                windowToReuse = 0;
+                var newWindow = NotepadWindows().FirstOrDefault(handle => !existingWindows.Contains(handle));
+                if (newWindow != 0) SetForegroundWindow(newWindow);
+                Thread.Sleep(100);
+                continue;
             }
-            // Modern Notepad may restore previous tabs when launched. Ctrl+N creates
-            // a new tab regardless of the user's startup/session-restoration setting.
-            if (GetForegroundWindow() != window || !SendNewDocumentShortcut()) return 0;
-            await Task.Delay(200);
-            for (var attempt = 0; attempt < 30; attempt++)
+            // Modern Notepad may restore previous tabs at startup. Always create
+            // a tab through its button and verify its identity before inserting.
+            return NotepadTabs.OpenNewTab(window, () =>
             {
-                if (GetForegroundWindow() != window) return 0;
                 var blank = FindEditor(window);
-                if (blank != 0 && TextLength(blank) == 0) return blank;
-                await Task.Delay(100);
-            }
-            return 0;
+                return blank != 0 && TextLength(blank) == 0 ? blank : 0;
+            });
         }
         return 0;
     }
 
-    private static bool InsertText(nint editor, string text)
+    internal static bool InsertText(nint editor, string text)
     {
         if (!IsWindow(editor) || TextLength(editor) != 0) return false;
         // EM_REPLACESEL inserts Unicode text with undo support and notifies Notepad
@@ -138,44 +146,17 @@ internal sealed class NotepadLauncher
         return name.ToString();
     }
 
-    private static bool SendNewDocumentShortcut()
-    {
-        // Do not mix the shortcut with modifiers still physically held by the user.
-        if ((GetAsyncKeyState(0x10) & 0x8000) != 0 || (GetAsyncKeyState(0x11) & 0x8000) != 0 ||
-            (GetAsyncKeyState(0x12) & 0x8000) != 0) return false;
-        var keys = new[] { Key(0x11, false), Key(0x4E, false), Key(0x4E, true), Key(0x11, true) };
-        return SendInput((uint)keys.Length, keys, Marshal.SizeOf<Input>()) == keys.Length;
-    }
-
-    private static Input Key(ushort key, bool up) => new()
-    {
-        Type = 1, Data = new InputData { Keyboard = new KeyboardInput { VirtualKey = key, Flags = up ? 2u : 0u } }
-    };
-
-    [StructLayout(LayoutKind.Sequential)] private struct Input { public uint Type; public InputData Data; }
-    [StructLayout(LayoutKind.Explicit)] private struct InputData
-    {
-        [FieldOffset(0)] public KeyboardInput Keyboard;
-        [FieldOffset(0)] public MouseInput Mouse;
-    }
-    [StructLayout(LayoutKind.Sequential)] private struct KeyboardInput
-    { public ushort VirtualKey, ScanCode; public uint Flags, Time; public nint ExtraInfo; }
-    [StructLayout(LayoutKind.Sequential)] private struct MouseInput
-    { public int X, Y; public uint Data, Flags, Time; public nint ExtraInfo; }
     private delegate bool WindowCallback(nint window, nint parameter);
     [DllImport("user32.dll")] private static extern bool EnumWindows(WindowCallback callback, nint parameter);
     [DllImport("user32.dll")] private static extern bool EnumChildWindows(nint window, WindowCallback callback, nint parameter);
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(nint window);
     [DllImport("user32.dll")] private static extern bool IsWindow(nint window);
-    [DllImport("user32.dll")] private static extern nint GetForegroundWindow();
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(nint window);
     [DllImport("user32.dll")] private static extern bool IsIconic(nint window);
     [DllImport("user32.dll")] private static extern bool ShowWindowAsync(nint window, int command);
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(nint window, out uint processId);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(nint window, StringBuilder name, int count);
-    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
     [DllImport("user32.dll")] private static extern int GetWindowLong(nint window, int index);
-    [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, Input[] inputs, int size);
     [DllImport("user32.dll", EntryPoint = "SendMessageTimeoutW", CharSet = CharSet.Unicode)]
     private static extern nint SendMessageTimeout(nint window, uint message, nuint wParam, string text, uint flags, uint timeout, out nuint result);
     [DllImport("user32.dll", EntryPoint = "SendMessageTimeoutW", CharSet = CharSet.Unicode)]

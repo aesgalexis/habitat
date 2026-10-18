@@ -10,20 +10,23 @@ function signal() { const listeners = []; return {listeners,addListener(fn){list
 async function settled() { for(let i=0;i<12;i++)await new Promise(resolve=>setImmediate(resolve)); }
 
 async function workerChecks() {
-  const first={id:101,url:'https://chatgpt.com/c/first',active:true,autoDiscardable:true};
-  const second={id:202,url:'https://chatgpt.com/c/second',active:false,autoDiscardable:true};
+  const first={id:101,windowId:1,url:'https://chatgpt.com/c/first',active:true,autoDiscardable:true};
+  const second={id:202,windowId:2,url:'https://chatgpt.com/c/second',active:false,autoDiscardable:true};
   const local={habitatTab:202,habitatUrl:second.url,habitatKey:'key',habitatSession:{messageCount:999}};
-  const session={},commands=[],sockets=[],timers=new Set();
+  const session={},commands=[],sockets=[],timers=new Set(),activations=[],windowUpdates=[];
+  let allowActivation=false;
   let pageBusy=false,available=true,protocol=6,injections=0;
   const chrome={runtime:{id:'test-extension',onMessage:signal(),onInstalled:signal(),onStartup:signal(),getURL:p=>'chrome-extension://test-extension/'+p},
     alarms:{onAlarm:signal(),create:async()=>{}},storage:{onChanged:signal()},
     tabs:{onRemoved:signal(),onUpdated:signal(),
       query:async query=>query.active?[first,second].filter(t=>t.active):[],
       get:async id=>[first,second].find(t=>t.id===id),
-      update:async(id,values)=>{check(Object.keys(values).every(k=>k==='autoDiscardable'),'Never navigate or activate Chrome tabs.');Object.assign([first,second].find(t=>t.id===id),values);},
+      update:async(id,values)=>{check(Object.keys(values).every(k=>k==='autoDiscardable'||allowActivation&&k==='active'),'Activate only after an explicit external action; never navigate.');
+        if(values.active)activations.push(id);Object.assign([first,second].find(t=>t.id===id),values);},
       create:async()=>{throw Error('Must never create a tab');},remove:async()=>{},
       sendMessage:async(id,request)=>{commands.push({id,request});if(!available)throw Error('No content script');
         return request.kind==='habitat:probe'?{protocol,ready:true,busy:pageBusy,url:[first,second].find(t=>t.id===id).url,model:'test-model'}:{accepted:true};}},
+    windows:{get:async()=>({state:'minimized'}),update:async(id,values)=>{windowUpdates.push({id,values});}},
     scripting:{executeScript:async()=>{injections++;available=true;protocol=6;}}
   };
   function storage(data,area){return {get:async keys=>Object.fromEntries((Array.isArray(keys)?keys:[keys]).map(k=>[k,data[k]])),
@@ -31,7 +34,7 @@ async function workerChecks() {
       if(Object.keys(changes).length)queueMicrotask(()=>chrome.storage.onChanged.listeners.forEach(fn=>fn(changes,area)));},
     remove:async keys=>{for(const k of Array.isArray(keys)?keys:[keys])delete data[k];}};}
   chrome.storage.local=storage(local,'local');chrome.storage.session=storage(session,'session');
-  class Socket{static OPEN=1;constructor(){this.readyState=0;this.sent=[];sockets.push(this);queueMicrotask(()=>{this.readyState=1;this.onopen?.();});}send(s){this.sent.push(JSON.parse(s));}close(){this.readyState=3;this.onclose?.();}}
+  class Socket{static OPEN=1;constructor(url){this.url=url;this.readyState=0;this.sent=[];sockets.push(this);queueMicrotask(()=>{this.readyState=1;this.onopen?.();});}send(s){this.sent.push(JSON.parse(s));}close(){this.readyState=3;this.onclose?.();}}
   const context=vm.createContext({chrome,WebSocket:Socket,URL,console,Promise,queueMicrotask,
     setTimeout:(fn,ms)=>{const timer=setTimeout(fn,ms);timers.add(timer);return timer;},clearTimeout:id=>{clearTimeout(id);timers.delete(id);},
     fetch:async url=>{check(url==='http://127.0.0.1:8765/pair','Pair only with the local desktop.');return {ok:true,json:async()=>({key:'key'})};}});
@@ -39,7 +42,8 @@ async function workerChecks() {
   vm.runInContext(fs.readFileSync(path.join(extension,'background.js'),'utf8'),context);
   await settled();
   check(local.habitatTab===101,'Use the active chat instead of the previously dedicated chat.');
-  async function tick(message=null){context.socket=sockets.at(-1);context.message=message;await vm.runInContext('transportTick(socket,message)',context);await settled();}
+  const chatSocket=()=>sockets.findLast(socket=>socket.url.endsWith('/bridge'));
+  async function tick(message=null){context.socket=chatSocket();context.message=message;await vm.runInContext('transportTick(socket,message)',context);await settled();}
   await tick({id:'one',text:'test'});
   check(commands.at(-1).id===101 && commands.at(-1).request.kind==='habitat:deliver','Deliver only to the active existing chat.');
   check(!('chatTitle' in commands.at(-1).request),'Never rename a chat.');
@@ -67,18 +71,37 @@ async function workerChecks() {
   second.active=false;
   const sent=commands.filter(c=>c.request.kind==='habitat:deliver').length;
   await tick({id:'blocked',text:'test'});
-  check(sockets.at(-1).sent.at(-1).ready===true && commands.filter(c=>c.request.kind==='habitat:deliver').length===sent+1 &&
+  check(chatSocket().sent.at(-1).ready===true && commands.filter(c=>c.request.kind==='habitat:deliver').length===sent+1 &&
     commands.at(-1).id===202,'Keep the linked background chat ready and send while no ChatGPT tab is active.');
   await vm.runInContext('closeTransport()',context);await settled();
   await vm.runInContext('startTransport()',context);await settled();
-  check(local.habitatTab===202 && sockets.at(-1).readyState===1,'Reconnect to the same background chat after the desktop/worker restarts.');
+  check(local.habitatTab===202 && chatSocket().readyState===1,'Reconnect to the same background chat after the desktop/worker restarts.');
   await tick({id:'background-reconnected',text:'test'});
   check(commands.at(-1).id===202 && commands.at(-1).request.kind==='habitat:deliver',
     'The reconnected background binding can deliver without activation.');
+  check(activations.length===0 && windowUpdates.length===0,'Regular sends keep the browser in the background.');
+  allowActivation=true;
+  await tick({id:'external',text:'current unsent draft',openExternally:true});
+  check(activations.at(-1)===202 && windowUpdates.at(-1).id===2 &&
+    windowUpdates.at(-1).values.state==='normal' && windowUpdates.at(-1).values.focused,
+    'An external send restores the exact linked window and selects its tab.');
+  const focusedCount=activations.length;
+  await tick({id:'external',text:'current unsent draft',openExternally:true});
+  check(activations.length===focusedCount,'Redelivery never refocuses the window.');
+  context.openId='empty-open';context.socket=chatSocket();
+  const deliveriesBeforeOpen=commands.filter(c=>c.request.kind==='habitat:deliver').length;
+  await vm.runInContext('transportTick(socket,null,openId)',context);await settled();
+  check(activations.length===focusedCount+1 && commands.filter(c=>c.request.kind==='habitat:deliver').length===deliveriesBeforeOpen &&
+    chatSocket().sent.some(p=>p.kind==='chat-opened'&&p.id==='empty-open'&&p.opened),
+    'An empty external action only opens the linked chat and acknowledges it.');
+  await vm.runInContext('transportTick(socket,null,openId)',context);await settled();
+  check(activations.length===focusedCount+1,'Repeated open requests are idempotent.');
+  allowActivation=false;
+  second.active=false;
   second.frozen=true;
   const beforeFrozen=commands.filter(c=>c.request.kind==='habitat:deliver').length;
   await tick({id:'frozen',text:'test'});
-  check(sockets.at(-1).sent.at(-1).ready===false && commands.filter(c=>c.request.kind==='habitat:deliver').length===beforeFrozen,
+  check(chatSocket().sent.at(-1).ready===false && commands.filter(c=>c.request.kind==='habitat:deliver').length===beforeFrozen,
     'A suspended tab is reported and never receives an ambiguous delivery.');
   second.frozen=false;
   local.habitatUrl='https://chatgpt.com/c/mismatched';

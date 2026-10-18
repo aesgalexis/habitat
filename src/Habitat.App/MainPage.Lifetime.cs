@@ -32,7 +32,10 @@ public sealed partial class MainPage
     private async Task StopCoreAsync()
     {
         _timer.Stop();
+        CancelEmptyYouTubeReset();
+        CancelPendingCodexSend();
         _activeDialog?.Hide();
+        foreach (var section in _destinationSections.Values) section.Dispose();
         if (_bridge is not null)
         {
             _bridge.EventReceived -= Bridge_EventReceived;

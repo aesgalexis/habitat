@@ -1,19 +1,23 @@
 {
   "manifest_version": 3,
-  "name": "HABITAT · ChatGPT bridge",
-  "version": "0.4.2",
+  "name": "HABITAT · browser bridge",
+  "version": "0.7.2",
   "minimum_chrome_version": "120",
-  "description": "Send and receive messages through the linked ChatGPT chat, including in the background.",
+  "description": "Connect HABITAT to ChatGPT and bring Google, YouTube and Translate results back to the desktop.",
   "permissions": [
     "storage",
     "activeTab",
     "tabs",
     "scripting",
+    "debugger",
     "alarms"
   ],
   "host_permissions": [
     "http://127.0.0.1:8765/*",
-    "https://chatgpt.com/*"
+    "https://chatgpt.com/*",
+    "https://translate.google.com/*",
+    "https://www.google.com/search*",
+    "https://www.youtube.com/results*"
   ],
   "background": {
     "service_worker": "background.js"

@@ -16,6 +16,45 @@ public sealed partial class MainPage
                 throw new InvalidOperationException("UI checks did not receive isolated services.");
             File.AppendAllText(path, "PASS: isolated services, empty in-memory Gmail credentials and explicit data paths\n");
             await _initialTaskLoad;
+            if (_sidebarExpanded || TasksPreview.Visibility != Visibility.Collapsed ||
+                GmailMessageButton.Visibility != Visibility.Collapsed ||
+                Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(SidebarToggle) != "Expand sidebar")
+                throw new InvalidOperationException("The sidebar must start collapsed with an accessible expansion action.");
+            File.AppendAllText(path, "PASS: sidebar starts collapsed with Gmail and Tasks icons\n");
+            if (Environment.GetCommandLineArgs().Contains("--vscode-ui-only"))
+            {
+                await CheckVSCodeUiAsync(path);
+                await StopAsync();
+                await _services.DisposeAsync();
+                window.Close();
+                Application.Current.Exit();
+                return;
+            }
+            if (Environment.GetCommandLineArgs().Contains("--search-ui-only"))
+            {
+                await CheckSearchUiAsync(path);
+                await CheckSearchUiAsync(path, Services.ComposerDestination.YouTube);
+                await StopAsync();
+                await _services.DisposeAsync();
+                window.Close();
+                Application.Current.Exit();
+                return;
+            }
+            if (Environment.GetCommandLineArgs().Contains("--codex-ui-only") ||
+                Environment.GetCommandLineArgs().Contains("--codex-conversation-smoke") ||
+                Environment.GetCommandLineArgs().Contains("--codex-desktop-smoke"))
+            {
+                if (Environment.GetCommandLineArgs().Contains("--codex-conversation-smoke"))
+                    await CheckCodexConversationDesktopAsync(path);
+                else if (Environment.GetCommandLineArgs().Contains("--codex-desktop-smoke"))
+                    await CheckCodexDesktopAsync(path);
+                else await CheckCodexUiAsync(path);
+                await StopAsync();
+                await _services.DisposeAsync();
+                window.Close();
+                Application.Current.Exit();
+                return;
+            }
             await CheckDestinationsUiAsync(path);
             SetTasksOpen(true);
             await Task.Delay(700);
@@ -169,7 +208,14 @@ public sealed partial class MainPage
             SetTasksOpen(false);
             window.AppWindow.Resize(new Windows.Graphics.SizeInt32(860, 720));
             await Task.Delay(300);
+            SelectDestination(Services.ComposerDestination.OpenAI);
             UpdateWritingLayout();
+            await Task.Delay(100);
+            if (_sidebarExpanded) throw new InvalidOperationException("An empty conversation must keep the sidebar collapsed by default.");
+            var togglePeer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(SidebarToggle);
+            var toggleInvoke = (Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)togglePeer.GetPattern(
+                Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke);
+            toggleInvoke.Invoke();
             await Task.Delay(100);
             if (!_sidebarExpanded || TasksButton.ActualWidth != GmailWidget.ActualWidth ||
                 Microsoft.UI.Xaml.Controls.Grid.GetRow(GmailWidget) != 0 || Microsoft.UI.Xaml.Controls.Grid.GetRow(TasksButton) != 1)
@@ -209,9 +255,6 @@ public sealed partial class MainPage
             if (_root.Margin.Left != railMargin || !HasActiveConversation)
                 throw new InvalidOperationException("Closing Tasks did not restore the conversation space.");
             var sidebarLeft = _widgets.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point()).X;
-            var togglePeer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(SidebarToggle);
-            var toggleInvoke = (Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)togglePeer.GetPattern(
-                Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke);
             toggleInvoke.Invoke();
             await Task.Delay(200);
             if (!_sidebarExpanded || _widgets.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point()).X != sidebarLeft ||
@@ -266,8 +309,8 @@ public sealed partial class MainPage
             window.AppWindow.Resize(new Windows.Graphics.SizeInt32(860, 720));
             UpdateWritingLayout();
             await Task.Delay(300);
-            if (!_sidebarExpanded) throw new InvalidOperationException("Empty conversation did not restore sidebar previews.");
-            File.AppendAllText(path, "PASS: narrow drawer preserves the conversation; empty chat restores previews\n");
+            if (_sidebarExpanded) throw new InvalidOperationException("An empty conversation must restore the collapsed sidebar default.");
+            File.AppendAllText(path, "PASS: narrow drawer preserves the conversation; empty chat keeps the sidebar collapsed\n");
             File.AppendAllText(path, "PASS: Tasks icon click opens below both widgets in collapsed, expanded and narrow states, including toggling with Tasks open\n");
             await StopAsync();
             await _services.DisposeAsync();

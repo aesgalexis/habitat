@@ -1,5 +1,12 @@
 using Habitat;
 using Habitat.Services;
+using Habitat.Features.Translation;
+
+if (args.Length > 0 && args[0] == "app-server" && args.Contains("--stdio"))
+{
+    await CodexChatChecks.ReaderServerAsync();
+    return;
+}
 
 static void Check(bool condition, string name)
 {
@@ -7,12 +14,103 @@ static void Check(bool condition, string name)
     Console.WriteLine($"PASS: {name}");
 }
 
-var destinations = Enum.GetValues<ComposerDestination>();
+if (args.Contains("--search-browser-smoke"))
+{
+    await SearchChecks.BrowserSmokeAsync(Check);
+    return;
+}
+
+if (args.Contains("--youtube-browser-smoke"))
+{
+    await YouTubeSearchChecks.BrowserSmokeAsync(Check);
+    return;
+}
+
+if (args.Contains("--vscode-smoke"))
+{
+    await VSCodeChecks.SmokeAsync(Check);
+    return;
+}
+
+if (args.Contains("--codex-chat-inspect"))
+{
+    if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
+    var family = args.First(arg => arg.StartsWith("--codex-family="))["--codex-family=".Length..];
+    var executable = args.First(arg => arg.StartsWith("--codex-executable="))["--codex-executable=".Length..];
+    var desktop = new CodexDesktopAutomation(family, _ => Task.FromResult(false), executable, Console.WriteLine);
+    var visible = await desktop.ReadVisibleAsync(default);
+    Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(visible is null ? null : new {
+        visible.Composer.IsNewChat, visible.IsEmpty, visible.CanAccept, visible.Composer.CanSend,
+        SendIdLength = visible.Composer.SendId.Length, TextLength = visible.Composer.Text.Length,
+        SelectionCount = visible.SelectedTitles.Count }));
+    if (visible is not null)
+    {
+        await using var reader = new CodexReadClient(Path.Combine(Path.GetDirectoryName(executable)!, "resources", "codex.exe"));
+        var target = await reader.ResolveAsync(visible.SelectedTitles, default);
+        var history = target is null ? null : await reader.ReadAsync(target, default);
+        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { target?.Id, Turns = history?.Turns.Count, LastStatus = history?.Turns.LastOrDefault()?.Status }));
+    }
+    return;
+}
+
+if (args.Contains("--codex-smoke"))
+{
+    if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
+    var family = args.FirstOrDefault(arg => arg.StartsWith("--codex-family="))?["--codex-family=".Length..]
+        ?? throw new ArgumentException("The Codex package family is required for this explicit integration check.");
+    var executable = args.FirstOrDefault(arg => arg.StartsWith("--codex-executable="))?["--codex-executable=".Length..];
+    var marker = "HABITAT_ENTER_" + Guid.NewGuid().ToString("N")[..8];
+    var instruction = args.Contains("--codex-multiline")
+        ? $"  Integration check {marker}: café ☕ 雪 & #?\r\nSecond line.\nReply only {marker}_OK. Do not use tools, edit files, or change settings.  "
+        : $"Integration check {marker}. Reply only {marker}_OK. Do not use tools, edit files, or change settings.";
+    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+    var desktop = new CodexDesktopAutomation(family, uri =>
+    {
+        using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(uri.AbsoluteUri)
+            { UseShellExecute = true });
+        return Task.FromResult(true);
+    }, executable, Console.WriteLine);
+    var result = await new CodexDelivery(desktop, trace: Console.WriteLine).SendAsync(instruction);
+    Console.WriteLine($"Codex integration result: {result}; elapsed={stopwatch.ElapsedMilliseconds} ms; marker={marker}");
+    Check(result == CodexDeliveryResult.Sent, "A new real Codex chat receives the synthetic instruction and starts after one Enter");
+    return;
+}
+
+if (args.Contains("--notepad-smoke"))
+{
+    var editors = new List<nint>();
+    var realNotepad = new NotepadLauncher(insertText: (editor, text) =>
+    {
+        editors.Add(editor);
+        return NotepadLauncher.InsertText(editor, text);
+    });
+    try
+    {
+        Check(await realNotepad.OpenAsync("HABITAT Notepad check 1\r\n  café ☕ 雪 Ελληνικά  \nLast line"),
+            "Real Notepad creates a new tab and receives exact Unicode text with line breaks");
+        Check(await realNotepad.OpenAsync("HABITAT Notepad check 2\nSecond document"),
+            "A second send creates another tab without replacing the previous document");
+    }
+    finally
+    {
+        File.WriteAllLines(Path.Combine(AppContext.BaseDirectory, "notepad-smoke-editors.txt"),
+            editors.Select(editor => editor.ToString()));
+    }
+    return;
+}
+
+var destinations = ComposerDestinations.Ordered;
+await CodexDeliveryChecks.RunAsync(Check);
+await CodexChatChecks.RunAsync(Check);
+await VSCodeChecks.RunAsync(Check);
+await ExternalDestinationChecks.RunAsync(Check);
+ComposerDraftChecks.Run(Check);
+RunChecks.Run(Check);
 Check(destinations.Select((destination, index) => ComposerDestinations.Cycle(destination, 1) ==
-    destinations[(index + 1) % destinations.Length]).All(result => result),
+    destinations[(index + 1) % destinations.Count]).All(result => result),
     "Wheel cycles forward through all destinations");
 Check(ComposerDestinations.Cycle(ComposerDestination.OpenAI, -1) == destinations[^1] &&
-    ComposerDestinations.Cycle(ComposerDestination.Google, -destinations.Length - 1) == ComposerDestination.OpenAI,
+    ComposerDestinations.Cycle(ComposerDestination.Google, -destinations.Count - 1) == ComposerDestination.OpenAI,
     "Reverse and multi-notch wheel cycling wrap correctly");
 Check(ComposerDestinations.CycleFromWheel(ComposerDestination.OpenAI, 1) == destinations[^1] &&
     ComposerDestinations.CycleFromWheel(ComposerDestination.OpenAI, -1) == ComposerDestination.Google,
@@ -31,10 +129,12 @@ Check(ComposerDestinations.SearchUri(ComposerDestination.OpenAI, query) is null,
     "OpenAI never creates a browser search");
 Check(ComposerDestinations.SearchUri(ComposerDestination.Notepad, query) is null,
     "Notepad never creates a browser search");
-var translate = ComposerDestinations.SearchUri(ComposerDestination.Translate, query)!;
-Check(translate.Host == "translate.google.com" && translate.Query.StartsWith("?sl=auto&tl=") &&
-    translate.Query.Contains("&text=" + Uri.EscapeDataString(query) + "&op=translate") && translate.Fragment == "",
-    "Google Translate receives the encoded text with automatic source language detection");
+Check(ComposerDestinations.SearchUri(ComposerDestination.Translate, query) is null,
+    "Translate never creates a website or browser search");
+await TranslationChecks.RunAsync(Check);
+await SearchChecks.RunAsync(Check);
+await YouTubeSearchChecks.RunAsync(Check);
+if (args.Contains("--translation-browser-smoke")) await TranslationChecks.BrowserSmokeAsync(Check);
 Check(ComposerDestinations.SearchUri(ComposerDestination.Gmail, query)!.AbsoluteUri ==
     "https://mail.google.com/mail/?view=cm&fs=1&body=" + Uri.EscapeDataString(query),
     "Gmail opens a new draft with the exact encoded body and no recipient or send action");
@@ -45,6 +145,7 @@ Check(ComposerDestinations.SearchUri(ComposerDestination.GoogleMaps, query)!.Abs
     "Google Maps opens a correctly encoded place or address search");
 Check(ComposerDestinations.Label(ComposerDestination.GoogleMaps) == "Google Maps",
     "Google Maps uses its readable English label");
+GoogleMapsChecks.Run(Check);
 var path = Path.Combine(AppContext.BaseDirectory, "isolated-preferences", "preferences.json");
 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 File.WriteAllText(path, "{\"Theme\":\"night\",\"Opacity\":35,\"TextOnly\":false}");

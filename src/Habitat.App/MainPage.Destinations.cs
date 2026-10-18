@@ -12,23 +12,27 @@ namespace Habitat;
 
 public sealed partial class MainPage
 {
-    private const double DestinationRailWidth = 128;
+    private const double DestinationLabelWidth = 128;
+    private const double DestinationRailWidth = DestinationLabelWidth + 40;
     private const double DestinationRailInset = DestinationRailWidth + 18;
     private readonly StackPanel DestinationRail = new()
     {
         Width = DestinationRailWidth, Spacing = 16,
+        Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
         HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center
     };
     private readonly Dictionary<ComposerDestination, Button> _destinationButtons = new();
+    private readonly Dictionary<ComposerDestination, Button> _externalDestinationButtons = new();
     private ComposerDestination _destination;
     private int _destinationWheelDelta;
     private bool _destinationLaunching;
     private PointerRoutedEventArgs? _lastDestinationWheelEvent;
     private Func<Uri, Task<bool>> _launchBrowser;
     private Func<string, Task<bool>> _launchNotepad;
-    private Func<string, Task<bool>> _launchCodex;
+    private Func<string, CancellationToken, Task<CodexDeliveryResult>> _launchCodex;
     private readonly PowerShellLauncher _powerShell;
     private Func<string, bool>? _launchTerminal;
+    private Func<string, bool> _launchRun;
     private Func<string, Task<bool>>? _confirmTerminal;
     private bool _terminalConfirmationOpen;
 
@@ -44,6 +48,8 @@ public sealed partial class MainPage
             ComposerDestination.Terminal => "\uE756",
             ComposerDestination.GoogleMaps => "\uE707",
             ComposerDestination.Codex => "\uE943",
+            ComposerDestination.VSCode => "\uE756",
+            ComposerDestination.Run => "\uE768",
             _ => "\uE8F2"
         },
         FontSize = 16
@@ -54,25 +60,43 @@ public sealed partial class MainPage
         _launchTerminal = _powerShell.Run;
         _confirmTerminal = ConfirmTerminalAsync;
         _destination = ComposerDestinations.Normalize(_preferences.Destination);
-        foreach (var destination in Enum.GetValues<ComposerDestination>())
+        foreach (var destination in ComposerDestinations.Ordered)
         {
             var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
             content.Children.Add(DestinationIcon(destination));
             content.Children.Add(new TextBlock { Text = ComposerDestinations.Label(destination), FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
             var button = new Button
             {
-                Content = content, Width = DestinationRailWidth, Height = 36,
+                Content = content, Width = DestinationLabelWidth, Height = 36,
                 Padding = new Thickness(8, 4, 4, 4), BorderThickness = new Thickness(2, 0, 0, 0),
                 CornerRadius = new CornerRadius(0), HorizontalContentAlignment = HorizontalAlignment.Left
             };
             UseStableWidgetButton(button);
             button.Click += (_, _) => { SelectDestination(destination); FocusComposer(); };
             AutomationProperties.SetName(button, ComposerDestinations.Label(destination));
-            AutomationProperties.SetHelpText(button, "Select destination. Ctrl + mouse wheel cycles destinations.");
+            AutomationProperties.SetHelpText(button, "Select destination. Mouse wheel over the selector cycles destinations. Ctrl + mouse wheel works anywhere in the window.");
             if (destination == ComposerDestination.Codex)
-                ToolTipService.SetToolTip(button, "Copy the instruction and open Codex. Paste it into your active chat.");
+            {
+                const string help = "Send to the visible Codex chat and show its reply in HABITAT.";
+                ToolTipService.SetToolTip(button, help);
+                AutomationProperties.SetHelpText(button, help);
+            }
             _destinationButtons.Add(destination, button);
-            DestinationRail.Children.Add(button);
+            var external = new Button
+            {
+                Content = new FontIcon { Glyph = "\uE8A7", FontSize = 14 },
+                Width = 32, Height = 36, Padding = new Thickness(0), BorderThickness = new Thickness(0),
+                HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center
+            };
+            external.Click += async (_, _) => await OpenSelectedDestinationAsync();
+            _externalDestinationButtons.Add(destination, external);
+            var row = new Grid();
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(DestinationLabelWidth) });
+            row.Children.Add(external);
+            Grid.SetColumn(button, 1);
+            row.Children.Add(button);
+            DestinationRail.Children.Add(row);
         }
         surface.Children.Add(DestinationRail);
         RegisterDestinationWheel(surface);
@@ -87,7 +111,11 @@ public sealed partial class MainPage
         if (ReferenceEquals(e, _lastDestinationWheelEvent) ||
             (_windowHost is { IsActive: false })) return;
         var control = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control);
-        if ((control & CoreVirtualKeyStates.Down) == 0)
+        var position = e.GetCurrentPoint(DestinationRail).Position;
+        var overSelector = DestinationRail.Visibility == Visibility.Visible &&
+            position.X >= 0 && position.X < DestinationRail.ActualWidth &&
+            position.Y >= 0 && position.Y < DestinationRail.ActualHeight;
+        if (!overSelector && (control & CoreVirtualKeyStates.Down) == 0)
         {
             _destinationWheelDelta = 0;
             return;
@@ -104,7 +132,9 @@ public sealed partial class MainPage
 
     private void SelectDestination(ComposerDestination destination)
     {
+        if (_destination == ComposerDestination.Codex && destination != _destination) CancelPendingCodexSend();
         _destination = ComposerDestinations.Normalize(destination);
+        RestoreComposerDraft();
         _preferences = _preferences with { Destination = _destination };
         SavePreferences();
         UpdateDestinationPresentation();
@@ -126,12 +156,20 @@ public sealed partial class MainPage
             foreach (var key in new[] { "ButtonBackgroundPointerOver", "ButtonBackgroundPressed" })
                 button.Resources[key] = transparent;
             AutomationProperties.SetItemStatus(button, active ? "Selected" : "Not selected");
+            var external = _externalDestinationButtons[destination];
+            external.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
+            external.Foreground = accent;
+            external.Resources["ButtonForegroundPointerOver"] = accent;
+            external.Resources["ButtonForegroundPressed"] = accent;
+            external.Background = transparent;
+            external.Resources["ButtonBackgroundPointerOver"] = new SolidColorBrush(dark ? Color(0x24, 255, 255, 255) : Color(0x12, 0, 0, 0));
         }
     }
 
     private void UpdateDestinationPresentation()
     {
         PaintDestinations();
+        PresentDestinationSection();
         Composer.PlaceholderText = string.Empty;
         ComposerHint.Text = ComposerDestinations.Placeholder(_destination);
         AutomationProperties.SetName(Composer, ComposerHint.Text);
@@ -142,48 +180,93 @@ public sealed partial class MainPage
             ComposerDestination.Translate => "Translate",
             ComposerDestination.Gmail => "Draft email",
             ComposerDestination.Terminal => "Run command…",
-            ComposerDestination.Codex => "Copy to Codex",
+            ComposerDestination.Run => "Run",
+            ComposerDestination.VSCode => "Run in VS Code",
+            ComposerDestination.Codex => "Send to Codex",
             ComposerDestination.OpenAI => "Send",
             _ => "Search"
         };
         UpdateSendState();
     }
 
-    private Task LaunchDestinationAsync(ComposerDestination destination, string draft) =>
-        RunOperationAsync(() => LaunchDestinationCoreAsync(destination, draft));
+    private Task LaunchDestinationAsync(ComposerDestination destination, string draft, bool openExternally = false) =>
+        RunOperationAsync(() => LaunchDestinationCoreAsync(destination, draft, openExternally));
 
-    private async Task LaunchDestinationCoreAsync(ComposerDestination destination, string draft)
+    private async Task LaunchDestinationCoreAsync(ComposerDestination destination, string draft, bool openExternally = false)
     {
+        if (_destinationLaunching) return;
+        if (!openExternally && string.IsNullOrWhiteSpace(draft)) return;
+        var submission = _composerDrafts.Capture(destination);
+        if (destination == ComposerDestination.Codex && !string.IsNullOrWhiteSpace(draft))
+        {
+            await SendToCodexAsync(draft, submission, openExternally);
+            return;
+        }
+        if (destination == ComposerDestination.Codex && openExternally && CodexChat.Target is not null)
+        {
+            await CodexChat.OpenAsync();
+            return;
+        }
+        if (_destinationSections.TryGetValue(destination, out var section) &&
+            (!openExternally || destination == ComposerDestination.VSCode))
+        {
+            if (section.IsBusy) return;
+            if (section is Features.Destinations.VSCodeSection vscode)
+            {
+                if (string.IsNullOrWhiteSpace(draft)) { await vscode.OpenProjectAsync(); return; }
+                if (await vscode.RunCommandAsync(draft, () =>
+                    { _composerDrafts.Accept(submission); RestoreComposerDraft(); }, openExternally))
+                {
+                    _composerDrafts.Clear(submission);
+                    RestoreComposerDraft();
+                }
+                return;
+            }
+            _composerDrafts.Accept(submission);
+            RestoreComposerDraft();
+            await section.SubmitAsync(draft);
+            return;
+        }
+        if (_destinationLaunching) return;
         _destinationLaunching = true;
         UpdateSendState();
         try
         {
-            if (destination == ComposerDestination.Terminal &&
+            if (destination == ComposerDestination.Terminal && !string.IsNullOrWhiteSpace(draft) &&
                 !await (_confirmTerminal ?? ConfirmTerminalAsync)(draft)) return;
-            var opened = destination == ComposerDestination.Codex
-                ? await _launchCodex(draft)
-                : destination == ComposerDestination.Terminal
+            _composerDrafts.Accept(submission);
+            RestoreComposerDraft();
+            var opened = destination == ComposerDestination.Terminal
                 ? (_launchTerminal ?? _powerShell.Run)(draft)
+                : destination == ComposerDestination.Run
+                ? (string.IsNullOrWhiteSpace(draft) ? _openRun() : _launchRun(draft))
                 : destination == ComposerDestination.Notepad
                 ? await _launchNotepad(draft)
-                : ComposerDestinations.SearchUri(destination, draft, _gmailAuth?.Email) is { } uri && await _launchBrowser(uri);
+                : (openExternally ? ComposerDestinations.ExternalUri(destination, draft, _gmailAuth?.Email,
+                    (_destinationSections[ComposerDestination.Translate] as Features.Translation.TranslateSection)!.TargetLanguage)
+                    : ComposerDestinations.SearchUri(destination, draft, _gmailAuth?.Email)) is { } uri && await _launchBrowser(uri);
             if (opened)
             {
-                if (Composer.Text == draft) Composer.Text = string.Empty;
+                if (destination != ComposerDestination.Translate) _composerDrafts.Clear(submission);
+                RestoreComposerDraft();
             }
-            else SetStatus($"Could not open {ComposerDestinations.Label(destination)}. Try again.", StatusTone.Warning);
+            else SetStatus(DestinationLaunchError(destination), StatusTone.Warning);
         }
         catch (Exception)
         {
-            SetStatus($"Could not open {ComposerDestinations.Label(destination)}. Try again.", StatusTone.Warning);
+            SetStatus(DestinationLaunchError(destination), StatusTone.Warning);
         }
         finally
         {
             _destinationLaunching = false;
             UpdateSendState();
-            FocusComposer();
+            if (!openExternally) FocusComposer();
         }
     }
+
+    private static string DestinationLaunchError(ComposerDestination destination) => destination == ComposerDestination.Run
+        ? "Could not run this command. Check the name or path and try again."
+        : $"Could not open {ComposerDestinations.Label(destination)}. Try again.";
 
     private async Task<bool> ConfirmTerminalAsync(string command)
     {

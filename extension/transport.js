@@ -8,6 +8,7 @@ let retryTimer = null;
 let retryCount = 0;
 let tickRunning = false;
 let protectionChange = Promise.resolve();
+const openedChatRequests = new Map();
 
 chrome.alarms.onAlarm.addListener(alarm => {
   if (alarm.name === WATCHDOG) void startTransport();
@@ -63,7 +64,7 @@ async function connectTransport() {
     if (habitatSocket !== socket) return;
     try {
       const packet = JSON.parse(event.data);
-      if (packet.kind === "tick") void transportTick(socket, packet.message);
+      if (packet.kind === "tick") void transportTick(socket, packet.message, packet.openChatId);
     } catch (_) {}
   };
   socket.onclose = () => {
@@ -92,7 +93,7 @@ async function chooseBoundTab(saved) {
   } catch (_) { return null; }
 }
 
-async function transportTick(socket, message) {
+async function transportTick(socket, message, openChatId = null) {
   if (tickRunning || socket !== habitatSocket || socket.readyState !== WebSocket.OPEN) return;
   tickRunning = true;
   try {
@@ -108,6 +109,14 @@ async function transportTick(socket, message) {
     if (transition || url !== saved.habitatUrl) {
       await chrome.storage.local.set({habitatUrl:url});
       return;
+    }
+    if (typeof openChatId === "string" && openChatId) {
+      if (!openedChatRequests.has(openChatId)) {
+        let opened = false;
+        try { await showChatTab(tab); opened = true; } catch (_) {}
+        rememberChatOpen(openChatId, opened);
+      }
+      socket.send(JSON.stringify({kind:"chat-opened",id:openChatId,opened:openedChatRequests.get(openChatId)}));
     }
     if (tab.discarded || tab.frozen) {
       heartbeat(socket, false, "Chrome suspended the linked tab. Open it once to resume.");
@@ -131,6 +140,12 @@ async function transportTick(socket, message) {
       // of another chat or worker retries must not route a message elsewhere.
       const current = await chrome.storage.local.get(["habitatTab","habitatUrl"]);
       if (current.habitatTab !== tab.id || current.habitatUrl !== url || socket !== habitatSocket) return;
+      if (message.openExternally === true && !openedChatRequests.has(message.id)) {
+        // Focus the exact bound tab before delivering, without opening or
+        // navigating a second conversation. Never resend to recover focus.
+        await showChatTab(tab);
+        rememberChatOpen(message.id, true);
+      }
       await contactPage(tab.id, {kind:"habitat:deliver",message,expectedUrl:url});
     }
   } catch (error) {
@@ -164,7 +179,18 @@ function timedPageMessage(tabId, request) {
 
 function heartbeat(socket, ready, issue, model = "") {
   if (socket === habitatSocket && socket.readyState === WebSocket.OPEN)
-    socket.send(JSON.stringify({kind:"heartbeat",ready,issue,model}));
+    socket.send(JSON.stringify({kind:"heartbeat",ready,issue,model,supportsExternalOpen:true}));
+}
+
+async function showChatTab(tab) {
+  await chrome.tabs.update(tab.id, {active:true});
+  const window = await chrome.windows.get(tab.windowId);
+  await chrome.windows.update(tab.windowId, {...(window.state === "minimized" ? {state:"normal"} : {}),focused:true});
+}
+
+function rememberChatOpen(id, opened) {
+  openedChatRequests.set(id, opened);
+  if (openedChatRequests.size > 128) openedChatRequests.delete(openedChatRequests.keys().next().value);
 }
 
 function closeTransport() {

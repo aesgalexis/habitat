@@ -18,6 +18,18 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Invalid extension manifest.' }
     node tests/extension-background.checks.cjs
     if ($LASTEXITCODE -ne 0) { throw 'Extension checks failed.' }
+    node tests/extension-translation.checks.cjs
+    if ($LASTEXITCODE -ne 0) { throw 'Translation extension checks failed.' }
+    node --check vscode-extension/extension.js
+    if ($LASTEXITCODE -ne 0) { throw 'VS Code extension syntax check failed.' }
+    node --check vscode-extension/terminal-runs.js
+    if ($LASTEXITCODE -ne 0) { throw 'VS Code terminal tracking syntax check failed.' }
+    node tests/vscode-extension.checks.cjs
+    if ($LASTEXITCODE -ne 0) { throw 'VS Code extension checks failed.' }
+    node tests/extension-search.checks.cjs
+    if ($LASTEXITCODE -ne 0) { throw 'Search extension checks failed.' }
+    node tests/extension-youtube.checks.cjs
+    if ($LASTEXITCODE -ne 0) { throw 'YouTube extension checks failed.' }
     foreach ($suite in 'Appearance', 'Bridge', 'Core', 'Destination', 'Gmail', 'Tasks', 'Weather') {
         dotnet run --project "tests/Habitat.$suite.Checks" --configuration Release --no-restore `
             "-p:BaseOutputPath=$verifyOutput/$suite/"

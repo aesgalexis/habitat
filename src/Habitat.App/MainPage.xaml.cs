@@ -72,7 +72,11 @@ public sealed partial class MainPage : Page
         _launchBrowser = services.LaunchBrowser;
         _launchNotepad = services.LaunchNotepad;
         _launchCodex = services.LaunchCodex;
+        _openRun = services.Run.Open;
+        _openChat = () => services.Bridge.HasBrowserConnection ? services.Bridge.OpenChatAsync() :
+            _launchBrowser(new Uri("https://chatgpt.com/"));
         _powerShell = services.PowerShell;
+        _launchRun = services.Run.Run;
         _bridge.EventReceived += Bridge_EventReceived;
         _bridge.StartFailed += Bridge_StartFailed;
         BuildInterface();
@@ -158,6 +162,7 @@ public sealed partial class MainPage : Page
         ConversationScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
         ConversationScroll.VerticalAlignment = VerticalAlignment.Top;
         _root.Children.Add(ConversationScroll);
+        BuildDestinationSections();
 
         Composer.MinHeight = 58;
         Composer.MaxHeight = 180;
@@ -165,7 +170,15 @@ public sealed partial class MainPage : Page
         Composer.FontFamily = new FontFamily("Cascadia Mono");
         ComposerHint.FontFamily = Composer.FontFamily;
         ComposerHint.SizeChanged += (_, _) => UpdateWritingLayout();
-        Composer.TextChanged += (_, _) => UpdateWritingLayout();
+        Composer.TextChanging += (_, _) =>
+        {
+            if (!_restoringComposerDraft)
+            {
+                _composerDrafts.Edit(_destination, Composer.Text);
+                if (_destination == ComposerDestination.Codex) CancelPendingCodexSend();
+            }
+        };
+        Composer.TextChanged += (_, _) => { UpdateWritingLayout(); UpdateExternalDestinationState(); };
         Composer.TextAlignment = TextAlignment.Center;
         Composer.VerticalContentAlignment = VerticalAlignment.Center;
         Composer.VerticalAlignment = VerticalAlignment.Top;
@@ -237,7 +250,7 @@ public sealed partial class MainPage : Page
 
         var historyTop = _header.Margin.Top + _header.ActualHeight + 10;
         ConversationScroll.Margin = new Thickness(0, historyTop, 0, 0);
-        if (Conversation.Children.Count > 0)
+        if (_destination == ComposerDestination.OpenAI && Conversation.Children.Count > 0 || HasDestinationSection)
         {
             const double bottomPadding = 24;
             var sendWidth = SendButton.ActualWidth > 0 ? SendButton.ActualWidth : 60;
@@ -257,8 +270,10 @@ public sealed partial class MainPage : Page
             var editorHeight = Composer.ActualHeight > 0 ? Composer.ActualHeight : Composer.MinHeight;
             UpdateComposerHintLayout(height - bottomPadding - editorHeight);
             var hintSpace = ComposerHint.Visibility == Visibility.Visible ? ComposerHintHeight + 16 : 0;
-            ConversationScroll.Visibility = Visibility.Visible;
+            ConversationScroll.Visibility = IsDestinationSectionVisible ? Visibility.Collapsed : Visibility.Visible;
             ConversationScroll.Height = Math.Max(0, height - bottomPadding - editorHeight - hintSpace - 10 - historyTop);
+            _destinationContent.Margin = new Thickness(0, historyTop, 0, 0);
+            _destinationContent.Height = ConversationScroll.Height;
             return;
         }
 
@@ -283,6 +298,9 @@ public sealed partial class MainPage : Page
         Composer.Margin = new Thickness(0, composerTop, 0, 0);
         UpdateComposerHintLayout(composerTop);
         SendButton.Margin = new Thickness(0, sendTop, 0, 0);
+        // Project context stays above the welcome editor without moving it.
+        _destinationContent.Margin = new Thickness(0, historyTop, 0, 0);
+        _destinationContent.Height = Math.Max(0, ComposerHint.Margin.Top - 16 - historyTop);
 
     }
 
@@ -295,7 +313,12 @@ public sealed partial class MainPage : Page
             Math.Max(0, editorTop - ComposerHintHeight - 16), Composer.Margin.Right, 0);
     }
 
-    private bool HasActiveConversation => _conversation.HasActiveConversation;
+    private bool HasActiveConversation => _destination switch
+    {
+        ComposerDestination.OpenAI => _conversation.HasActiveConversation,
+        ComposerDestination.Codex => CodexChat.HasMessages,
+        _ => false
+    };
 
     private void MainPage_Loaded(object sender, RoutedEventArgs e)
     {
@@ -330,13 +353,15 @@ public sealed partial class MainPage : Page
         SendCurrentMessage();
     }
 
-    private void SendCurrentMessage()
+    private void SendCurrentMessage(bool openExternally = false)
     {
-        if (_operations.IsStopping) return;
+        if (_operations.IsStopping || _destinationLaunching) return;
         var text = Composer.Text.Trim();
         if (_destination != ComposerDestination.OpenAI)
         {
-            if (!_destinationLaunching && !string.IsNullOrWhiteSpace(text))
+            var busy = _destination == ComposerDestination.Codex ? _codexSendCancellation is not null || CodexChat.IsBusy :
+                _destinationSections.TryGetValue(_destination, out var section) ? section.IsBusy : _destinationLaunching;
+            if (!busy && !string.IsNullOrWhiteSpace(text))
                 _ = LaunchDestinationAsync(_destination, Composer.Text);
             else FocusComposer();
             return;
@@ -351,7 +376,7 @@ public sealed partial class MainPage : Page
             ? $"{text}\n\n{TextOnlyDirective}"
             : text;
 
-        if (!_bridge.TryQueueMessage(outboundText, out var reason))
+        if (!_bridge.TryQueueMessage(outboundText, out var reason, openExternally))
         {
             SetStatus(reason, StatusTone.Warning);
             FocusComposer();
@@ -359,10 +384,13 @@ public sealed partial class MainPage : Page
         }
 
         AddMessage("YOU", text, MessageTone.User);
-        Composer.Text = string.Empty;
+        var submission = _composerDrafts.Capture(_destination);
+        _composerDrafts.Accept(submission);
+        _composerDrafts.Clear(submission);
+        RestoreComposerDraft();
         SetStatus("Sending to Chrome…", StatusTone.Active);
         UpdateSendState();
-        FocusComposer();
+        if (!openExternally) FocusComposer();
     }
 
     private void Timer_Tick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
@@ -389,7 +417,7 @@ public sealed partial class MainPage : Page
             AddMessage("SYSTEM", "The request timed out. Check ChatGPT before sending it again.", MessageTone.Muted);
             SetStatus("Timed out — check Chrome", StatusTone.Danger);
         }
-        else if (!_bridge.HasMessageInFlight)
+        else if (!_bridge.HasMessageInFlight && _destination == ComposerDestination.OpenAI)
         {
             SetStatus(_bridge.IsConnected ? "Extension connected" : _bridge.ConnectionIssue,
                 _bridge.IsConnected ? StatusTone.Success : StatusTone.Warning);
@@ -582,11 +610,20 @@ public sealed partial class MainPage : Page
 
     private void UpdateSendState()
     {
+        UpdateExternalDestinationState();
+        if (_operations.IsStopping || _destinationLaunching) { SendButton.IsEnabled = false; return; }
+        if (_destination == ComposerDestination.Codex)
+        {
+            SendButton.Content = _codexSendCancellation is not null || CodexChat.IsSubmitting ? "Sending to Codex…" :
+                CodexChat.IsBusy ? "Waiting for Codex…" : "Send to Codex";
+            SendButton.IsEnabled = _codexSendCancellation is null && !CodexChat.IsBusy && !_operations.IsStopping;
+            return;
+        }
         // Keep Send visible and clickable while reconnecting. The bridge
         // reports why it cannot send without dropping the user's draft.
         SendButton.IsEnabled = _destination == ComposerDestination.OpenAI
             ? _bridge is { HasMessageInFlight: false }
-            : !_destinationLaunching;
+            : _destinationSections.TryGetValue(_destination, out var section) ? !section.IsBusy : !_destinationLaunching;
     }
 
     private async void ShowPreferences_Click(object sender, RoutedEventArgs e) => await RunOperationAsync(ShowPreferencesAsync);

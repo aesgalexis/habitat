@@ -1,3 +1,4 @@
+param([switch]$VSCodeOnly)
 $ErrorActionPreference = "Stop"
 $taskProjectRoot = Split-Path -Parent $PSScriptRoot
 $env:DOTNET_CLI_HOME = Join-Path $taskProjectRoot ".dotnet-local"
@@ -8,6 +9,7 @@ dotnet publish (Join-Path $taskProjectRoot "src\Habitat.App\Habitat.App.csproj")
     -p:Platform=x64 -p:HabitatUiChecks=true -p:PublishReadyToRun=false --output $taskOutput
 if ($LASTEXITCODE -ne 0) { throw "Could not build the tasks UI checks." }
 $taskProcess = Start-Process -FilePath (Join-Path $taskOutput "HABITAT.exe") `
+    -ArgumentList $(if ($VSCodeOnly) { '--vscode-ui-only' } else { '--all-ui-checks' }) `
     -WorkingDirectory $taskOutput -WindowStyle Hidden -PassThru
 if (-not $taskProcess.WaitForExit(30000)) {
     Stop-Process -Id $taskProcess.Id

@@ -1,4 +1,9 @@
 using Habitat.Models;
+using Habitat.Features.Translation;
+using Habitat.Features.Search;
+using Habitat.Features.Codex;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.System;
 
 namespace Habitat.Services;
@@ -18,8 +23,29 @@ internal sealed class AppServices : IAsyncDisposable
     public WeatherService Weather { get; }
     public Func<Uri, Task<bool>> LaunchBrowser { get; }
     public Func<string, Task<bool>> LaunchNotepad { get; }
-    public Func<string, Task<bool>> LaunchCodex { get; }
+    public Func<string, CancellationToken, Task<CodexDeliveryResult>> LaunchCodex { get; }
+    internal ICodexChatService Codex { get; set; }
     public PowerShellLauncher PowerShell { get; }
+    public RunLauncher Run { get; }
+    public VSCodeService VSCode { get; }
+    private readonly VSCodeFolderLauncher _vsCodeFolders;
+    internal ITranslationService Translation { get; set; }
+    internal ISearchService Search { get; set; }
+    internal ISearchService YouTubeSearch { get; set; }
+    internal Func<Uri, ImageSource?> SearchThumbnail { get; set; }
+    internal bool CopyText(string text)
+    {
+        if (Paths.IsIsolated) return false;
+        try
+        {
+            var content = new Windows.ApplicationModel.DataTransfer.DataPackage();
+            content.SetText(text);
+            Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(content);
+            Windows.ApplicationModel.DataTransfer.Clipboard.Flush();
+            return true;
+        }
+        catch (Exception exception) { ReportError("Copy translation", exception); return false; }
+    }
     public Task StartAsync()
     {
         if (Paths.IsIsolated) throw new InvalidOperationException("The desktop bridge is disabled in isolated checks.");
@@ -49,11 +75,37 @@ internal sealed class AppServices : IAsyncDisposable
         TaskSession = new TaskSession(Tasks);
         if (paths.IsIsolated) _isolatedHttp = new HttpClient(new DisabledNetwork());
         Weather = new WeatherService(_isolatedHttp);
+        Translation = Bridge.Translation;
+        Search = Bridge.Search;
+        YouTubeSearch = Bridge.YouTubeSearch;
+        SearchThumbnail = paths.IsIsolated ? _ => null : CreateSearchThumbnail;
         LaunchBrowser = paths.IsIsolated ? _ => Task.FromResult(false) : async uri => await Launcher.LaunchUriAsync(uri);
         LaunchNotepad = paths.IsIsolated ? _ => Task.FromResult(false) : new NotepadLauncher().OpenAsync;
-        LaunchCodex = paths.IsIsolated ? _ => Task.FromResult(false) : new CodexLauncher().OpenAsync;
+        var codex = paths.IsIsolated ? null : new CodexLauncher();
+        LaunchCodex = codex is null ? (_, _) => Task.FromResult(CodexDeliveryResult.NotSent) : codex.OpenAsync;
+        Codex = codex is null ? new DisabledCodexChatService() : codex;
         PowerShell = paths.IsIsolated ? new PowerShellLauncher(paths.LocalDirectory, _ => false) : new PowerShellLauncher();
+        Run = paths.IsIsolated ? new RunLauncher(paths.LocalDirectory, _ => false) : new RunLauncher();
+        VSCode = new VSCodeService(Path.Combine(paths.LocalDirectory, "vscode"), paths.IsIsolated ? new DisabledNetwork() : null);
+        _vsCodeFolders = paths.IsIsolated ? new VSCodeFolderLauncher("code.exe", _ => false) : new VSCodeFolderLauncher();
     }
+
+    public Task<VSCodeProject?> EnsureVSCodeProjectAsync(VSCodeFolder folder, CancellationToken token) =>
+        VSCode.EnsureProjectAsync(folder, _vsCodeFolders.Open, token);
+
+    public async Task<string?> PickVSCodeFolderAsync(nint owner)
+    {
+        if (Paths.IsIsolated || owner == 0) return null;
+        var picker = new Windows.Storage.Pickers.FolderPicker { CommitButtonText = "Select project" };
+        picker.FileTypeFilter.Add("*");
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, owner);
+        return (await picker.PickSingleFolderAsync())?.Path;
+    }
+
+    internal static BitmapImage CreateSearchThumbnail(Uri uri) => new()
+    {
+        DecodePixelWidth = 320, DecodePixelHeight = 180, AutoPlay = false, UriSource = uri
+    };
 
     public GmailAuthService CreateGmailAuth() => Paths.IsIsolated
         ? new GmailAuthService(new MemoryCredentials(), _isolatedHttp, _ => throw new InvalidOperationException("Browser sign-in is disabled in checks."))
@@ -74,7 +126,7 @@ internal sealed class AppServices : IAsyncDisposable
             try { await _bridgeStart; }
             finally { await Bridge.DisposeAsync(); }
         }
-        finally { Weather.Dispose(); _isolatedHttp?.Dispose(); }
+        finally { Weather.Dispose(); VSCode.Dispose(); _isolatedHttp?.Dispose(); await Codex.DisposeAsync(); }
     }
 
     private sealed class MemoryCredentials : IGmailCredentialStore

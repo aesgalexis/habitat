@@ -1,5 +1,7 @@
 // Use Chrome’s active ChatGPT chat. Never create or rename a conversation.
 importScripts("transport.js");
+importScripts("translation.js");
+importScripts("search-transport.js", "search.js", "youtube.js");
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   (async () => {
     if (request.kind === "connect" && sender.id === chrome.runtime.id &&
