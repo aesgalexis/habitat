@@ -1,6 +1,6 @@
 # HABITAT — Product state and direction
 
-_Last updated: 14 October 2026 · living project note_
+_Last updated: 18 October 2026 · desktop release 0.9.0 · living project note_
 
 ## What Habitat is
 
@@ -12,7 +12,7 @@ The principle is simple: **ChatGPT remains the conversation system of record; Ha
 
 ### Verified in this repository at this revision
 
-- The current desktop app is C# / WinUI 3 on .NET 10, launched with `HABITAT.vbs` after building. Python/Tkinter was the original prototype.
+- The current desktop app is C# / WinUI 3 on .NET 10, distributed as a self-contained Windows x64 ZIP with a per-user installer. Source builds still launch with `HABITAT.vbs`. Python/Tkinter was the original prototype.
 - The bridge uses a Chrome extension following the active ChatGPT conversation, and a local service bound to `127.0.0.1:8765` with a per-run pairing key. The background extension maintains a WebSocket connection and pairs again after app restarts. An in-flight answer finishes in its original conversation.
 - The existing conversation in ChatGPT is retained; the bridge sends messages and extracts textual responses from its web interface.
 - Rich content (interactive controls, images, files, confirmations and complex tool states) cannot be assumed to render faithfully in the prototype.
@@ -20,10 +20,14 @@ The principle is simple: **ChatGPT remains the conversation system of record; Ha
 - Day, Night and Hybrid appearance, background opacity and window placement are persisted. The composer is centered for an empty conversation and moves to the bottom once messages exist.
 - A weather widget uses Windows location with a saved-city fallback and Open-Meteo forecasts; the forecast refreshes every 15 minutes.
 - A Gmail widget rotates sender, subject and snippet every eight seconds. Icon/count open the local reader; message text opens Gmail. Hover highlights are independent, with no tooltips; narrow windows use the compact icon/count view.
-- Gmail uses read-only desktop OAuth, encrypted Windows DPAPI storage and automatic access-token renewal. Refresh tokens issued in OAuth Testing remain subject to Google's seven-day lifetime. Mail content is not sent to ChatGPT.
-- Automated checks cover the extension transport, local bridge, Gmail authorization and persistence, weather and appearance. They do not establish compatibility with every future ChatGPT web UI.
+- Gmail uses desktop OAuth, Windows Credential Manager and automatic access-token renewal, with migration from the earlier DPAPI file. Reading mail and saving unsent drafts have separate authorization requirements. Refresh tokens issued in OAuth Testing remain subject to Google's seven-day lifetime. Mail content is not sent to ChatGPT.
+- The destination selector includes OpenAI, Google, YouTube, Notepad, Translate, Gmail, Google Maps, Codex, VS Code, Terminal and Run. Integrated results and external actions preserve each destination's draft and pending-operation boundaries.
+- Ctrl+H opens or focuses HABITAT and can import verified selected text without sending it. The companion process preserves clipboard formats when capture is supported; existing drafts require confirmation before replacement.
+- Tasks persist with recoverable revisions and protection against stale-session overwrites. OpenAI and Codex memory caches are bounded; task history revisions are retained.
+- Preferences include the web browser policy alongside appearance and the global shortcut. Composer coordination, conversation controls and shutdown/draining have explicit boundaries with synthetic regression coverage.
+- Automated checks cover extensions, bridge, core, destinations, Gmail, tasks, weather, appearance, hotkey capture and distribution, including isolated installation and rollback. They do not establish compatibility with every future provider UI.
 
-The README and Gmail setup guide now describe this implementation. New clones must build the application, load the extension and separately configure any Gmail account; local credentials and compiled artifacts are not included.
+The README and setup guides describe this implementation. Users can install a release without development tools, then load the Chrome extension and separately configure Gmail if needed. Source clones require a build. Credentials and user data are excluded from Git and release assets. Desktop versions follow the [release policy](RELEASING.md); browser and VS Code extensions are versioned independently.
 
 ### Reported from real use on 13 October 2026
 
@@ -56,9 +60,9 @@ These observations are usage feedback, not claims verified by the code currently
 ### Next: small, high-value conveniences (ideas, not committed scope)
 
 - Attach or drag-and-drop a document or image from Explorer into the conversation, if the bridge can handle it reliably.
-- Quickly send selected text or a user-approved screenshot from the active Windows application.
-- Optional global shortcut or compact floating invocation, only if it genuinely improves the workflow.
-- Optional project context/shortcuts (e.g., active repository or folder), without duplicating ChatGPT's native project or history features.
+- Explore user-approved screenshot import. Selected-text import is already available through Ctrl+H.
+- Explore compact floating invocation; the optional global shortcut is already implemented.
+- Extend project context only where it saves a demonstrated step; VS Code already supports project selection and integrated terminal execution.
 
 ### Longer-term direction
 

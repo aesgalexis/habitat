@@ -42,12 +42,12 @@ Si Google indica que la aplicación está en pruebas y solo admite testers aprob
 
 ## Comportamiento y privacidad
 
-- El widget superior muestra el icono y contador junto a tres líneas: remitente, asunto y fragmento. Rota cada ocho segundos entre los no leídos cargados en la lista. Se pausa al pasar el ratón, abrir el lector o durante una carga. Conserva el correo mostrado al actualizar si sigue en la lista. En ventanas estrechas se reduce al icono y contador para dejar espacio al tiempo.
+- El widget de Gmail del sidebar, situado debajo del tiempo, muestra el icono y contador junto a tres líneas: remitente, asunto y fragmento. Rota cada ocho segundos entre los no leídos cargados en la lista. Se pausa al pasar el ratón, abrir el lector o durante una carga. Conserva el correo mostrado al actualizar si sigue en la lista. Con la barra recogida muestra solo el icono; el tiempo permanece arriba del todo.
 - La rotación usa los fragmentos ya cargados en memoria; no descarga cuerpos completos ni realiza consultas adicionales a Google. El texto largo se recorta con puntos suspensivos.
 - El widget tiene dos botones independientes: icono y contador abren el lector de HABITAT; remitente, asunto y fragmento abren Gmail en el navegador del sistema y en la cuenta conectada. Se busca el correo por su cabecera Message-ID mediante `rfc822msgid`; si no existe esa cabecera se usa el enlace a su conversación. Cada zona tiene su propio resaltado. La rotación también se pausa al enfocar el mensaje con el teclado.
 - Ninguna de las dos zonas muestra tooltips al pasar el ratón.
 - Leer dentro de HABITAT no marca el correo como leído. Abrirlo en Gmail sigue el comportamiento normal de Gmail. Si no hay un mensaje mostrado, el bloque de texto abre el lector local.
-- Solo lectura: no envía, elimina, archiva ni marca mensajes como leídos.
+- El lector solo consulta mensajes: no envía, elimina, archiva ni marca mensajes como leídos.
 - La lista se actualiza cada 60 segundos mientras HABITAT está abierto. Cada página muestra hasta 25 mensajes; el contador de **All unread** es una estimación de Google y se señala con `≈`.
 - El cuerpo se obtiene al seleccionar un mensaje. Se presenta exclusivamente como texto, sin ejecutar HTML ni cargar imágenes remotas. No se descargan adjuntos.
 - Ningún correo se envía a ChatGPT, ni se trata como una instrucción para la aplicación.
@@ -57,6 +57,18 @@ Si Google indica que la aplicación está en pruebas y solo admite testers aprob
 - En proyectos externos en **Testing**, Google puede caducar el refresh token a los siete días. Si ocurre, vuelve a iniciar sesión. Distribuir la aplicación a otros usuarios puede requerir verificación de Google por el permiso Gmail de alcance restringido.
 
 Documentación oficial: [OAuth para aplicaciones de escritorio](https://developers.google.com/identity/protocols/oauth2/native-app), [permisos Gmail](https://developers.google.com/workspace/gmail/api/auth/scopes), [caducidad de tokens](https://developers.google.com/identity/protocols/oauth2#expiration).
+
+## Destino Draft email
+
+La pantalla inicial conserva el formato común de todos los destinos: indicación **Draft a new email…** sobre el editor, editor centrado con cursor y botón **Draft email** debajo. No muestra explicaciones ni la sección de resultados. **Open in browser**, **Clear** y los estados de guardado o autorización aparecen después de ejecutar la acción. **Clear** vuelve a esta pantalla inicial y devuelve el foco al editor. Este formato de indicación de acción, cursor y botón de ejecución/envío es el mismo en todos los destinos.
+
+**Draft email** guarda el texto directamente en los borradores de la cuenta conectada mediante `users.drafts.create`, sin abrir Chrome ni otro navegador. El asunto usa las primeras ocho palabras, con espacios normalizados; el cuerpo conserva el texto completo, Unicode y saltos de línea. No añade destinatarios ni envía el correo. El texto permanece en el editor después del guardado.
+
+El permiso de lectura del widget no permite crear borradores. Si falta autorización, aparece **Authorize Gmail drafts**: esta acción explícita abre el consentimiento de Google y solicita `gmail.compose` junto con `gmail.readonly`. Añade también `https://www.googleapis.com/auth/gmail.compose` en la configuración de permisos de Google Cloud si usas este destino. Google agrupa gestionar borradores y enviar correo en ese permiso; HABITAT solo utiliza la creación de borradores. Al terminar, pulsa **Draft email** otra vez para guardarlo. Una sesión ya autorizada guarda sin abrir el navegador y conserva ese acceso al reiniciar.
+
+**Open in browser** abre el último borrador guardado mediante su Message-ID, o la carpeta de borradores si todavía no hay uno en esta sesión. No genera otro borrador ni limpia el editor. El icono externo del selector Gmail tiene el mismo comportamiento. **Clear**, situado a su derecha, limpia el editor y el estado local; conserva los borradores guardados en Gmail. Durante un guardado se bloquean las acciones duplicadas. Si la respuesta falla después del POST, no se repite automáticamente: comprueba Gmail antes de reintentar para evitar duplicados.
+
+Documentación oficial: [crear borradores](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.drafts/create).
 
 ## Comprobaciones sin cuenta real
 

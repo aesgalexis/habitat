@@ -17,6 +17,7 @@ internal sealed class VSCodeRunView
     private readonly TextBlock _truncated = new() { Text = "Output truncated", FontSize = 11, Opacity = 0.7, Visibility = Visibility.Collapsed };
     private readonly StackPanel _links = new() { Spacing = 2 };
     private readonly Button _details;
+    private readonly Func<Uri, Task<bool>> _openLink;
     private readonly StackPanel _expanded = new() { Spacing = 6, Visibility = Visibility.Collapsed };
     public StackPanel View { get; } = new() { Spacing = 6, Margin = new Thickness(0, 8, 0, 8) };
     public VSCodeEndpoint Endpoint { get; }
@@ -35,8 +36,9 @@ internal sealed class VSCodeRunView
         _preview.Visibility = expand || _preview.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    public VSCodeRunView(VSCodeProject project, string command, string? id)
+    public VSCodeRunView(VSCodeProject project, string command, string? id, Func<Uri, Task<bool>>? openLink = null)
     {
+        _openLink = openLink ?? (_ => Task.FromResult(false));
         Endpoint = project.Endpoint;
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         Snapshot = new VSCodeExecution(id ?? "", command, project.Folder.Path, "", id is null ? "unknown" : "starting",
@@ -78,8 +80,16 @@ internal sealed class VSCodeRunView
         _links.Children.Clear();
         foreach (var uri in snapshot.Links)
         {
-            var link = new HyperlinkButton { Content = uri.AbsoluteUri, NavigateUri = uri, Padding = new Thickness(0),
+            var link = new HyperlinkButton { Content = uri.AbsoluteUri, Padding = new Thickness(0),
                 HorizontalAlignment = HorizontalAlignment.Left };
+            link.Click += async (_, _) =>
+            {
+                try
+                {
+                    if (!await _openLink(uri)) _summary.Text = "Could not open link. Check Preferences > Browser.";
+                }
+                catch (Exception) { _summary.Text = "Could not open link. Check Preferences > Browser."; }
+            };
             AutomationProperties.SetName(link, "Open " + uri.AbsoluteUri);
             _links.Children.Add(link);
         }

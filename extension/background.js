@@ -46,7 +46,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const run = async credentials => {
       const url = "http://127.0.0.1:8765/" + (request.kind === "next" ? "next" : "event");
       const init = {method: request.kind === "next" ? "GET" : "POST",
-        headers:{"X-Habitat-Key":credentials.habitatKey,"Content-Type":"application/json"}};
+        headers:{"X-Habitat-Key":credentials.habitatKey,"Content-Type":"application/json","X-Habitat-Browser":await habitatBrowser()}};
       if (request.kind === "event") init.body=JSON.stringify(request.event);
       return fetch(url,init);
     };

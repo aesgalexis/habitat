@@ -2,12 +2,15 @@ namespace Habitat.Features.Codex;
 
 // UI-independent identity and turn tracking. A late reply can update its own
 // cached chat, but can never appear under a different selected chat.
-internal sealed class CodexChatSession
+internal sealed class CodexChatSession(int maxCachedChats = 32)
 {
+    private readonly int _capacity = maxCachedChats >= 2 ? maxCachedChats : throw new ArgumentOutOfRangeException(nameof(maxCachedChats));
     private sealed record Pending(CodexChatTarget Target, string? PreviousTurnId, string Text, string? TurnId = null);
     private readonly Dictionary<string, CodexChatHistory> _history = new(StringComparer.Ordinal);
     private readonly Dictionary<(string Chat, string Turn), string> _originalText = new();
     private readonly Dictionary<string, string> _issues = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, long> _access = new(StringComparer.Ordinal);
+    private long _sequence;
     private Pending? _pending;
     public CodexChatTarget? Selected { get; private set; }
     public CodexChatTarget? PendingTarget => _pending?.Target;
@@ -15,8 +18,15 @@ internal sealed class CodexChatSession
     public CodexChatHistory? Current => Selected is { } target ? _history.GetValueOrDefault(target.Id) : null;
     public string Issue => _issues.GetValueOrDefault(Selected?.Id ?? "", "");
 
-    public void Select(CodexChatTarget? target) => Selected = target;
-    public void SetIssue(CodexChatTarget? target, string message) => _issues[target?.Id ?? ""] = message;
+    internal int CachedChatCount => _access.Count;
+    internal int OriginalTextCount => _originalText.Count;
+    public void Select(CodexChatTarget? target) { Selected = target; Touch(target); }
+    public void SetIssue(CodexChatTarget? target, string message)
+    {
+        if (message.Length == 0) _issues.Remove(target?.Id ?? "");
+        else _issues[target?.Id ?? ""] = message;
+        Touch(target);
+    }
 
     public void Accept(CodexChatSubmission submission, string text)
     {
@@ -24,11 +34,17 @@ internal sealed class CodexChatSession
         _pending = new(target, submission.PreviousTurnId, text);
         _issues.Remove(target.Id);
         if (Selected is null) Selected = target;
+        Touch(target);
     }
 
     public void Observe(CodexChatHistory history)
     {
+        history = history with { Turns = history.Turns.TakeLast(20).ToArray() };
         _history[history.Target.Id] = history;
+        var turns = history.Turns.Select(turn => turn.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (var key in _originalText.Keys.Where(key => key.Chat == history.Target.Id && !turns.Contains(key.Turn)).ToArray())
+            _originalText.Remove(key);
+        Touch(history.Target);
         if (_issues.GetValueOrDefault(history.Target.Id) == "Could not read the Codex response. Retrying…")
             _issues.Remove(history.Target.Id);
         if (_pending is not { } pending || pending.Target.Id != history.Target.Id) return;
@@ -81,5 +97,20 @@ internal sealed class CodexChatSession
     {
         if (_pending is { } pending) SetIssue(pending.Target, "Stopped waiting. Codex may still be working.");
         _pending = null;
+    }
+
+    private void Touch(CodexChatTarget? target)
+    {
+        if (target is null) return;
+        _access[target.Id] = ++_sequence;
+        while (_access.Count > _capacity)
+        {
+            var oldest = _access.Where(entry => entry.Key != Selected?.Id && entry.Key != _pending?.Target.Id)
+                .MinBy(entry => entry.Value).Key;
+            _access.Remove(oldest);
+            _history.Remove(oldest);
+            _issues.Remove(oldest);
+            foreach (var key in _originalText.Keys.Where(key => key.Chat == oldest).ToArray()) _originalText.Remove(key);
+        }
     }
 }

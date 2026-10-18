@@ -9,6 +9,7 @@ var checks = 0;
 void Check(bool condition, string message) { if (!condition) throw new Exception(message); checks++; }
 var root = Path.Combine(AppContext.BaseDirectory, "isolated-core", Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(root);
+BrowserChecks.Run(root, Check);
 var paths = AppDataPaths.Isolated(root);
 Check(paths.IsIsolated && paths.LocalDirectory == root && paths.DesktopDirectory == root && paths.TasksPath.StartsWith(root), "Isolated paths never resolve desktop data.");
 
@@ -19,6 +20,16 @@ conversation.Add("YOU", "hello", MessageTone.User);
 Check(conversation.HasActiveConversation && conversation.Messages.Count == 2, "Conversation state is independent of controls.");
 conversation.Clear();
 Check(!conversation.HasActiveConversation && conversation.Messages.Count == 0, "Clearing a conversation restores its state.");
+var bounded = new ConversationSession(maxMessages: 3, maxCharacters: 80);
+for (var index = 0; index < 10; index++) bounded.Add("YOU", "message " + index, MessageTone.User);
+Check(bounded.HasTrimmedMessages && bounded.Messages.Select(message => message.Body).SequenceEqual(["message 7", "message 8", "message 9"]),
+    "Conversation retention bounds old messages while preserving the latest ones in order.");
+bounded.Add("OpenAI", new string('x', 100), MessageTone.Assistant);
+Check(bounded.Messages.Count == 1 && bounded.Messages[0].Body.Length == 100 && bounded.HasActiveConversation,
+    "The character budget retires older messages without truncating the newest reply.");
+bounded.Clear();
+Check(!bounded.HasTrimmedMessages && !bounded.HasActiveConversation && bounded.Messages.Count == 0,
+    "Clearing resets retention bookkeeping and the conversation state.");
 
 var scope = new AsyncOperationScope();
 var started = new TaskCompletionSource();
@@ -38,6 +49,20 @@ Check(ReferenceEquals(stop, scope.StopAsync()), "Shutdown is idempotent.");
 var newWork = false;
 await scope.RunAsync(() => { newWork = true; return Task.CompletedTask; });
 Check(!newWork, "Shutdown rejects new operations.");
+Check(await scope.RunAsync(() => Task.FromResult(42), -1) == -1, "Stopped operations return their explicit fallback without running.");
+var drainingScope = new AsyncOperationScope();
+var cleanUp = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+var draining = drainingScope.RunAsync(async () =>
+{
+    try { await Task.Delay(Timeout.InfiniteTimeSpan, drainingScope.Token); }
+    finally { await cleanUp.Task; }
+    return true;
+}, false);
+var drainStop = drainingScope.StopAsync();
+Check(!drainStop.IsCompleted, "Stop waits for asynchronous cleanup after cancellation.");
+cleanUp.SetResult();
+await drainStop;
+try { await draining; } catch (OperationCanceledException) { }
 
 var failingScope = new AsyncOperationScope();
 using var callback = failingScope.Token.Register(() => throw new InvalidOperationException("Synthetic cancellation failure"));
@@ -67,6 +92,11 @@ Check(weatherSession.NextRefresh == weatherClock.GetUtcNow().AddMinutes(5) && !w
 var preferences = new Preferences("night", 35)
     { Destination = ComposerDestination.Translate, TextOnly = false, VSCodeFolders = [Path.Combine(root, "sample project")] };
 Check(preferences.Save(paths.PreferencesPath), "Preferences save succeeds.");
+Check(Preferences.Load(Path.Combine(root, "missing-preferences.json")).GlobalHotkeyEnabled,
+    "Existing installations enable the global shortcut by default.");
+Check((preferences with { GlobalHotkeyEnabled = false }).Save(paths.PreferencesPath) &&
+    !Preferences.Load(paths.PreferencesPath).GlobalHotkeyEnabled, "Disabling Ctrl+H survives a preferences reload.");
+Check(preferences.Save(paths.PreferencesPath), "Restore synthetic preferences for persistence checks.");
 var original = File.ReadAllText(paths.PreferencesPath);
 var reported = false;
 using (var locked = new FileStream(paths.PreferencesPath, FileMode.Open, FileAccess.Read, FileShare.Read))

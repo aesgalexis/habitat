@@ -77,6 +77,59 @@ Check(Parse(invalidBody.ToJsonString()).Body!.Contains("No text body"), "Invalid
 Check(Parse(Message(text: new string('a', 180000))).Body!.EndsWith("[Message truncated]"), "Limit the rendered body size.");
 
 var freshAccount = new GmailAccount(clientConfig, new GmailTokens("access-test", "refresh-test", DateTimeOffset.UtcNow.AddHours(1)), "sample@example.com");
+var draftScopes = QueryHelpers.ParseQuery(new Uri(GmailAuthService.AuthorizationUrl(clientConfig.ClientId,
+    "http://127.0.0.1:1234/oauth/callback", "state", "challenge", authorizeDrafts: true)).Query)["scope"].ToString().Split(' ');
+Check(draftScopes.Contains(GmailAuthService.ReadOnlyScope) && draftScopes.Contains(GmailAuthService.ComposeScope),
+    "Explicit draft authorization adds compose access and preserves reader access.");
+var draftCalls = 0;
+var draftStatus = HttpStatusCode.OK;
+string? postedMime = null;
+using var draftHttp = new HttpClient(new FakeHandler(async request =>
+{
+    draftCalls++;
+    Check(request.Method == HttpMethod.Post && request.RequestUri!.AbsoluteUri == "https://gmail.googleapis.com/gmail/v1/users/me/drafts",
+        "Saving uses only drafts.create, never a send endpoint.");
+    Check(request.Headers.Authorization?.Parameter == "access-test", "Saving a draft uses the cached authorized account.");
+    using var data = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
+    var raw = data.RootElement.GetProperty("message").GetProperty("raw").GetString()!;
+    Check(!raw.Contains('+') && !raw.Contains('/') && !raw.Contains('='), "Raw MIME uses unpadded base64url.");
+    var padded = raw.Replace('-', '+').Replace('_', '/');
+    postedMime = Encoding.UTF8.GetString(Convert.FromBase64String(padded.PadRight((padded.Length + 3) / 4 * 4, '=')));
+    return draftStatus == HttpStatusCode.Forbidden
+        ? Json("{\"error\":{\"errors\":[{\"reason\":\"insufficientPermissions\"}]}}", draftStatus)
+        : Json("{\"id\":\"draft123\"}", draftStatus);
+}));
+using var draftAuth = new GmailAuthService(new MemoryStore(freshAccount), draftHttp, _ => throw new Exception("Saving must never open a browser."));
+using var draftService = new GmailService(draftAuth, draftHttp);
+const string draftBody = "  Buenos días ☕\r\nestas son las primeras ocho palabras y el resto del correo.  ";
+var savedDraft = await draftService.CreateDraftAsync(draftBody, CancellationToken.None);
+Check(savedDraft.Id == "draft123" && savedDraft.Subject == "Buenos días ☕ estas son las primeras ocho", "Use the first eight words as the subject.");
+var mimeParts = postedMime!.Split("\r\n\r\n", 2);
+Check(Encoding.UTF8.GetString(Convert.FromBase64String(mimeParts[1])) == draftBody &&
+    !mimeParts[0].Contains("\r\nTo:") && !mimeParts[0].Contains("\r\nBcc:"), "Preserve the exact Unicode body, whitespace and line breaks with no recipient.");
+var subjectHeader = mimeParts[0].Split("Subject: ")[1].Split("\r\nContent-Type:")[0];
+Check(string.Concat(System.Text.RegularExpressions.Regex.Matches(subjectHeader, @"=\?UTF-8\?B\?([^?]*)\?=")
+    .Cast<System.Text.RegularExpressions.Match>().Select(match => Encoding.UTF8.GetString(Convert.FromBase64String(match.Groups[1].Value)))) == savedDraft.Subject,
+    "Encode the Unicode subject as a valid MIME header.");
+Check(savedDraft.BrowserUri(freshAccount.Email).Query.Contains("authuser=sample%40example.com") &&
+    Uri.UnescapeDataString(savedDraft.BrowserUri(freshAccount.Email).Fragment).Contains("rfc822msgid:" + savedDraft.RfcMessageId),
+    "Open the saved draft by its Message-ID in the connected account without composing a duplicate.");
+Check(GmailDraft.SubjectFrom("\r\n Hello\tworld \n") == "Hello world", "Normalize subject whitespace only.");
+var longSubject = string.Concat(Enumerable.Repeat("😀", 100));
+var encodedLong = GmailDraft.EncodeMessage("body", longSubject, "test@habitat.local");
+var decodedLong = Encoding.UTF8.GetString(Convert.FromBase64String(encodedLong.Replace('-', '+').Replace('_', '/').PadRight((encodedLong.Length + 3) / 4 * 4, '=')));
+Check(decodedLong.Split("\r\n").TakeWhile(line => line.Length > 0).All(line => line.Length < 998), "Fold long Unicode subject headers safely.");
+draftStatus = HttpStatusCode.Forbidden;
+await Reject<GmailDraftAuthorizationException>(() => draftService.CreateDraftAsync(draftBody, CancellationToken.None), "Missing compose permission requests explicit authorization without opening the browser.");
+draftStatus = HttpStatusCode.ServiceUnavailable;
+var callsBeforeFailure = draftCalls;
+await Reject<HttpRequestException>(() => draftService.CreateDraftAsync(draftBody, CancellationToken.None), "Surface ambiguous save failures.");
+Check(draftCalls == callsBeforeFailure + 1, "Do not retry draft creation after an ambiguous failure and risk duplicates.");
+await Reject<ArgumentException>(() => draftService.CreateDraftAsync(" \r\n", CancellationToken.None), "Do not save an empty draft.");
+using (var unsignedAuth = new GmailAuthService(new MemoryStore(new GmailAccount(clientConfig, null, null)), draftHttp,
+    _ => throw new Exception("Saving while signed out must not launch sign-in.")))
+using (var unsignedDrafts = new GmailService(unsignedAuth, draftHttp))
+    await Reject<GmailDraftAuthorizationException>(() => unsignedDrafts.CreateDraftAsync(draftBody, CancellationToken.None), "Signed-out saves preserve the draft and require explicit authorization.");
 var store = new MemoryStore(freshAccount);
 var requests = new List<string>();
 using var apiClient = new HttpClient(new FakeHandler(request =>

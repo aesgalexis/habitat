@@ -25,7 +25,6 @@ public sealed partial class MainPage
     private readonly Dictionary<ComposerDestination, Button> _externalDestinationButtons = new();
     private ComposerDestination _destination;
     private int _destinationWheelDelta;
-    private bool _destinationLaunching;
     private PointerRoutedEventArgs? _lastDestinationWheelEvent;
     private Func<Uri, Task<bool>> _launchBrowser;
     private Func<string, Task<bool>> _launchNotepad;
@@ -77,7 +76,7 @@ public sealed partial class MainPage
             AutomationProperties.SetHelpText(button, "Select destination. Mouse wheel over the selector cycles destinations. Ctrl + mouse wheel works anywhere in the window.");
             if (destination == ComposerDestination.Codex)
             {
-                const string help = "Send to the visible Codex chat and show its reply in HABITAT.";
+                const string help = "Continue a Codex chat started from HABITAT or start a new chat and show its reply here.";
                 ToolTipService.SetToolTip(button, help);
                 AutomationProperties.SetHelpText(button, help);
             }
@@ -190,83 +189,7 @@ public sealed partial class MainPage
     }
 
     private Task LaunchDestinationAsync(ComposerDestination destination, string draft, bool openExternally = false) =>
-        RunOperationAsync(() => LaunchDestinationCoreAsync(destination, draft, openExternally));
-
-    private async Task LaunchDestinationCoreAsync(ComposerDestination destination, string draft, bool openExternally = false)
-    {
-        if (_destinationLaunching) return;
-        if (!openExternally && string.IsNullOrWhiteSpace(draft)) return;
-        var submission = _composerDrafts.Capture(destination);
-        if (destination == ComposerDestination.Codex && !string.IsNullOrWhiteSpace(draft))
-        {
-            await SendToCodexAsync(draft, submission, openExternally);
-            return;
-        }
-        if (destination == ComposerDestination.Codex && openExternally && CodexChat.Target is not null)
-        {
-            await CodexChat.OpenAsync();
-            return;
-        }
-        if (_destinationSections.TryGetValue(destination, out var section) &&
-            (!openExternally || destination == ComposerDestination.VSCode))
-        {
-            if (section.IsBusy) return;
-            if (section is Features.Destinations.VSCodeSection vscode)
-            {
-                if (string.IsNullOrWhiteSpace(draft)) { await vscode.OpenProjectAsync(); return; }
-                if (await vscode.RunCommandAsync(draft, () =>
-                    { _composerDrafts.Accept(submission); RestoreComposerDraft(); }, openExternally))
-                {
-                    _composerDrafts.Clear(submission);
-                    RestoreComposerDraft();
-                }
-                return;
-            }
-            _composerDrafts.Accept(submission);
-            RestoreComposerDraft();
-            await section.SubmitAsync(draft);
-            return;
-        }
-        if (_destinationLaunching) return;
-        _destinationLaunching = true;
-        UpdateSendState();
-        try
-        {
-            if (destination == ComposerDestination.Terminal && !string.IsNullOrWhiteSpace(draft) &&
-                !await (_confirmTerminal ?? ConfirmTerminalAsync)(draft)) return;
-            _composerDrafts.Accept(submission);
-            RestoreComposerDraft();
-            var opened = destination == ComposerDestination.Terminal
-                ? (_launchTerminal ?? _powerShell.Run)(draft)
-                : destination == ComposerDestination.Run
-                ? (string.IsNullOrWhiteSpace(draft) ? _openRun() : _launchRun(draft))
-                : destination == ComposerDestination.Notepad
-                ? await _launchNotepad(draft)
-                : (openExternally ? ComposerDestinations.ExternalUri(destination, draft, _gmailAuth?.Email,
-                    (_destinationSections[ComposerDestination.Translate] as Features.Translation.TranslateSection)!.TargetLanguage)
-                    : ComposerDestinations.SearchUri(destination, draft, _gmailAuth?.Email)) is { } uri && await _launchBrowser(uri);
-            if (opened)
-            {
-                if (destination != ComposerDestination.Translate) _composerDrafts.Clear(submission);
-                RestoreComposerDraft();
-            }
-            else SetStatus(DestinationLaunchError(destination), StatusTone.Warning);
-        }
-        catch (Exception)
-        {
-            SetStatus(DestinationLaunchError(destination), StatusTone.Warning);
-        }
-        finally
-        {
-            _destinationLaunching = false;
-            UpdateSendState();
-            if (!openExternally) FocusComposer();
-        }
-    }
-
-    private static string DestinationLaunchError(ComposerDestination destination) => destination == ComposerDestination.Run
-        ? "Could not run this command. Check the name or path and try again."
-        : $"Could not open {ComposerDestinations.Label(destination)}. Try again.";
+        RunOperationAsync(() => _composer.SubmitAsync(destination, draft, openExternally));
 
     private async Task<bool> ConfirmTerminalAsync(string command)
     {

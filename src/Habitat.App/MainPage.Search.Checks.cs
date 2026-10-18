@@ -58,9 +58,9 @@ public sealed partial class MainPage
             SelectDestination(target);
             if (Composer.Text != query || section.Results.Count != 1) throw new Exception("Returning to search must restore its own draft and results.");
 
-            fake.Error = new BrowserSearchException("Open Chrome and reload the HABITAT extension, then retry.");
+            fake.Error = new BrowserSearchException("Open your selected browser and reload the HABITAT extension, then retry.");
             await section.SubmitAsync(query);
-            if (section.Results.Count != 0 || !section.StatusText.StartsWith("Open Chrome") || Composer.Text != query)
+            if (section.Results.Count != 0 || !section.StatusText.StartsWith("Open your selected browser") || Composer.Text != query)
                 throw new Exception("Search errors must explain recovery and discard stale results without losing the query.");
             fake.Error = null;
             await section.RetryAsync();

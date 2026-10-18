@@ -81,13 +81,20 @@ internal sealed class GmailSession(Func<GmailAuthService> createAuth, Func<Gmail
         finally { IsBusy = false; Notify(token); }
     }
 
-    public async Task SignInAsync(Func<bool> inboxOnly, CancellationToken token)
+    public async Task<GmailDraft> CreateDraftAsync(string text, CancellationToken token)
+    {
+        Initialize();
+        await Auth!.RestoreSavedSessionAsync(token);
+        return await _gmail!.CreateDraftAsync(text, token);
+    }
+
+    public async Task SignInAsync(Func<bool> inboxOnly, CancellationToken token, bool authorizeDrafts = false)
     {
         if (IsBusy || Auth is null || token.IsCancellationRequested) return;
         IsBusy = true; Error = null;
         SignInCancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
         Notify(token);
-        try { await Auth.SignInAsync(SignInCancellation.Token); NextRefresh = DateTimeOffset.MinValue; }
+        try { await Auth.SignInAsync(SignInCancellation.Token, authorizeDrafts); NextRefresh = DateTimeOffset.MinValue; }
         catch (OperationCanceledException) { Error = "Sign-in cancelled or timed out. You can try again."; }
         catch (Exception exception) { Error = describeError(exception); }
         finally

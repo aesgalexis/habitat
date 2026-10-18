@@ -25,6 +25,13 @@ Estas reglas se aplican a todo el repositorio.
 - Antes de entregar nuevos elementos o modificar existentes, revisa sus textos visibles y de accesibilidad para evitar mezclar idiomas. Actualiza las comprobaciones y las referencias de la documentación cuando cambien las etiquetas.
 - Esta regla se aplica al producto; la documentación del proyecto y la conversación con el usuario pueden estar en español.
 
+## Pantalla inicial común de los destinos
+
+- La pantalla inicial de todos los destinos mantiene siempre el mismo formato y disposición de tres elementos: indicación de la acción, editor con cursor y botón para ejecutar/enviar esa acción.
+- Conserva la indicación sobre el editor, el editor centrado y el botón de acción debajo. Solo cambian los textos correspondientes al destino, siempre en inglés (por ejemplo: **Draft a new email…**, cursor y **Draft email**).
+- No añadas explicaciones de uso, resultados, estados informativos ni barras de acciones de una sección a esta pantalla inicial. La sección con resultados y sus acciones aparece tras ejecutar la acción; limpiar debe devolver la pantalla inicial y el foco al editor.
+- Verifica esta estructura compartida al crear o modificar un destino; no fuerces la vista de resultados ni desplaces el editor al pie antes de la primera acción.
+
 ## Actualización de la aplicación durante cambios
 
 - El usuario autoriza cerrar HABITAT cuando sea necesario para compilar o instalar cambios en este proyecto. No pidas confirmación adicional para cerrar la aplicación durante este trabajo.

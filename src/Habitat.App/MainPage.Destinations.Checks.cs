@@ -111,7 +111,7 @@ public sealed partial class MainPage
 
             await CheckCodexUiAsync(logPath);
 
-            foreach (var destination in new[] { ComposerDestination.Gmail, ComposerDestination.GoogleMaps })
+            foreach (var destination in new[] { ComposerDestination.GoogleMaps })
             {
                 SelectDestination(destination);
                 Composer.Text = fullText;
@@ -120,7 +120,8 @@ public sealed partial class MainPage
                     Conversation.Children.Count != 0 || _bridge!.HasMessageInFlight)
                     throw new InvalidOperationException($"{destination} must open the correct URI without using chat.");
             }
-            File.AppendAllText(logPath, "PASS: Gmail draft and Google Maps routing preserve the full encoded input\n");
+            File.AppendAllText(logPath, "PASS: Google Maps routing preserves the full encoded input\n");
+            await CheckGmailDraftUiAsync(logPath);
 
             await CheckVSCodeUiAsync(logPath);
             SelectDestination(ComposerDestination.Terminal);

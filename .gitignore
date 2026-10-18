@@ -4,6 +4,7 @@ __pycache__/
 .venv/
 venv/
 .dotnet-local/
+.dotnet-cli/
 .nuget/
 
 # .NET / WinUI build outputs

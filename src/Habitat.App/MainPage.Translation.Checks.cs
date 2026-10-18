@@ -21,7 +21,8 @@ public sealed partial class MainPage
         {
             _services.Translation = fake;
             var externalCalls = 0;
-            _launchBrowser = _ => { externalCalls++; return Task.FromResult(true); };
+            Uri? openedTranslation = null;
+            _launchBrowser = uri => { openedTranslation = uri; externalCalls++; return Task.FromResult(true); };
             SelectDestination(ComposerDestination.Translate);
             Composer.Text = original;
             await Task.Delay(80);
@@ -37,6 +38,13 @@ public sealed partial class MainPage
             section.View.UpdateLayout();
             if (!HasVisibleText(section.View, section.ResultText) || !HasVisibleText(section.View, "English"))
                 throw new InvalidOperationException("The translated text and selected language name must actually render in the native section.");
+            Composer.Text = "A revised source draft";
+            await section.OpenTranslationAsync();
+            if (externalCalls != 1 || openedTranslation?.Host != "translate.google.com" ||
+                !openedTranslation.Query.Contains("tl=en") || !openedTranslation.Query.Contains("text=" + Uri.EscapeDataString(original)) ||
+                Composer.Text != "A revised source draft" || fake.Calls != 1 || !section.CanCopy)
+                throw new InvalidOperationException("Open in browser must use the submitted translation source and language, preserve a revised draft and avoid another translation request.");
+            Composer.Text = original;
             foreach (var destination in new[] { ComposerDestination.Google, ComposerDestination.YouTube, ComposerDestination.OpenAI })
             {
                 SelectDestination(destination);
@@ -70,9 +78,9 @@ public sealed partial class MainPage
             Conversation.Children.Clear();
             SelectDestination(ComposerDestination.Translate);
 
-            fake.Error = new BrowserTranslationException("Open Chrome and reconnect the HABITAT extension, then retry.");
+            fake.Error = new BrowserTranslationException("Open your selected browser and reconnect the HABITAT extension, then retry.");
             await section.SubmitAsync(original);
-            if (!section.StatusText.StartsWith("Open Chrome") || section.CanCopy || section.IsBusy || Composer.Text != original)
+            if (!section.StatusText.StartsWith("Open your selected browser") || section.CanCopy || section.IsBusy || Composer.Text != original)
                 throw new InvalidOperationException("Service failure must be recoverable without altering the draft or exposing stale results.");
             fake.Error = null;
             await section.RetryAsync();
@@ -95,16 +103,36 @@ public sealed partial class MainPage
                 throw new InvalidOperationException("Cancel must immediately release the section even when the browser never completes.");
             fake.Pending.SetResult(new TranslationResult("Canceled result", "en"));
 
+            fake.Pending = new TaskCompletionSource<TranslationResult>();
+            var staleTranslation = fake.Pending;
+            pending = section.SubmitAsync(original);
+            section.RequestClear();
+            if (section.HasContent || section.IsBusy || section.ResultText.Length != 0 || section.CanCopy || section.StatusText.Length != 0 ||
+                Composer.Text.Length != 0 || _destinationContent.Visibility != Visibility.Collapsed || Composer.VerticalAlignment != VerticalAlignment.Top)
+                throw new InvalidOperationException("Clear translation must cancel pending work, clear the original and result and return to the centered welcome editor.");
+            fake.Pending = new TaskCompletionSource<TranslationResult>();
+            var freshTranslation = section.SubmitAsync("Fresh source");
+            await pending;
+            staleTranslation.SetResult(new TranslationResult("Must stay cleared", "en"));
+            await Task.Yield();
+            if (!section.IsBusy || section.ResultText.Length != 0 || section.CanCopy)
+                throw new InvalidOperationException("A cleared translation must never restore stale text or release a newer translation request.");
+            fake.Pending.SetResult(new TranslationResult("Fresh result", "en"));
+            await freshTranslation;
+            if (section.IsBusy || section.ResultText != "Fresh result" || !section.CanCopy)
+                throw new InvalidOperationException("Translating again after Clear must display only the new result.");
+            section.RequestClear();
+
             string? copied = null;
             using var copySection = new TranslateSection((_, _, _) => Task.FromResult(new TranslationResult("<b>plain text</b> & ☕", "en")),
                 text => { copied = text; return true; }, _ => { });
             await copySection.SubmitAsync(original);
-            if (!copySection.CopyResult() || copied != "<b>plain text</b> & ☕" || copySection.StatusText != "Copied.")
+            if (!copySection.CopyResult() || copied != "<b>plain text</b> & ☕" || copySection.CopyStatusText != "Copied." || copySection.StatusText.Length != 0)
                 throw new InvalidOperationException("Copy must transfer only the exact plain translated text.");
             using var failedCopy = new TranslateSection((_, _, _) => Task.FromResult(new TranslationResult("Text", "en")),
                 _ => false, _ => { });
             await failedCopy.SubmitAsync(original);
-            if (failedCopy.CopyResult() || !failedCopy.StatusText.StartsWith("Could not copy."))
+            if (failedCopy.CopyResult() || !failedCopy.CopyStatusText.StartsWith("Could not copy.") || failedCopy.StatusText.Length != 0)
                 throw new InvalidOperationException("Clipboard failures must retain selectable text and explain recovery.");
 
             fake.Pending = new TaskCompletionSource<TranslationResult>();
@@ -115,7 +143,7 @@ public sealed partial class MainPage
             fake.Pending.SetResult(new TranslationResult("Late result", "en"));
             await pending;
             if (delayedSection.ResultText.Length != 0) throw new InvalidOperationException("Disposed sections must ignore late translations.");
-            File.AppendAllText(logPath, "PASS: original writing view and hidden selector before Enter; English default; three languages; native results, exact source, copy, independent modes, retry, cancel and stale-response/shutdown protection (browser simulated)\n");
+            File.AppendAllText(logPath, "PASS: original writing view and hidden selector before Enter; English default; three languages; native results, exact source, copy, browser opening, clear, independent modes, retry, cancel and stale-response/shutdown protection (browser simulated)\n");
         }
         finally
         {

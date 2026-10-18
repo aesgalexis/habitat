@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using Habitat;
 using Habitat.Services;
+using Habitat.Features.VSCode;
 
 internal static class VSCodeChecks
 {
@@ -77,6 +78,24 @@ internal static class VSCodeChecks
         var newerEndpoint = endpoint with { SessionId = Guid.NewGuid().ToString() };
         var newer = new VSCodeProject(newerEndpoint, context with { SessionId = newerEndpoint.SessionId, LastFocused = 100, ActivePath = secondFolder.Path }, secondFolder);
         check(VSCodeProjects.Active([projects[0], newer]) == newer, "VS Code follows the most recently focused window");
+        var selection = new VSCodeProjectSelection();
+        selection.Refresh([projects[0]]);
+        selection.Resolved(projects[0]);
+        selection.Refresh([projects[0], newer]);
+        check(selection.Selected?.Project == newer, "Resolving a command's project preserves automatic focus following");
+        selection.Select(selection.Choices.First(choice => choice.Project == projects[0]));
+        selection.Resolved(projects[0]);
+        selection.Refresh([projects[0], newer]);
+        check(selection.Selected?.Project == projects[0], "Explicit project selection stays pinned across sends and focus changes");
+        selection.Refresh([]);
+        check(selection.Selected?.Folder == folder && selection.Selected.Project is null,
+            "A pinned project retains its directory after disconnecting without retaining a stale endpoint");
+        var reconnected = projects[0] with { Endpoint = newerEndpoint };
+        selection.Refresh([reconnected, newer]);
+        check(selection.Selected?.Project == reconnected, "A pinned folder reconnects to its new VS Code window session");
+        selection.SelectFolder(secondFolder.Path);
+        selection.Refresh([projects[0], newer]);
+        check(selection.Selected?.Folder?.Path == secondFolder.Path, "The folder picker pins its directory independently of window focus");
         var empty = newer with { Context = newer.Context with { ActivePath = null, Folders = [] }, Folder = new("No folder", "") };
         check(VSCodeProjects.Active([projects[0], empty]) is null, "An empty active VS Code window never falls back to an older project");
         check(VSCodeProjects.Active([projects[0] with { Context = context with { ActivePath = null } }]) is null,

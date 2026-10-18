@@ -16,11 +16,40 @@ public sealed partial class MainPage
                 throw new InvalidOperationException("UI checks did not receive isolated services.");
             File.AppendAllText(path, "PASS: isolated services, empty in-memory Gmail credentials and explicit data paths\n");
             await _initialTaskLoad;
+            if (Environment.GetCommandLineArgs().Contains("--preferences-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
+                await CheckPreferencesUiAsync(path);
+            if (Environment.GetCommandLineArgs().Contains("--preferences-ui-only"))
+            {
+                await StopAsync();
+                await _services.DisposeAsync();
+                window.Close();
+                Application.Current.Exit();
+                return;
+            }
+            if (Environment.GetCommandLineArgs().Contains("--gmail-ui-only"))
+            {
+                await CheckGmailDraftUiAsync(path);
+                await StopAsync();
+                await _services.DisposeAsync();
+                window.Close();
+                Application.Current.Exit();
+                return;
+            }
+            await CheckActivationUiAsync(path);
+            if (Environment.GetCommandLineArgs().Contains("--hotkey-ui-only"))
+            {
+                await StopAsync();
+                await _services.DisposeAsync();
+                window.Close();
+                Application.Current.Exit();
+                return;
+            }
             if (_sidebarExpanded || TasksPreview.Visibility != Visibility.Collapsed ||
                 GmailMessageButton.Visibility != Visibility.Collapsed ||
                 Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(SidebarToggle) != "Expand sidebar")
                 throw new InvalidOperationException("The sidebar must start collapsed with an accessible expansion action.");
-            File.AppendAllText(path, "PASS: sidebar starts collapsed with Gmail and Tasks icons\n");
+            CheckWeatherSidebar();
+            File.AppendAllText(path, "PASS: sidebar starts collapsed with Gmail, Tasks and compact weather\n");
             if (Environment.GetCommandLineArgs().Contains("--vscode-ui-only"))
             {
                 await CheckVSCodeUiAsync(path);
@@ -55,7 +84,12 @@ public sealed partial class MainPage
                 Application.Current.Exit();
                 return;
             }
-            await CheckDestinationsUiAsync(path);
+            if (!Environment.GetCommandLineArgs().Contains("--sidebar-ui-only"))
+            {
+                await CheckDestinationsUiAsync(path);
+                await CheckSectionShutdownAsync(path);
+                CheckConversationRetentionUi(path);
+            }
             SetTasksOpen(true);
             await Task.Delay(700);
             if (!_tasksPanelOpen || _taskArea.Visibility != Visibility.Visible || TasksButton.Flyout is not null ||
@@ -218,9 +252,10 @@ public sealed partial class MainPage
             toggleInvoke.Invoke();
             await Task.Delay(100);
             if (!_sidebarExpanded || TasksButton.ActualWidth != GmailWidget.ActualWidth ||
-                Microsoft.UI.Xaml.Controls.Grid.GetRow(GmailWidget) != 0 || Microsoft.UI.Xaml.Controls.Grid.GetRow(TasksButton) != 1)
+                Microsoft.UI.Xaml.Controls.Grid.GetRow(GmailWidget) != 1 || Microsoft.UI.Xaml.Controls.Grid.GetRow(TasksButton) != 2)
                 throw new InvalidOperationException("Sidebar order or equal widget widths failed.");
-            File.AppendAllText(path, "PASS: Gmail above Tasks with equal widths in the expanded sidebar\n");
+            File.AppendAllText(path, "PASS: Weather above Gmail above Tasks with equal widths in the expanded sidebar\n");
+            CheckWeatherSidebar();
             var taskGlyph = (Microsoft.UI.Xaml.Controls.FontIcon)TasksSymbol.Children[0];
             var mailGlyph = (Microsoft.UI.Xaml.Controls.FontIcon)((Microsoft.UI.Xaml.Controls.StackPanel)GmailButton.Content).Children[0];
             var expandedTaskPosition = taskGlyph.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point());
@@ -237,6 +272,7 @@ public sealed partial class MainPage
                 TasksPreview.Visibility != Visibility.Collapsed || GmailMessageButton.Visibility != Visibility.Collapsed ||
                 TasksBadge.Visibility != Visibility.Collapsed || GmailBadge.Visibility != Visibility.Collapsed)
                 throw new InvalidOperationException("Conversation did not collapse the sidebar to icons.");
+            CheckWeatherSidebar();
             if (taskGlyph.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point()) != expandedTaskPosition ||
                 mailGlyph.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point()) != expandedMailPosition)
                 throw new InvalidOperationException("Icon coordinates changed while collapsing the sidebar.");
@@ -280,7 +316,7 @@ public sealed partial class MainPage
                 Math.Abs(taskCenter - 20) > 0.5 || Math.Abs(mailCenter - 20) > 0.5 ||
                 _widgets.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point()).X != sidebarLeft)
                 throw new InvalidOperationException("Collapsed rail icons/toggle are not centered or the left edge moved.");
-            if (ReferenceEquals(SidebarToggle.Parent, _widgets) || _widgets.RowDefinitions.Count != 2 ||
+            if (ReferenceEquals(SidebarToggle.Parent, _widgets) || _widgets.RowDefinitions.Count != 3 ||
                 _widgets.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point()).Y != 20 || sidebarLeft != 12 ||
                 SidebarToggle.Content is not null || SidebarToggle.ActualHeight <= _widgets.ActualHeight ||
                 ((Microsoft.UI.Xaml.Media.SolidColorBrush)SidebarToggle.Background).Color.A != 0)
@@ -299,6 +335,7 @@ public sealed partial class MainPage
             await Task.Delay(300);
             if (_root.Visibility != Visibility.Collapsed || _taskArea.Visibility != Visibility.Visible)
                 throw new InvalidOperationException("Narrow task drawer must preserve and temporarily hide the chat.");
+            CheckWeatherSidebar();
             CheckTasksBelowWidgets();
             SetTasksOpen(false);
             await Task.Delay(200);
@@ -311,7 +348,22 @@ public sealed partial class MainPage
             await Task.Delay(300);
             if (_sidebarExpanded) throw new InvalidOperationException("An empty conversation must restore the collapsed sidebar default.");
             File.AppendAllText(path, "PASS: narrow drawer preserves the conversation; empty chat keeps the sidebar collapsed\n");
-            File.AppendAllText(path, "PASS: Tasks icon click opens below both widgets in collapsed, expanded and narrow states, including toggling with Tasks open\n");
+
+            toggleInvoke.Invoke();
+            SetTasksOpen(true);
+            _tasks = Enumerable.Range(0, 30).Select(index => new Models.TaskItem(
+                Guid.NewGuid(), $"Weather clearance task {index}", false, DateTimeOffset.UtcNow)).ToList();
+            RenderTasks();
+            window.AppWindow.Resize(new Windows.Graphics.SizeInt32(860, 480));
+            await Task.Delay(300);
+            CheckTasksBelowWidgets();
+            CheckWeatherSidebar();
+            var taskViewportBottom = _taskArea.TransformToVisual(this).TransformPoint(
+                new Windows.Foundation.Point(0, _taskArea.ActualHeight)).Y;
+            if (taskViewportBottom > ((Microsoft.UI.Xaml.Controls.Grid)Content).ActualHeight - 24 || _taskArea.ScrollableHeight <= 0)
+                throw new InvalidOperationException("Long task lists must scroll below the sidebar widgets in short windows.");
+            File.AppendAllText(path, "PASS: top weather adapts to both sidebar states; long tasks scroll below the widgets in short windows\n");
+            File.AppendAllText(path, "PASS: Tasks icon click opens below all three widgets in collapsed, expanded and narrow states, including toggling with Tasks open\n");
             await StopAsync();
             await _services.DisposeAsync();
             window.Close();
@@ -330,8 +382,29 @@ public sealed partial class MainPage
             var panelTop = _taskArea.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point()).Y;
             var tasksBottom = TasksButton.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, TasksButton.ActualHeight)).Y;
             var gmailBottom = GmailWidget.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, GmailWidget.ActualHeight)).Y;
-            if (panelTop < tasksBottom + 16 || panelTop < gmailBottom || GmailWidget.Visibility != Visibility.Visible)
-                throw new InvalidOperationException("Tasks panel invades the Tasks/Gmail widget region.");
+            var weatherBottom = WeatherBlock.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, WeatherBlock.ActualHeight)).Y;
+            if (panelTop < tasksBottom + 16 || panelTop < gmailBottom || panelTop < weatherBottom || GmailWidget.Visibility != Visibility.Visible)
+                throw new InvalidOperationException("Tasks panel invades the Weather/Gmail/Tasks widget region.");
+            CheckWeatherSidebar();
+        }
+
+        void CheckWeatherSidebar()
+        {
+            var position = WeatherBlock.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point());
+            var iconCenter = WeatherSymbol.TransformToVisual(WeatherBlock).TransformPoint(
+                new Windows.Foundation.Point(WeatherSymbol.ActualWidth / 2, 0)).X;
+            var gmailTop = GmailWidget.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point()).Y;
+            if (!ReferenceEquals(WeatherBlock.Parent, _widgets) || WeatherBlock.Visibility != Visibility.Visible ||
+                Math.Abs(position.X - 12) > 0.5 || Math.Abs(iconCenter - 20) > 0.5 ||
+                Math.Abs(position.Y - 20) > 0.5 || position.Y + WeatherBlock.ActualHeight + 12 > gmailTop + 0.5 ||
+                Microsoft.UI.Xaml.Controls.Grid.GetRow(WeatherBlock) != 0 ||
+                WeatherBlock.ActualWidth != _widgets.ActualWidth)
+                throw new InvalidOperationException("Weather must stay at the top of the sidebar above Gmail with aligned icons and matching width.");
+            if (WeatherDetails.Visibility != (_sidebarExpanded ? Visibility.Visible : Visibility.Collapsed) ||
+                WeatherCompactTemperature.Visibility != (_sidebarExpanded ? Visibility.Collapsed : Visibility.Visible) ||
+                WeatherCompactTemperature.Text != WeatherTemperature.Text ||
+                !Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(WeatherCompactTemperature).Contains(WeatherOutlook.Text))
+                throw new InvalidOperationException("Weather must retain its temperature and accessible forecast in both sidebar states.");
         }
     }
 }

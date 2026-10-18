@@ -27,7 +27,7 @@ internal sealed class BrowserTranslationService(TimeProvider? clock = null) : IT
         TaskCompletionSource<TranslationResult> completion;
         lock (_gate)
         {
-            if (!IsConnected) throw new BrowserTranslationException("Open Chrome and reload the HABITAT extension to connect Google Translate, then retry.");
+            if (!IsConnected) throw new BrowserTranslationException("Open your selected browser and reload the HABITAT extension to connect Google Translate, then retry.");
             if (_request is not null) throw new BrowserTranslationException("Wait for the current translation to finish.");
             LastDiagnostic = null;
             _request = new BrowserTranslationRequest(Guid.NewGuid().ToString("N"), text, targetLanguage);
@@ -67,25 +67,25 @@ internal sealed class BrowserTranslationService(TimeProvider? clock = null) : IT
         {
             if (!ReferenceEquals(_owner, owner)) return;
             _owner = null;
-            _completion?.TrySetException(new BrowserTranslationException("Chrome disconnected. Reconnect the HABITAT extension, then retry."));
+            _completion?.TrySetException(new BrowserTranslationException("The selected browser disconnected. Reconnect the HABITAT extension, then retry."));
         }
     }
 
     private static string PageError(string error) => error switch
     {
-        "consent" => "Open Google Translate in Chrome and complete its consent screen, then retry.",
+        "consent" => "Open Google Translate in your selected browser and complete its consent screen, then retry.",
         "permission" => "Reload the HABITAT extension and allow access to translate.google.com, then retry.",
         "background-permission" => "Reload the HABITAT extension and allow its background translation permission, then retry.",
         "background-unavailable" => "Could not keep Google Translate active in the background. Close its DevTools or reload the HABITAT extension, then retry.",
         "page-changed" => "The Google Translate tab changed. Retry to reopen the translator.",
-        "timeout" => "Google Translate did not return a result. Check its tab in Chrome, then retry.",
-        _ => "Could not read the translation from Google Translate. Check its tab in Chrome, then retry."
+        "timeout" => "Google Translate did not return a result. Check its tab in your selected browser, then retry.",
+        _ => "Could not read the translation from Google Translate. Check its tab in your selected browser, then retry."
     };
 
     internal static string ErrorMessage(Exception exception) => exception switch
     {
         BrowserTranslationException => exception.Message,
         OperationCanceledException => "Translation timed out. Try again.",
-        _ => "Could not translate in Chrome. Check Google Translate and try again."
+        _ => "Could not translate in your selected browser. Check Google Translate and try again."
     };
 }

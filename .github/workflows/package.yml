@@ -1,0 +1,59 @@
+name: Package HABITAT for WinGet
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (must match VERSION, currently 0.9.0)'
+        required: true
+      installer_url:
+        description: 'Final versioned HTTPS URL for the installer (not latest)'
+        required: true
+      package_url:
+        description: 'Public product or distribution page'
+        required: true
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: windows-latest
+    env:
+      HABITAT_VERSION: ${{ inputs.version }}
+      HABITAT_INSTALLER_URL: ${{ inputs.installer_url }}
+      HABITAT_PACKAGE_URL: ${{ inputs.package_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify production sources
+        shell: powershell
+        run: ./scripts/verify.ps1
+      - name: Install compiler
+        shell: powershell
+        run: |
+          choco install innosetup --version=6.7.1 --yes --no-progress --allow-downgrade
+          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed.' }
+      - name: Build installer and candidate manifests
+        shell: powershell
+        run: |
+          ./scripts/build-installer.ps1 -Version $env:HABITAT_VERSION
+          $installer = "artifacts/distribution/$env:HABITAT_VERSION/HABITAT-$env:HABITAT_VERSION-x64-setup.exe"
+          ./scripts/new-winget-manifest.ps1 -Version $env:HABITAT_VERSION -InstallerPath $installer -InstallerUrl $env:HABITAT_INSTALLER_URL -PackageUrl $env:HABITAT_PACKAGE_URL
+      - name: Check silent installation and uninstall
+        shell: powershell
+        run: ./scripts/test-installer.ps1 -InstallerPath "artifacts/distribution/$env:HABITAT_VERSION/HABITAT-$env:HABITAT_VERSION-x64-setup.exe"
+      - name: Validate WinGet schema
+        shell: powershell
+        run: |
+          winget validate --manifest "artifacts/winget/manifests/a/aesgalexis/HABITAT/$env:HABITAT_VERSION" --disable-interactivity
+          if ($LASTEXITCODE -ne 0) { throw 'WinGet manifest validation failed.' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HABITAT-${{ inputs.version }}-x64-winget-candidate
+          path: |
+            artifacts/distribution/${{ inputs.version }}/*
+            artifacts/winget/manifests/**
+          if-no-files-found: error

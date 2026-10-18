@@ -16,15 +16,12 @@ namespace Habitat;
 
 public sealed partial class MainPage : Page
 {
-    private const string TextOnlyDirective =
-        "[HABITAT: Reply in plain text unless asked otherwise.]";
-
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _timer;
     private readonly ConversationSession _conversation = new();
     private readonly Grid _root = new();
-    private readonly Grid _header = new();
-    private readonly ScrollViewer ConversationScroll = new();
-    private readonly StackPanel Conversation = new();
+    private readonly Features.Conversation.ConversationView _conversationView;
+    private ScrollViewer ConversationScroll => _conversationView.Scroll;
+    private StackPanel Conversation => _conversationView.Messages;
     private readonly TextBox Composer = new();
     private readonly TextBlock ComposerHint = new()
     {
@@ -39,8 +36,12 @@ public sealed partial class MainPage : Page
     private readonly AppServices _services;
     private WeatherService _weather => _services.Weather;
     private readonly CancellationTokenSource _weatherCancellation = new();
-    private readonly Grid WeatherBlock = new();
-    private readonly Viewbox WeatherSymbol = new() { Width = 32, Height = 32 };
+    private readonly Grid WeatherBlock = new()
+    {
+        Height = 78, HorizontalAlignment = HorizontalAlignment.Left,
+        VerticalAlignment = VerticalAlignment.Center
+    };
+    private readonly Viewbox WeatherSymbol = new() { Width = 24, Height = 24, HorizontalAlignment = HorizontalAlignment.Center };
     private readonly TextBlock WeatherTemperature = new() { Text = "—", FontSize = 22 };
     private readonly TextBlock WeatherLocation = new() { FontSize = 11, Opacity = 0.72 };
     private readonly TextBlock WeatherOutlook = new() { Text = "Loading weather…", FontSize = 12, Opacity = 0.8 };
@@ -61,6 +62,8 @@ public sealed partial class MainPage : Page
     internal MainPage(AppServices services, IWindowHost? windowHost = null)
     {
         _services = services;
+        _composer = new(_composerDrafts, RestoreComposerDraft);
+        _conversationView = new(_conversation, ToneBrush, TextBrush);
         _windowHost = windowHost;
         _preferences = Preferences.Load(services.Paths.PreferencesPath);
         _taskStore = services.Tasks;
@@ -104,28 +107,6 @@ public sealed partial class MainPage : Page
         _root.MaxWidth = 867;
         _root.HorizontalAlignment = HorizontalAlignment.Stretch;
         _root.SizeChanged += (_, _) => UpdateWritingLayout();
-
-        var header = _header;
-        header.ColumnSpacing = 18;
-        header.HorizontalAlignment = HorizontalAlignment.Right;
-        header.VerticalAlignment = VerticalAlignment.Top;
-        header.Margin = new Thickness(0, 20, 0, 0);
-        header.SizeChanged += (_, _) => UpdateWritingLayout();
-        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        WeatherBlock.ColumnSpacing = 12;
-        WeatherBlock.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        WeatherBlock.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        WeatherSymbol.VerticalAlignment = VerticalAlignment.Center;
-        WeatherBlock.Children.Add(WeatherSymbol);
-        var weatherText = new StackPanel { Spacing = 2, MaxWidth = 230 };
-        WeatherLocation.Text = _preferences.UseDeviceLocation ? "Current location" : _preferences.WeatherCity;
-        WeatherLocation.TextTrimming = TextTrimming.CharacterEllipsis;
-        weatherText.Children.Add(WeatherLocation);
-        weatherText.Children.Add(WeatherTemperature);
-        weatherText.Children.Add(WeatherOutlook);
-        Grid.SetColumn(weatherText, 1);
-        WeatherBlock.Children.Add(weatherText);
-        header.Children.Add(WeatherBlock);
 
         OverflowButton.Content = new FontIcon { Glyph = "\uE700", FontSize = 14 };
         OverflowButton.Width = 40;
@@ -176,6 +157,7 @@ public sealed partial class MainPage : Page
             {
                 _composerDrafts.Edit(_destination, Composer.Text);
                 if (_destination == ComposerDestination.Codex) CancelPendingCodexSend();
+                ResetEmptySearch();
             }
         };
         Composer.TextChanged += (_, _) => { UpdateWritingLayout(); UpdateExternalDestinationState(); };
@@ -209,13 +191,12 @@ public sealed partial class MainPage : Page
         _root.Children.Add(SendButton);
 
         surface.Children.Add(_root);
-        surface.Children.Add(header);
         BuildTaskInterface(surface);
         BuildGmailInterface(_widgets);
         surface.Children.Add(_widgets);
+        BuildWeatherInterface(_widgets);
         BuildDestinationInterface(surface);
         surface.SizeChanged += (_, _) => SizeTopWidgets(surface);
-        header.SizeChanged += (_, _) => SizeTopWidgets(surface);
         Content = surface;
         PaintSurface();
     }
@@ -248,7 +229,8 @@ public sealed partial class MainPage : Page
         if (height <= 0) return;
         ComposerHint.Visibility = Composer.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
 
-        var historyTop = _header.Margin.Top + _header.ActualHeight + 10;
+        // Preserve the space above the content that the former weather header occupied.
+        const double historyTop = 100;
         ConversationScroll.Margin = new Thickness(0, historyTop, 0, 0);
         if (_destination == ComposerDestination.OpenAI && Conversation.Children.Count > 0 || HasDestinationSection)
         {
@@ -322,6 +304,7 @@ public sealed partial class MainPage : Page
 
     private void MainPage_Loaded(object sender, RoutedEventArgs e)
     {
+        _ = RunOperationAsync(ApplyGlobalHotkeyAsync);
         ApplyPreferences();
         SetStatus("Starting bridge…", StatusTone.Active);
         _timer.Start();
@@ -355,46 +338,15 @@ public sealed partial class MainPage : Page
 
     private void SendCurrentMessage(bool openExternally = false)
     {
-        if (_operations.IsStopping || _destinationLaunching) return;
-        var text = Composer.Text.Trim();
-        if (_destination != ComposerDestination.OpenAI)
-        {
-            var busy = _destination == ComposerDestination.Codex ? _codexSendCancellation is not null || CodexChat.IsBusy :
-                _destinationSections.TryGetValue(_destination, out var section) ? section.IsBusy : _destinationLaunching;
-            if (!busy && !string.IsNullOrWhiteSpace(text))
-                _ = LaunchDestinationAsync(_destination, Composer.Text);
-            else FocusComposer();
-            return;
-        }
-        if (string.IsNullOrWhiteSpace(text) || _bridge is null)
-        {
-            FocusComposer();
-            return;
-        }
-
-        var outboundText = _preferences.TextOnly
-            ? $"{text}\n\n{TextOnlyDirective}"
-            : text;
-
-        if (!_bridge.TryQueueMessage(outboundText, out var reason, openExternally))
-        {
-            SetStatus(reason, StatusTone.Warning);
-            FocusComposer();
-            return;
-        }
-
-        AddMessage("YOU", text, MessageTone.User);
-        var submission = _composerDrafts.Capture(_destination);
-        _composerDrafts.Accept(submission);
-        _composerDrafts.Clear(submission);
-        RestoreComposerDraft();
-        SetStatus("Sending to Chrome…", StatusTone.Active);
-        UpdateSendState();
-        if (!openExternally) FocusComposer();
+        if (_operations.IsStopping || _composer.IsExclusiveBusy) return;
+        if (!_composer.CanSend(_destination, Composer.Text, openExternally) || string.IsNullOrWhiteSpace(Composer.Text))
+        { FocusComposer(); return; }
+        _ = LaunchDestinationAsync(_destination, Composer.Text, openExternally);
     }
 
     private void Timer_Tick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
     {
+        RefreshBrowserPreference();
         TickGmail();
         TickTasks(DateTimeOffset.UtcNow);
         if (!_weatherRefreshing && !_appearanceDialogOpen && DateTimeOffset.UtcNow >= _nextWeatherRefresh)
@@ -415,7 +367,7 @@ public sealed partial class MainPage : Page
         if (_bridge.TryExpireMessage(BridgeProtocol.RequestTimeout))
         {
             AddMessage("SYSTEM", "The request timed out. Check ChatGPT before sending it again.", MessageTone.Muted);
-            SetStatus("Timed out — check Chrome", StatusTone.Danger);
+            SetStatus("Timed out — check your selected browser", StatusTone.Danger);
         }
         else if (!_bridge.HasMessageInFlight && _destination == ComposerDestination.OpenAI)
         {
@@ -454,6 +406,7 @@ public sealed partial class MainPage : Page
             _nextWeatherRefresh = DateTimeOffset.UtcNow.AddMinutes(5);
             WeatherOutlook.Text = _weatherSnapshot is null ? "Weather unavailable" :
                 $"Offline · updated {_weatherSnapshot.UpdatedAt.ToLocalTime():HH:mm}";
+            UpdateWeatherSummary();
         }
     }
 
@@ -476,7 +429,9 @@ public sealed partial class MainPage : Page
         var text = TextBrush();
         WeatherLocation.Foreground = text;
         WeatherTemperature.Foreground = text;
+        WeatherCompactTemperature.Foreground = text;
         WeatherOutlook.Foreground = text;
+        UpdateWeatherSummary();
         WeatherSymbol.Child = WeatherIcon.Create(_weatherSnapshot?.Condition ?? WeatherCondition.Cloudy,
             _weatherSnapshot?.IsDay ?? true, text);
     }
@@ -493,7 +448,7 @@ public sealed partial class MainPage : Page
             switch (bridgeEvent.Type)
             {
                 case "received":
-                    SetStatus("Chrome received the message…", StatusTone.Active);
+                    SetStatus("The browser received the message…", StatusTone.Active);
                     break;
                 case "started":
                     SetStatus($"{_activeModel} is responding…", StatusTone.Active);
@@ -528,27 +483,9 @@ public sealed partial class MainPage : Page
 
     private void AddMessage(string author, string body, MessageTone tone)
     {
-        _conversation.Add(author, body, tone);
-        var group = new StackPanel { Spacing = 5, Tag = tone };
-        group.Children.Add(new TextBlock
-        {
-            Text = author,
-            FontSize = 11,
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            Foreground = ToneBrush(tone)
-        });
-        group.Children.Add(new TextBlock
-        {
-            Text = body,
-            FontSize = 15,
-            TextWrapping = TextWrapping.Wrap,
-            IsTextSelectionEnabled = true,
-            Foreground = TextBrush()
-        });
-        Conversation.Children.Add(group);
+        _conversationView.Add(author, body, tone);
         UpdateWritingLayout();
-        ConversationScroll.UpdateLayout();
-        ConversationScroll.ChangeView(null, ConversationScroll.ScrollableHeight, null);
+        _conversationView.ScrollToEnd();
     }
 
     private void SetStatus(string text, StatusTone tone)
@@ -611,147 +548,17 @@ public sealed partial class MainPage : Page
     private void UpdateSendState()
     {
         UpdateExternalDestinationState();
-        if (_operations.IsStopping || _destinationLaunching) { SendButton.IsEnabled = false; return; }
+        if (_operations.IsStopping || _composer.IsExclusiveBusy) { SendButton.IsEnabled = false; return; }
         if (_destination == ComposerDestination.Codex)
         {
             SendButton.Content = _codexSendCancellation is not null || CodexChat.IsSubmitting ? "Sending to Codex…" :
                 CodexChat.IsBusy ? "Waiting for Codex…" : "Send to Codex";
-            SendButton.IsEnabled = _codexSendCancellation is null && !CodexChat.IsBusy && !_operations.IsStopping;
+            SendButton.IsEnabled = _composer.CanSend(_destination, Composer.Text);
             return;
         }
         // Keep Send visible and clickable while reconnecting. The bridge
         // reports why it cannot send without dropping the user's draft.
-        SendButton.IsEnabled = _destination == ComposerDestination.OpenAI
-            ? _bridge is { HasMessageInFlight: false }
-            : _destinationSections.TryGetValue(_destination, out var section) ? !section.IsBusy : !_destinationLaunching;
-    }
-
-    private async void ShowPreferences_Click(object sender, RoutedEventArgs e) => await RunOperationAsync(ShowPreferencesAsync);
-
-    private async Task ShowPreferencesAsync()
-    {
-        var opacityValue = new TextBlock { Text = $"{_preferences.Opacity:0}%", VerticalAlignment = VerticalAlignment.Center };
-        var opacity = new Slider { Minimum = 0, Maximum = 100, Value = _preferences.Opacity, StepFrequency = 1 };
-        opacity.ValueChanged += (_, args) =>
-        {
-            opacityValue.Text = $"{args.NewValue:0}%";
-            _windowHost?.SetBackgroundAppearance(
-                args.NewValue, RequestedTheme == ElementTheme.Dark);
-        };
-        var theme = new ComboBox
-        {
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            ItemsSource = new[] { "Day", "Night", "Hybrid" },
-            SelectedIndex = _preferences.Theme switch { "night" => 1, "hybrid" => 2, _ => 0 }
-        };
-        theme.SelectionChanged += (_, _) =>
-        {
-            var dark = theme.SelectedIndex == 1 ||
-                (theme.SelectedIndex == 2 && DetectHybridTheme());
-            RequestedTheme = dark ? ElementTheme.Dark : ElementTheme.Light;
-            _windowHost?.SetBackgroundAppearance(
-                opacity.Value, dark);
-        };
-
-        var panel = new StackPanel { Spacing = 10, MinWidth = 360 };
-        panel.Children.Add(new TextBlock { Text = "Appearance", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-        panel.Children.Add(theme);
-        var opacityHeader = new Grid();
-        opacityHeader.ColumnDefinitions.Add(new ColumnDefinition());
-        opacityHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        opacityHeader.Children.Add(new TextBlock { Text = "Background opacity", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-        Grid.SetColumn(opacityValue, 1);
-        opacityHeader.Children.Add(opacityValue);
-        panel.Children.Add(opacityHeader);
-        panel.Children.Add(opacity);
-        var textOnly = new ToggleSwitch
-        {
-            Header = "Text-only replies",
-            IsOn = _preferences.TextOnly,
-            Margin = new Thickness(0, 8, 0, 0)
-        };
-        panel.Children.Add(textOnly);
-        panel.Children.Add(new TextBlock
-        {
-            Text = "Tell ChatGPT that messages come from HABITAT and avoid tables, images, files and other rich output unless you explicitly request them.",
-            TextWrapping = TextWrapping.Wrap,
-            Opacity = 0.72
-        });
-        var useDeviceLocation = new ToggleSwitch
-        {
-            Header = "Use current location (GPS / Windows)",
-            IsOn = _preferences.UseDeviceLocation,
-            Margin = new Thickness(0, 8, 0, 0)
-        };
-        panel.Children.Add(useDeviceLocation);
-        panel.Children.Add(new TextBlock
-        {
-            Text = "Uses GPS when available. Windows asks for location permission. Coordinates are sent to Open-Meteo for the forecast; the saved city is used if location is unavailable.",
-            TextWrapping = TextWrapping.Wrap,
-            Opacity = 0.72
-        });
-        var weatherCity = new TextBox
-        {
-            Header = useDeviceLocation.IsOn ? "Fallback city" : "Weather location",
-            Text = _preferences.WeatherCity,
-            PlaceholderText = "City, country code (for example Palma, ES)",
-            MaxLength = 100,
-            Margin = new Thickness(0, 8, 0, 0)
-        };
-        useDeviceLocation.Toggled += (_, _) => weatherCity.Header = useDeviceLocation.IsOn ? "Fallback city" : "Weather location";
-        panel.Children.Add(weatherCity);
-        var locationSettings = new HyperlinkButton
-        {
-            Content = "Windows location settings",
-            NavigateUri = new Uri("ms-settings:privacy-location"),
-            HorizontalAlignment = HorizontalAlignment.Left,
-            Padding = new Thickness(0)
-        };
-        locationSettings.Click += (_, _) => _locationSettingsOpened = true;
-        panel.Children.Add(locationSettings);
-        panel.Children.Add(new TextBlock
-        {
-            Text = "Weather data: Open-Meteo · refreshes every 15 minutes.",
-            FontSize = 11,
-            Opacity = 0.72
-        });
-
-        var dialog = new ContentDialog
-        {
-            XamlRoot = XamlRoot,
-            Title = "Preferences",
-            Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto },
-            CloseButtonText = "Close",
-            DefaultButton = ContentDialogButton.Close
-        };
-        StyleDialog(dialog);
-        _appearanceDialogOpen = true;
-        try { await ShowDialogAsync(dialog); }
-        finally { _appearanceDialogOpen = false; }
-
-        var locationChanged = _preferences.WeatherCity != weatherCity.Text.Trim() ||
-            _preferences.UseDeviceLocation != useDeviceLocation.IsOn;
-        _preferences = _preferences with
-        {
-            Theme = theme.SelectedIndex switch { 1 => "night", 2 => "hybrid", _ => "day" },
-            Opacity = opacity.Value,
-            TextOnly = textOnly.IsOn,
-            WeatherCity = weatherCity.Text.Trim(),
-            UseDeviceLocation = useDeviceLocation.IsOn
-        };
-        SavePreferences();
-        ApplyPreferences();
-        if (locationChanged)
-        {
-            _services.ResetLocationAccess();
-            _weatherSnapshot = null;
-            WeatherLocation.Text = _preferences.UseDeviceLocation ? "Current location" : _preferences.WeatherCity;
-            WeatherTemperature.Text = "—";
-            WeatherOutlook.Text = "Loading weather…";
-            _nextWeatherRefresh = DateTimeOffset.MinValue;
-            PaintWeather();
-        }
-        FocusComposer();
+        SendButton.IsEnabled = _composer.CanSend(_destination, Composer.Text);
     }
 
     private async void ShowPairing_Click(object sender, RoutedEventArgs e) => await RunOperationAsync(ShowPairingAsync);
@@ -985,18 +792,7 @@ public sealed partial class MainPage : Page
         }
         Composer.Resources["TextControlForegroundDisabled"] = muted;
 
-        foreach(var child in Conversation.Children)
-        {
-            if(child is not StackPanel group || group.Tag is not MessageTone tone) continue;
-            if(group.Children.Count > 0 && group.Children[0] is TextBlock author)
-            {
-                author.Foreground = ToneBrush(tone);
-            }
-            if(group.Children.Count > 1 && group.Children[1] is TextBlock body)
-            {
-                body.Foreground = text;
-            }
-        }
+        _conversationView.RefreshAppearance();
     }
 
     private void PaintComposerCaret()

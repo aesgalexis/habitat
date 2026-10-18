@@ -17,7 +17,7 @@ public sealed partial class MainPage
         if (Environment.GetCommandLineArgs().Contains("--codex-multiline"))
             Composer.Text = $"  Integration check {marker}: café ☕ 雪 & #?\r\n# Literal **Markdown** and `code`\n\n  - Preserve indentation and [link](https://example.test).\nReply only {marker}_OK. Do not use tools, edit files, or change settings.  ";
         CodexDeliveryResult? result = null;
-        var launcher = new CodexLauncher(message => File.AppendAllText(logPath, message + "\n"));
+        var launcher = new CodexLauncher(message => File.AppendAllText(logPath, message + "\n"), _services.Paths);
         _launchCodex = async (text, token) =>
         {
             var delivery = await launcher.OpenAsync(text, token);
@@ -54,7 +54,7 @@ public sealed partial class MainPage
             _launchCodex = (_, _) => Task.FromResult(CodexDeliveryResult.Unconfirmed);
             SendCurrentMessage();
             if (Composer.Text != editorText || (string)SendButton.Content != "Send to Codex" ||
-                !AutomationProperties.GetHelpText(_destinationButtons[ComposerDestination.Codex]).Contains("visible Codex chat"))
+                !AutomationProperties.GetHelpText(_destinationButtons[ComposerDestination.Codex]).Contains("started from HABITAT"))
                 throw new InvalidOperationException("Unconfirmed Codex submission must preserve the instruction and use consistent send labels.");
             var codexPending = new TaskCompletionSource<CodexDeliveryResult>();
             var codexSubmissions = 0;
@@ -89,6 +89,21 @@ public sealed partial class MainPage
             Composer.Text = "";
         }
         await CheckCodexConversationUiAsync(logPath);
+        var previousService = _services.Codex;
+        var stoppingService = new CheckCodexService { WaitForOpenCancellation = true };
+        try
+        {
+            _services.Codex = stoppingService;
+            using var section = new Habitat.Features.Codex.CodexSection(() => _services.Codex, _ => { });
+            var opening = section.OpenAsync();
+            section.Dispose();
+            await opening;
+            await section.OpenAsync();
+            if (stoppingService.Opens != 1)
+                throw new InvalidOperationException("A disposed Codex section must not open a new operation.");
+            File.AppendAllText(logPath, "PASS: closing during Codex navigation cancels safely and rejects new navigation\n");
+        }
+        finally { _services.Codex = previousService; }
     }
 
     private async Task CheckCodexConversationUiAsync(string logPath)
@@ -102,7 +117,7 @@ public sealed partial class MainPage
             SelectDestination(ComposerDestination.Codex);
             await CodexChat.RefreshAsync();
             if (CodexChat.Target != fake.A || CodexChat.Messages.Last().Text != "A previous reply")
-                throw new InvalidOperationException("Codex must import the visible chat without using OpenAI history.");
+                throw new InvalidOperationException("Codex must show a linked HABITAT chat without using OpenAI history.");
             Composer.Text = "  Follow up **literal** ☕\rnext line  ";
             var original = Composer.Text;
             await LaunchDestinationAsync(ComposerDestination.Codex, original);
@@ -117,7 +132,7 @@ public sealed partial class MainPage
             fake.Visible = fake.B;
             await CodexChat.RefreshAsync();
             if (CodexChat.Target != fake.B || CodexChat.Messages.Last().Text != "B reply")
-                throw new InvalidOperationException("HABITAT must follow a changed visible Codex chat while the old chat responds.");
+                throw new InvalidOperationException("HABITAT must follow another linked HABITAT chat while the old chat responds.");
             SelectDestination(ComposerDestination.OpenAI);
             fake.Complete();
             await CodexChat.RefreshAsync();
@@ -133,7 +148,7 @@ public sealed partial class MainPage
             await LaunchDestinationAsync(ComposerDestination.Codex, Composer.Text);
             if (Composer.Text != "Next instruction" || CodexChat.IsBusy || !CodexChat.StatusText.Contains("could not be confirmed"))
                 throw new InvalidOperationException("An uncertain Codex send must retain its instruction without waiting for an invented turn.");
-            File.AppendAllText(logPath, "PASS: Codex imports the visible chat, sends a contextual follow-up, recovers its reply across chat and destination changes, preserves original text and keeps OpenAI history separate\n");
+            File.AppendAllText(logPath, "PASS: Codex shows linked HABITAT chats, sends a contextual follow-up, recovers its reply across chat and destination changes, preserves original text and keeps OpenAI history separate\n");
         }
         finally
         {
@@ -148,6 +163,8 @@ public sealed partial class MainPage
         public readonly CodexChatTarget B = new("22222222-2222-2222-2222-222222222222", "Check B");
         public CodexChatTarget Visible;
         public int Sends;
+        public int Opens;
+        public bool WaitForOpenCancellation;
         public CodexDeliveryResult Result = CodexDeliveryResult.Sent;
         private bool _complete;
         public CheckCodexService() => Visible = A;
@@ -162,7 +179,12 @@ public sealed partial class MainPage
         public Task<CodexChatSubmission> SendAsync(CodexChatTarget? expected, string text, CancellationToken token)
         { Sends++; return Task.FromResult(new CodexChatSubmission(Result, expected, "before")); }
         public void Complete() => _complete = true;
-        public Task<bool> OpenChatAsync(CodexChatTarget? target, CancellationToken token) => Task.FromResult(true);
+        public async Task<bool> OpenChatAsync(CodexChatTarget? target, CancellationToken token)
+        {
+            Opens++;
+            if (WaitForOpenCancellation) await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            return true;
+        }
         public void ReturnFocus(nint ownerWindow) { }
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
@@ -170,7 +192,7 @@ public sealed partial class MainPage
     private async Task CheckCodexConversationDesktopAsync(string logPath)
     {
         var marker = "HABITAT_CONTEXT_" + Guid.NewGuid().ToString("N")[..8];
-        await using var launcher = new CodexLauncher(message => File.AppendAllText(logPath, message + "\n"));
+        await using var launcher = new CodexLauncher(message => File.AppendAllText(logPath, message + "\n"), _services.Paths);
         _services.Codex = new CodexSmokeService(launcher);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(80));
         if (!await launcher.OpenChatAsync(null, timeout.Token)) throw new IOException("Could not open a new synthetic Codex chat.");

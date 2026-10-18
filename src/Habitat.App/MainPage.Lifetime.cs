@@ -32,10 +32,11 @@ public sealed partial class MainPage
     private async Task StopCoreAsync()
     {
         _timer.Stop();
+        _composer.Stop();
         CancelEmptyYouTubeReset();
         CancelPendingCodexSend();
         _activeDialog?.Hide();
-        foreach (var section in _destinationSections.Values) section.Dispose();
+        var sectionStops = _destinationSections.Values.Select(section => section.StopAsync()).ToArray();
         if (_bridge is not null)
         {
             _bridge.EventReceived -= Bridge_EventReceived;
@@ -46,7 +47,7 @@ public sealed partial class MainPage
             try { cancellation?.Cancel(); }
             catch (Exception exception) { _services.ReportError("Cancel operation", exception); }
         }
-        try { await _operations.StopAsync(); }
+        try { await Task.WhenAll(sectionStops.Append(_operations.StopAsync())); }
         finally
         {
             _gmailSession.Dispose();

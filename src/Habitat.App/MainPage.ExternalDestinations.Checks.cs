@@ -51,12 +51,12 @@ public sealed partial class MainPage
                 var before = opened.Count;
                 await OpenSelectedDestinationAsync();
                 if (opened.Count != before + 1 || opened[^1] != ComposerDestinations.ExternalUri(destination, exact, _gmailAuth?.Email, translate.TargetLanguage) ||
-                    _bridge!.HasMessageInFlight || (destination == ComposerDestination.Translate ? Composer.Text != exact : Composer.Text != ""))
+                    _bridge!.HasMessageInFlight || (destination is ComposerDestination.Translate or ComposerDestination.Gmail ? Composer.Text != exact : Composer.Text != ""))
                     throw new Exception($"{destination} must open its action once using the current, complete unsent text.");
                 Composer.Text = "";
                 await OpenSelectedDestinationAsync();
                 if (opened[^1] != ComposerDestinations.ExternalUri(destination, "", _gmailAuth?.Email, translate.TargetLanguage))
-                    throw new Exception("Empty external actions must open a starting page or new Gmail draft.");
+                    throw new Exception("Empty external actions must open a starting page or saved Gmail drafts.");
             }
 
             SelectDestination(ComposerDestination.Gmail);

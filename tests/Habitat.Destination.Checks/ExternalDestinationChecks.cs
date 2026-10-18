@@ -7,19 +7,19 @@ internal static class ExternalDestinationChecks
     {
         const string text = "  café ☕ & #?\r\nsecond line  ";
         var gmail = ComposerDestinations.ExternalUri(ComposerDestination.Gmail, text, "user+test@example.com")!;
-        check(gmail.AbsoluteUri.Contains("view=cm&fs=1&body=" + Uri.EscapeDataString(text)) &&
-            gmail.AbsoluteUri.Contains("authuser=user%2Btest%40example.com"), "External Gmail drafts include the complete unsent text and selected account");
+        check(gmail.Fragment == "#drafts" && !gmail.Query.Contains("body=") &&
+            gmail.AbsoluteUri.Contains("authuser=user%2Btest%40example.com"), "Opening Gmail shows saved drafts in the selected account without composing another message");
         var translation = ComposerDestinations.ExternalUri(ComposerDestination.Translate, text, targetLanguage: "el")!;
         check(translation.Query.Contains("sl=auto&tl=el&text=" + Uri.EscapeDataString(text)), "External translation preserves source text and selected target language");
         foreach (var destination in new[] { ComposerDestination.Google, ComposerDestination.YouTube, ComposerDestination.GoogleMaps })
             check(ComposerDestinations.ExternalUri(destination, text) == ComposerDestinations.SearchUri(destination, text), $"External {destination} uses the destination action with current text");
         check(ComposerDestinations.ExternalUri(ComposerDestination.GoogleMaps, "ruta de Madrid a Barcelona")!.AbsolutePath.Contains("/dir/"),
             "External Maps preserves directions instead of turning routes into place searches");
-        check(ComposerDestinations.ExternalUri(ComposerDestination.Gmail, "")!.Query.Contains("view=cm") &&
+        check(ComposerDestinations.ExternalUri(ComposerDestination.Gmail, "")!.Fragment == "#drafts" &&
             ComposerDestinations.ExternalUri(ComposerDestination.Google, " ") == new Uri("https://www.google.com/") &&
             ComposerDestinations.ExternalUri(ComposerDestination.YouTube, "") == new Uri("https://www.youtube.com/") &&
             ComposerDestinations.ExternalUri(ComposerDestination.Codex, "") == new Uri("codex://threads/new"),
-            "Empty external actions open starting pages, a new email draft or a blank Codex chat");
+            "Empty external actions open starting pages, saved Gmail drafts or a blank Codex chat");
         var project = new VSCodeProject(new(Guid.NewGuid().ToString(), new string('a', 64), 12345),
             new("session", "context", "Workspace", [], null, 1, true, false), new("Project", Path.GetFullPath(".")));
         var handler = new FocusHandler();

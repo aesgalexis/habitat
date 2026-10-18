@@ -21,6 +21,7 @@ internal sealed class SearchSection : IDestinationSection
     private readonly Func<string, int, CancellationToken, Task<SearchPage>> _search;
     private readonly Func<Uri, Task<bool>> _open;
     private readonly Action<Exception> _reportError;
+    private readonly AsyncOperationScope _operations = new();
     private readonly Func<Uri, ImageSource?>? _thumbnailSource;
     private readonly List<int> _pages = [];
     private readonly ScrollViewer _scroll;
@@ -118,10 +119,13 @@ internal sealed class SearchSection : IDestinationSection
         return LoadAsync(text, 0);
     }
 
-    private async Task LoadAsync(string query, int start)
+    private Task LoadAsync(string query, int start) => _operations.RunAsync(() => LoadCoreAsync(query, start));
+
+    private async Task LoadCoreAsync(string query, int start)
     {
         if (_disposed || IsBusy) return;
-        using var request = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        using var request = CancellationTokenSource.CreateLinkedTokenSource(_operations.Token);
+        request.CancelAfter(TimeSpan.FromSeconds(60));
         _request = request;
         var revision = ++_revision;
         HasContent = true;
@@ -139,7 +143,8 @@ internal sealed class SearchSection : IDestinationSection
         StateChanged?.Invoke();
         try
         {
-            var page = await _search(query, start, request.Token).WaitAsync(request.Token);
+            var provider = _operations.RunAsync(() => _search(query, start, request.Token), default(SearchPage)!);
+            var page = await provider.WaitAsync(request.Token);
             if (_disposed || revision != _revision) return;
             request.Token.ThrowIfCancellationRequested();
             Results = page.Results;
@@ -285,12 +290,14 @@ internal sealed class SearchSection : IDestinationSection
     internal Task OpenResultAsync(SearchResult result) => BrowserSearchService.IsSafeLink(result.Url)
         ? OpenAsync(new Uri(result.Url)) : Task.CompletedTask;
 
-    private async Task OpenAsync(Uri uri)
+    private Task OpenAsync(Uri uri) => _operations.RunAsync(() => OpenCoreAsync(uri));
+
+    private async Task OpenCoreAsync(Uri uri)
     {
         if (_disposed) return;
         try
         {
-            if (!await _open(uri)) _status.Text = "Could not open the browser. Try again.";
+            if (!await _open(uri) && !_disposed) _status.Text = "Could not open the browser. Try again.";
         }
         catch (Exception exception)
         {
@@ -311,8 +318,14 @@ internal sealed class SearchSection : IDestinationSection
         if (_disposed) return;
         _disposed = true;
         _revision++;
-        _request?.Cancel();
         StateChanged = null;
         ClearRequested = null;
+        _ = _operations.StopAsync();
+    }
+
+    public Task StopAsync()
+    {
+        Dispose();
+        return _operations.StopAsync();
     }
 }

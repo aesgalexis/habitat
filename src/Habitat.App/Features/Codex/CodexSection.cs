@@ -17,7 +17,7 @@ internal sealed class CodexSection : IDestinationSection
     private readonly Button _stop = new() { Content = "Stop waiting", Visibility = Visibility.Collapsed };
     private readonly Func<ICodexChatService> _service;
     private readonly Action<Exception> _report;
-    private readonly CancellationTokenSource _lifetime = new();
+    private readonly AsyncOperationScope _operations = new();
     private readonly DispatcherQueueTimer _timer;
     private readonly CodexChatSession _session = new();
     private TaskCompletionSource? _refresh;
@@ -86,13 +86,14 @@ internal sealed class CodexSection : IDestinationSection
         if (_disposed || IsSubmitting) return Task.CompletedTask;
         if (_refresh is not null) return _refresh.Task;
         _refresh = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        _ = RefreshCoreAsync(_refresh);
+        var completion = _refresh;
+        _ = _operations.RunAsync(() => RefreshCoreAsync(completion));
         return _refresh?.Task ?? Task.CompletedTask;
     }
 
     private async Task RefreshCoreAsync(TaskCompletionSource completion)
     {
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_operations.Token);
         timeout.CancelAfter(TimeSpan.FromSeconds(10));
         var pending = _session.PendingTarget;
         try
@@ -100,7 +101,8 @@ internal sealed class CodexSection : IDestinationSection
             if (_disposed) return;
             if (_active)
             {
-                var selection = await _service().GetVisibleAsync(timeout.Token).WaitAsync(timeout.Token);
+                var provider = _operations.RunAsync(() => _service().GetVisibleAsync(timeout.Token), default(CodexChatSelection)!);
+                var selection = await provider.WaitAsync(timeout.Token);
                 if (_disposed) return;
                 _canStartNew = selection.CanStartNew;
                 _session.Select(selection.Target);
@@ -110,7 +112,7 @@ internal sealed class CodexSection : IDestinationSection
             }
             if (pending is not null) await ReadHistoryAsync(pending, timeout.Token);
         }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (_operations.Token.IsCancellationRequested) { }
         catch (Exception exception)
         {
             if (_disposed) return;
@@ -132,8 +134,13 @@ internal sealed class CodexSection : IDestinationSection
 
     private async Task ReadHistoryAsync(CodexChatTarget target, CancellationToken token)
     {
-        try { _session.Observe(await _service().ReadAsync(target, token).WaitAsync(token)); }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+        try
+        {
+            var provider = _operations.RunAsync(() => _service().ReadAsync(target, token), default(CodexChatHistory)!);
+            var history = await provider.WaitAsync(token);
+            if (!_disposed) _session.Observe(history);
+        }
+        catch (OperationCanceledException) when (_operations.Token.IsCancellationRequested) { }
         catch (Exception exception)
         {
             if (_disposed) return;
@@ -142,10 +149,15 @@ internal sealed class CodexSection : IDestinationSection
         }
     }
 
-    public async Task SubmitAsync(string text) => await SendAsync(text, _lifetime.Token);
+    public async Task SubmitAsync(string text) => await SendAsync(text, _operations.Token);
 
-    internal async Task<CodexChatSubmission> SendAsync(string text, CancellationToken token)
+    internal Task<CodexChatSubmission> SendAsync(string text, CancellationToken token) =>
+        _operations.RunAsync(() => SendCoreAsync(text, token), new CodexChatSubmission(CodexDeliveryResult.NotSent));
+
+    private async Task<CodexChatSubmission> SendCoreAsync(string text, CancellationToken token)
     {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, _operations.Token);
+        token = linked.Token;
         if (_disposed || IsBusy || string.IsNullOrWhiteSpace(text)) return new(CodexDeliveryResult.NotSent);
         await RefreshAsync();
         token.ThrowIfCancellationRequested();
@@ -155,7 +167,8 @@ internal sealed class CodexSection : IDestinationSection
         IsSubmitting = true; Render();
         try
         {
-            var submission = await _service().SendAsync(target, text, token).WaitAsync(token);
+            var provider = _operations.RunAsync(() => _service().SendAsync(target, text, token), new CodexChatSubmission(CodexDeliveryResult.Cancelled));
+            var submission = await provider.WaitAsync(token);
             token.ThrowIfCancellationRequested();
             if (_disposed || revision != _sendRevision) return new(CodexDeliveryResult.Cancelled);
             if (submission.Result == CodexDeliveryResult.Sent)
@@ -188,15 +201,23 @@ internal sealed class CodexSection : IDestinationSection
 
     internal void ReturnFocus(nint ownerWindow) => _service().ReturnFocus(ownerWindow);
 
-    internal async Task OpenAsync()
+    internal Task OpenAsync() => _operations.RunAsync(OpenCoreAsync);
+
+    private async Task OpenCoreAsync()
     {
+        if (_disposed) return;
         try
         {
-            if (!await _service().OpenChatAsync(Target, _lifetime.Token))
+            if (!await _service().OpenChatAsync(Target, _operations.Token) && !_disposed)
                 _session.SetIssue(Target, "Could not open Codex. Try again.");
         }
-        catch (Exception exception) when (!_disposed)
-        { _report(exception); _session.SetIssue(Target, "Could not open Codex. Try again."); }
+        catch (OperationCanceledException) when (_disposed) { }
+        catch (Exception exception)
+        {
+            if (_disposed) return;
+            _report(exception);
+            _session.SetIssue(Target, "Could not open Codex. Try again.");
+        }
         if (!_disposed) Render();
     }
 
@@ -207,7 +228,7 @@ internal sealed class CodexSection : IDestinationSection
         _status.Text = IsSubmitting ? "Sending to Codex…" : _session.Issue.Length > 0 ? _session.Issue :
             _session.IsWaiting ? _session.PendingTarget?.Id == Target?.Id ? "Codex is responding…" : "Waiting for Codex in another chat…" :
             _session.Current?.IsRunning is true ? "Codex is working. Open in Codex if it needs your input." :
-            Target is null ? "Your next message will start a new Codex chat." : "Following the visible Codex chat.";
+            Target is null ? "" : "Following a Codex chat started from HABITAT.";
         _stop.Visibility = _session.IsWaiting ? Visibility.Visible : Visibility.Collapsed;
         var rendered = System.Text.Json.JsonSerializer.Serialize(new { Id = Target?.Id, Messages = messages });
         if (rendered != _rendered)
@@ -231,6 +252,13 @@ internal sealed class CodexSection : IDestinationSection
     public void Dispose()
     {
         if (_disposed) return;
-        _disposed = true; _timer.Stop(); _lifetime.Cancel(); _lifetime.Dispose();
+        _disposed = true; _timer.Stop(); StateChanged = null;
+        _ = _operations.StopAsync();
+    }
+
+    public Task StopAsync()
+    {
+        Dispose();
+        return _operations.StopAsync();
     }
 }

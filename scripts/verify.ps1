@@ -18,6 +18,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Invalid extension manifest.' }
     node tests/extension-background.checks.cjs
     if ($LASTEXITCODE -ne 0) { throw 'Extension checks failed.' }
+    node tests/extension-browser.checks.cjs
+    if ($LASTEXITCODE -ne 0) { throw 'Browser identity checks failed.' }
     node tests/extension-translation.checks.cjs
     if ($LASTEXITCODE -ne 0) { throw 'Translation extension checks failed.' }
     node --check vscode-extension/extension.js
@@ -30,12 +32,14 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Search extension checks failed.' }
     node tests/extension-youtube.checks.cjs
     if ($LASTEXITCODE -ne 0) { throw 'YouTube extension checks failed.' }
-    foreach ($suite in 'Appearance', 'Bridge', 'Core', 'Destination', 'Gmail', 'Tasks', 'Weather') {
+    foreach ($suite in 'Appearance', 'Bridge', 'Core', 'Destination', 'Gmail', 'Tasks', 'Weather', 'Hotkey') {
         dotnet run --project "tests/Habitat.$suite.Checks" --configuration Release --no-restore `
             "-p:BaseOutputPath=$verifyOutput/$suite/"
         if ($LASTEXITCODE -ne 0) { throw "$suite checks failed." }
     }
     & (Join-Path $verifyRoot 'tests\release.checks.ps1')
+    & (Join-Path $verifyRoot 'tests\packaging.checks.ps1')
+    & (Join-Path $verifyRoot 'tests\package.checks.ps1')
     if (-not $SkipBuild) {
         dotnet build Habitat.sln --configuration Release --no-restore -p:Platform=x64 -p:HabitatUiChecks=false `
             "-p:BaseOutputPath=$verifyOutput/build/"

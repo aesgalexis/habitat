@@ -1,6 +1,7 @@
 using Habitat.Services;
 using Microsoft.UI.Xaml;
 using System.Runtime.InteropServices;
+using Habitat.Activation;
 
 namespace Habitat;
 
@@ -11,6 +12,9 @@ public partial class App : Application
     private readonly bool _ownsInstance;
 
     private AppServices? _services;
+#if !HABITAT_UI_CHECKS
+    private ActivationChannel? _activation;
+#endif
     public MainWindow? MainWindow { get; private set; }
 
     public App()
@@ -34,6 +38,7 @@ public partial class App : Application
 #else
         if (!_ownsInstance)
         {
+            await ActivationChannel.SendAsync(ActivationChannel.Name("App"), new(Guid.NewGuid()), 5000);
             Exit();
             return;
         }
@@ -41,6 +46,16 @@ public partial class App : Application
         _services = new AppServices(AppDataPaths.Production);
         await _services.TaskSession.LoadAsync();
         MainWindow = new MainWindow(_services);
+        _activation = new ActivationChannel(ActivationChannel.Name("App"), request =>
+        {
+            if (request.Kind != "activate") return Task.FromResult(new ActivationReply(false));
+            var queued = MainWindow.DispatcherQueue.TryEnqueue(() => MainWindow.ActivateComposer(request.Text));
+            return Task.FromResult(new ActivationReply(queued));
+        });
+        MainWindow.Closed += async (_, _) =>
+        {
+            if (_activation is not null) await _activation.DisposeAsync();
+        };
         MainWindow.Activate();
         _ = _services.StartAsync();
 #endif

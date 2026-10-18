@@ -92,7 +92,7 @@ public sealed partial class MainPage
             if (message is null || _gmailAuth?.Email is not string email) { OpenGmail(); return; }
             try
             {
-                if (!await Windows.System.Launcher.LaunchUriAsync(GmailWebLink.ForMessage(email, message)))
+                if (!await _launchBrowser(GmailWebLink.ForMessage(email, message)))
                     throw new InvalidOperationException("Windows could not open Gmail in your browser.");
             }
             catch (Exception exception) { _gmailError = GmailError(exception); RenderGmail(); }
@@ -157,7 +157,7 @@ public sealed partial class MainPage
         panel.Children.Add(GmailMore);
         panel.Children.Add(new TextBlock
         {
-            Text = "Read-only · opening a message does not mark it as read. Nothing is sent to ChatGPT.",
+            Text = "Read-only · opening a message does not mark it as read.",
             FontSize = 11, TextWrapping = TextWrapping.Wrap, Opacity = 0.7
         });
         GmailFlyout.Content = panel;
@@ -355,12 +355,17 @@ public sealed partial class MainPage
         var panel = new StackPanel { Spacing = 14, MaxWidth = 400 };
         panel.Children.Add(state);
         panel.Children.Add(MailText("When ready: enable Gmail API in Google Cloud, configure the OAuth consent screen and add your account as a test user. Create an OAuth client of type Desktop app, download its JSON, then import it here.", 14));
-        panel.Children.Add(MailText("HABITAT requests read-only Gmail access. Sign-in happens in your system browser. Credentials are encrypted for your Windows account, outside the project.", 12));
+        panel.Children.Add(MailText("The reader requests read-only Gmail access. Saving drafts requires separate authorization from Draft email. Sign-in happens in your selected browser. Credentials are encrypted for your Windows account, outside the project.", 12));
         panel.Children.Add(MailText("Standard Gmail API use is free within Google's quotas. No paid service is needed. Keep your Google Cloud project without billing enabled.", 12));
         var import = new Button { Content = "Import client JSON…", HorizontalAlignment = HorizontalAlignment.Left, IsEnabled = _gmailAuth is not null };
         panel.Children.Add(import);
-        var link = new HyperlinkButton { Content = "Google Cloud console", NavigateUri = new Uri("https://console.cloud.google.com/apis/credentials"),
+        var link = new HyperlinkButton { Content = "Google Cloud console",
             HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(0) };
+        link.Click += async (_, _) => await RunOperationAsync(async () =>
+        {
+            if (!await _launchBrowser(new Uri("https://console.cloud.google.com/apis/credentials")))
+                SetStatus("Could not open the selected browser. Check Preferences > Browser.", StatusTone.Warning);
+        });
         panel.Children.Add(link);
         var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Gmail setup", Content = panel,
             CloseButtonText = "Not now", PrimaryButtonText = "Sign in with Google", IsPrimaryButtonEnabled = _gmailAuth?.IsConfigured == true };

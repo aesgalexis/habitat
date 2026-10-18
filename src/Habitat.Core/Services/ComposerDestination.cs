@@ -49,7 +49,7 @@ internal static class ComposerDestinations
 
     public static string ExternalActionLabel(ComposerDestination destination, bool hasText) => (destination, hasText) switch
     {
-        (ComposerDestination.Gmail, _) => "Draft email and open Gmail",
+        (ComposerDestination.Gmail, _) => "Open in browser",
         (ComposerDestination.OpenAI, true) => "Send and open ChatGPT",
         (ComposerDestination.OpenAI, false) => "Open ChatGPT",
         (ComposerDestination.Google or ComposerDestination.YouTube or ComposerDestination.GoogleMaps, true) =>
@@ -86,8 +86,7 @@ internal static class ComposerDestinations
     {
         ComposerDestination.Google => new Uri("https://www.google.com/search?q=" + Uri.EscapeDataString(text)),
         ComposerDestination.YouTube => new Uri("https://www.youtube.com/results?search_query=" + Uri.EscapeDataString(text)),
-        ComposerDestination.Gmail => new Uri("https://mail.google.com/mail/?view=cm&fs=1&body=" + Uri.EscapeDataString(text) +
-            (string.IsNullOrWhiteSpace(gmailAccount) ? "" : "&authuser=" + Uri.EscapeDataString(gmailAccount))),
+        ComposerDestination.Gmail => Habitat.Models.GmailDraft.DraftsUri(gmailAccount),
         ComposerDestination.GoogleMaps => GoogleMapsDestination.SearchUri(text),
         _ => null
     };

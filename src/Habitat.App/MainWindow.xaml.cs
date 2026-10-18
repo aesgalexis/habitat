@@ -92,6 +92,18 @@ public sealed class MainWindow : Window, IWindowHost
         };
     }
 
+    internal void ActivateComposer(string? text)
+    {
+        if (_closing) return;
+        if (IsIconic(Handle)) ShowWindowAsync(Handle, 9 /* SW_RESTORE */);
+        Activate();
+        _ = SetForegroundWindow(Handle);
+        _page.ReceiveActivation(text);
+    }
+
+    [DllImport("user32.dll")] private static extern bool ShowWindowAsync(nint window, int command);
+    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(nint window);
+
     private void UpdateCaptionLayout()
     {
         var scale = _windowRoot.XamlRoot?.RasterizationScale ?? 1;

@@ -1,0 +1,68 @@
+name: Publish HABITAT
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate tag and main ancestry
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          if ($env:GITHUB_REF_NAME -ne "v$version") { throw 'Tag differs from VERSION.' }
+          git merge-base --is-ancestor HEAD origin/main
+          if ($LASTEXITCODE -ne 0) { throw 'Release commit must belong to main.' }
+      - name: Verify logic, contracts and production build
+        shell: powershell
+        run: ./scripts/verify.ps1
+      - name: Build self-contained package
+        shell: powershell
+        run: ./scripts/package-release.ps1
+      - name: Verify real package and isolated installation
+        shell: powershell
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          ./tests/package.checks.ps1 -PackagePath "artifacts/packages/HABITAT-$version-win-x64.zip"
+      - name: Install EXE compiler
+        shell: powershell
+        run: |
+          choco install innosetup --version=6.7.1 --yes --no-progress --allow-downgrade
+          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed.' }
+      - name: Build and verify EXE installer
+        shell: powershell
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          ./scripts/build-installer.ps1 -Version $version
+          ./scripts/test-installer.ps1 -InstallerPath "artifacts/distribution/$version/HABITAT-$version-x64-setup.exe"
+      - name: Publish release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          $zip = "artifacts/packages/HABITAT-$version-win-x64.zip"
+          $installer = "artifacts/distribution/$version/HABITAT-$version-x64-setup.exe"
+          $notes = "artifacts/packages/release-notes.md"
+          $changelog = Get-Content CHANGELOG.md -Raw
+          $section = [regex]::Match($changelog, '(?ms)^## ' + [regex]::Escape($version) + ' .*?(?=^## |\z)').Value
+          if (-not $section) { throw 'Changelog section is missing.' }
+          $section | Set-Content $notes -Encoding utf8
+          gh release create "v$version" $zip "$zip.sha256" $installer "$installer.sha256" --verify-tag --title "HABITAT $version" --notes-file $notes
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed.' }

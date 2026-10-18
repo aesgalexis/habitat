@@ -1,4 +1,5 @@
 using Habitat.Services;
+using Habitat.Features.VSCode;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -28,24 +29,21 @@ internal sealed class VSCodeSection : IDestinationSection
     private readonly Action<Exception> _report;
     private readonly Func<VSCodeProject, Task<bool>> _open;
     private readonly Func<Task<bool>> _openDefault;
+    private readonly Func<Uri, Task<bool>> _openLink;
     private readonly Func<Task<string?>> _chooseFolder;
     private readonly Func<VSCodeFolder, CancellationToken, Task<VSCodeProject?>> _resolveProject;
-    private readonly Action<string> _rememberFolder;
-    private string[] _recentFolders;
-    private IReadOnlyList<VSCodeProjectChoice> _choices = [];
-    private VSCodeProjectChoice? _selection;
-    private readonly CancellationTokenSource _lifetime = new();
+    private readonly VSCodeProjectSelection _selection;
+    private readonly AsyncOperationScope _operations = new();
     private readonly DispatcherQueueTimer _timer;
-    private IReadOnlyList<VSCodeProject> _available = [];
-    private bool _refreshing, _binding, _followActive = true, _disposed;
-    private string? _selectedId, _selectedPath, _displayedFolder;
+    private bool _refreshing, _binding, _disposed;
+    private string? _displayedFolder;
     public ComposerDestination Destination => ComposerDestination.VSCode;
     public FrameworkElement View => _view;
     public bool IsBusy { get; private set; }
     public bool HasContent => VSCodeFolders.Normalize(SelectedFolder?.Path) is { } folder && _submittedFolders.Contains(folder);
     public event Action? StateChanged;
-    internal VSCodeProject? SelectedProject => _selection?.Project;
-    internal VSCodeFolder? SelectedFolder => _selection?.Folder;
+    internal VSCodeProject? SelectedProject => _selection.Selected?.Project;
+    internal VSCodeFolder? SelectedFolder => _selection.Selected?.Folder;
     internal string StatusText => _status.Text;
     internal string PathText => _path.Text;
     internal ComboBox ProjectSelector => _projects;
@@ -58,17 +56,18 @@ internal sealed class VSCodeSection : IDestinationSection
         Func<VSCodeEndpoint, string, CancellationToken, Task<VSCodeExecution?>>? readExecution = null,
         Func<Task<string?>>? chooseFolder = null,
         Func<VSCodeFolder, CancellationToken, Task<VSCodeProject?>>? resolveProject = null,
-        IEnumerable<string>? recentFolders = null, Action<string>? rememberFolder = null)
+        IEnumerable<string>? recentFolders = null, Action<string>? rememberFolder = null,
+        Func<Uri, Task<bool>>? openLink = null)
     {
         _discover = discover; _run = run; _report = report;
         _open = open ?? (_ => Task.FromResult(false));
         _openDefault = openDefault ?? (() => Task.FromResult(false));
+        _openLink = openLink ?? (_ => Task.FromResult(false));
         _readExecution = readExecution ?? ((_, _, _) => Task.FromResult<VSCodeExecution?>(null));
         _chooseFolder = chooseFolder ?? (() => Task.FromResult<string?>(null));
+        _selection = new VSCodeProjectSelection(recentFolders, rememberFolder);
         _resolveProject = resolveProject ?? ((folder, _) => Task.FromResult(
-            _available.FirstOrDefault(project => VSCodeFolders.Same(project.Folder.Path, folder.Path))));
-        _recentFolders = (recentFolders ?? []).ToArray();
-        _rememberFolder = rememberFolder ?? (_ => { });
+            _selection.Available.FirstOrDefault(project => VSCodeFolders.Same(project.Folder.Path, folder.Path))));
         _view = new ScrollViewer { Content = _content, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         _content.Children.Add(_projects);
@@ -85,16 +84,12 @@ internal sealed class VSCodeSection : IDestinationSection
             if (choice.IsPicker)
             {
                 _binding = true;
-                try { _projects.SelectedItem = _selection; }
+                try { _projects.SelectedItem = _selection.Selected; }
                 finally { _binding = false; }
                 await BrowseForFolderAsync();
                 return;
             }
-            _selection = choice;
-            _followActive = false;
-            _selectedId = SelectedProject?.Id;
-            _selectedPath = SelectedFolder!.Path;
-            RememberFolder(_selectedPath);
+            _selection.Select(choice);
             ShowProject();
             ShowStatus(SelectedProject is { Context.Trusted: false } ? "Trust this project in VS Code." : "");
         };
@@ -113,16 +108,18 @@ internal sealed class VSCodeSection : IDestinationSection
         else if (!active) _timer.Stop();
     }
 
-    internal async Task RefreshAsync()
+    internal Task RefreshAsync() => _operations.RunAsync(RefreshCoreAsync);
+
+    private async Task RefreshCoreAsync()
     {
         if (_disposed || IsBusy || _refreshing || _projects.IsDropDownOpen) return;
         _refreshing = true;
         try
         {
-            var projects = await _discover(_lifetime.Token);
-            if (_disposed || IsBusy) return;
-            var previous = _selection;
-            _available = projects;
+            var projects = await _discover(_operations.Token);
+            if (_disposed || IsBusy || _projects.IsDropDownOpen) return;
+            var previous = _selection.Selected;
+            _selection.Refresh(projects);
             BindProjects();
             if (SelectedFolder is null)
                 ShowStatus("Choose a project.");
@@ -132,13 +129,13 @@ internal sealed class VSCodeSection : IDestinationSection
                 previous?.Project?.Context.ContextId != SelectedProject?.Context.ContextId || previous?.Folder?.Path != SelectedFolder.Path)
                 ShowStatus("");
         }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (_operations.Token.IsCancellationRequested) { }
         catch (Exception exception)
         {
             if (!_disposed)
             {
                 _report(exception);
-                _available = [];
+                _selection.Refresh([]);
                 BindProjects();
                 ShowStatus("Could not load VS Code projects.");
             }
@@ -148,33 +145,15 @@ internal sealed class VSCodeSection : IDestinationSection
 
     private void BindProjects()
     {
-        var active = _followActive ? VSCodeProjects.Active(_available) : null;
-        if (active is not null) RememberFolder(active.Folder.Path);
-        _choices = VSCodeFolders.Choices(_available, _recentFolders);
-        _selection = _followActive
-            ? _choices.FirstOrDefault(choice => choice.Project == active && !choice.IsPicker && active is not null)
-                ?? (_available.Count == 0 ? _choices.FirstOrDefault(choice => !choice.IsPicker) : null)
-            : _choices.FirstOrDefault(choice => choice.Project is not null && choice.Project.Id == _selectedId)
-                ?? _choices.FirstOrDefault(choice => choice.Folder is not null && VSCodeFolders.Same(choice.Folder.Path, _selectedPath));
-        if (_selection?.Folder is { } folder)
-        {
-            _selectedId = _selection.Project?.Id;
-            _selectedPath = folder.Path;
-        }
         _binding = true;
-        try { _projects.ItemsSource = _choices; _projects.SelectedItem = _selection; }
+        try { _projects.ItemsSource = _selection.Choices; _projects.SelectedItem = _selection.Selected; }
         finally { _binding = false; }
         ShowProject();
     }
 
-    private void RememberFolder(string path)
-    {
-        if (_recentFolders.Any(recent => VSCodeFolders.Same(recent, path))) return;
-        _recentFolders = VSCodeFolders.Remember(_recentFolders, path);
-        _rememberFolder(path);
-    }
+    internal Task BrowseForFolderAsync() => _operations.RunAsync(BrowseForFolderCoreAsync);
 
-    internal async Task BrowseForFolderAsync()
+    private async Task BrowseForFolderCoreAsync()
     {
         if (_disposed || IsBusy) return;
         IsBusy = true;
@@ -186,10 +165,7 @@ internal sealed class VSCodeSection : IDestinationSection
             if (_disposed || path is null) return;
             var folder = VSCodeFolders.Normalize(path);
             if (folder is null) { ShowStatus("Choose a local folder."); return; }
-            RememberFolder(folder);
-            _followActive = false;
-            _selectedId = null;
-            _selectedPath = folder;
+            _selection.SelectFolder(folder);
             BindProjects();
             ShowStatus(SelectedProject is { Context.Trusted: false } ? "Trust this project in VS Code." : "");
         }
@@ -231,12 +207,15 @@ internal sealed class VSCodeSection : IDestinationSection
 
     internal void SelectProject(string id)
     {
-        _projects.SelectedItem = _choices.FirstOrDefault(choice => choice.Project?.Id == id);
+        _projects.SelectedItem = _selection.Choices.FirstOrDefault(choice => choice.Project?.Id == id);
     }
 
     public async Task SubmitAsync(string text) => await RunCommandAsync(text);
 
-    internal async Task<bool> RunCommandAsync(string text, Action? dispatching = null, bool openExternally = false)
+    internal Task<bool> RunCommandAsync(string text, Action? dispatching = null, bool openExternally = false) =>
+        _operations.RunAsync(() => RunCommandCoreAsync(text, dispatching, openExternally), false);
+
+    private async Task<bool> RunCommandCoreAsync(string text, Action? dispatching, bool openExternally)
     {
         if (_disposed || IsBusy || string.IsNullOrWhiteSpace(text)) return false;
         // Capture the folder before changing the layout or opening VS Code.
@@ -254,11 +233,11 @@ internal sealed class VSCodeSection : IDestinationSection
             if (!selected.Context.Trusted) { ShowStatus("Trust this project in VS Code."); return false; }
             dispatching?.Invoke();
             ShowStatus("");
-            var result = await _run(selected, text, _lifetime.Token);
+            var result = await _run(selected, text, _operations.Token);
             if (!_disposed) ShowStatus(result.Accepted ? "" : result.Message);
             if (result.Accepted && !_disposed)
             {
-                var row = new VSCodeRunView(selected, text, result.ExecutionId);
+                var row = new VSCodeRunView(selected, text, result.ExecutionId, _openLink);
                 _runs.Insert(0, row);
                 // Prefer retiring completed results, then enforce the same
                 // hard bound as the extension's capture history.
@@ -286,7 +265,7 @@ internal sealed class VSCodeSection : IDestinationSection
             }
             return result.Accepted;
         }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { return false; }
+        catch (OperationCanceledException) when (_operations.Token.IsCancellationRequested) { return false; }
         catch (Exception exception)
         {
             _report(exception);
@@ -300,7 +279,9 @@ internal sealed class VSCodeSection : IDestinationSection
         }
     }
 
-    internal async Task OpenProjectAsync()
+    internal Task OpenProjectAsync() => _operations.RunAsync(OpenProjectCoreAsync);
+
+    private async Task OpenProjectCoreAsync()
     {
         if (_disposed || IsBusy) return;
         IsBusy = true;
@@ -312,9 +293,9 @@ internal sealed class VSCodeSection : IDestinationSection
             var selected = folder is null ? null : await ResolveProjectAsync(folder);
             if (_disposed || (folder is not null && selected is null)) return;
             var opened = selected is null ? await _openDefault() : await _open(selected);
-            ShowStatus(opened ? "" : "Could not open VS Code. Update HABITAT Terminal and try again.");
+            if (!_disposed) ShowStatus(opened ? "" : "Could not open VS Code. Update HABITAT Terminal and try again.");
         }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (_operations.Token.IsCancellationRequested) { }
         catch (Exception exception) { _report(exception); if (!_disposed) ShowStatus("Could not open VS Code. Try again."); }
         finally { IsBusy = false; if (!_disposed) { _projects.IsEnabled = true; StateChanged?.Invoke(); } }
     }
@@ -322,23 +303,22 @@ internal sealed class VSCodeSection : IDestinationSection
     private async Task<VSCodeProject?> ResolveProjectAsync(VSCodeFolder folder)
     {
         ShowStatus(SelectedProject is null ? "Opening project…" : "Connecting…");
-        var project = await _resolveProject(folder, _lifetime.Token);
+        var project = await _resolveProject(folder, _operations.Token);
         if (_disposed) return null;
         if (project is null || project.Context.Remote || !VSCodeFolders.Same(project.Folder.Path, folder.Path))
         {
             ShowStatus("Could not connect to this project. Check VS Code and try again.");
             return null;
         }
-        _available = _available.Where(candidate => candidate.Id != project.Id).Append(project).ToArray();
-        _selectedId = project.Id;
-        _selectedPath = folder.Path;
-        _followActive = false;
+        _selection.Resolved(project);
         BindProjects();
         ShowStatus("");
         return project;
     }
 
-    internal async Task RefreshExecutionsAsync()
+    internal Task RefreshExecutionsAsync() => _operations.RunAsync(RefreshExecutionsCoreAsync);
+
+    private async Task RefreshExecutionsCoreAsync()
     {
         if (_disposed || _polling) return;
         _polling = true;
@@ -347,7 +327,7 @@ internal sealed class VSCodeSection : IDestinationSection
             var pending = _runs.Where(run => run.NeedsPolling).ToArray();
             var snapshots = await Task.WhenAll(pending.Select(async run =>
             {
-                try { return await _readExecution(run.Endpoint, run.Snapshot.Id, _lifetime.Token); }
+                try { return await _readExecution(run.Endpoint, run.Snapshot.Id, _operations.Token); }
                 catch (Exception exception) { if (!_disposed) _report(exception); return null; }
             }));
             if (_disposed) return;
@@ -367,6 +347,13 @@ internal sealed class VSCodeSection : IDestinationSection
     public void Dispose()
     {
         if (_disposed) return;
-        _disposed = true; _timer.Stop(); _executionTimer.Stop(); _lifetime.Cancel(); StateChanged = null;
+        _disposed = true; _timer.Stop(); _executionTimer.Stop(); StateChanged = null;
+        _ = _operations.StopAsync();
+    }
+
+    public Task StopAsync()
+    {
+        Dispose();
+        return _operations.StopAsync();
     }
 }

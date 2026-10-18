@@ -4,7 +4,7 @@ using Habitat.Features.Codex;
 
 namespace Habitat.Services;
 
-internal sealed class CodexLauncher(Action<string>? trace = null) : ICodexChatService
+internal sealed class CodexLauncher(Action<string>? trace = null, AppDataPaths? paths = null) : ICodexChatService
 {
     private sealed record CodexPackage(string Family, string Executable, string Reader);
     private Task<CodexPackage?>? _package;
@@ -33,7 +33,8 @@ internal sealed class CodexLauncher(Action<string>? trace = null) : ICodexChatSe
             await Launcher.LaunchUriAsync(uri, new LauncherOptions { TargetApplicationPackageFamilyName = package.Family }),
             package.Executable, trace);
         return _chat ??= new CodexChatService(_desktop, new CodexReadClient(package.Reader),
-            (text, cancellation) => new CodexDelivery(_desktop, trace: trace).SendAsync(text, cancellation));
+            (text, cancellation) => new CodexDelivery(_desktop, trace: trace).SendAsync(text, cancellation),
+            new CodexChatOrigins((paths ?? AppDataPaths.Production).CodexChatsPath));
     }
 
     public async Task<CodexChatSelection> GetVisibleAsync(CancellationToken token) => await (await GetChatAsync(token)).GetVisibleAsync(token);

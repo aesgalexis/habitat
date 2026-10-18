@@ -1,0 +1,10 @@
+{
+  "PackageIdentifier": "aesgalexis.HABITAT",
+  "PackageName": "HABITAT",
+  "Publisher": "aesgalexis",
+  "PackageUrl": "https://github.com/aesgalexis/habitat",
+  "AppId": "49B12678-36E4-4C40-810B-2CD34C84B71E",
+  "MinimumOSVersion": "10.0.19041.0",
+  "License": "MIT",
+  "ShortDescription": "A native Windows workspace for writing, tasks and connected desktop tools."
+}

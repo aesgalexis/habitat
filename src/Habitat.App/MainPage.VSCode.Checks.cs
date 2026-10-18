@@ -101,6 +101,7 @@ public sealed partial class MainPage
             if (deliveries != before || !section.StatusText.Contains("Trust this project"))
                 throw new InvalidOperationException("Untrusted VS Code workspaces must remain blocked.");
             await CheckVSCodeExecutionUiAsync(project);
+            await CheckVSCodeAutomaticSelectionAsync(project);
             await CheckVSCodeFolderSelectionAsync(project);
             await CheckVSCodeProjectHistoryAsync(project);
             File.AppendAllText(logPath, "PASS: VS Code compact project and directory visible before sending above the centered editor, project selection, direct exact delivery without confirmation, duplicate gating, drafts and recovery\n");
@@ -114,6 +115,29 @@ public sealed partial class MainPage
             SelectDestination(ComposerDestination.OpenAI);
             Composer.Text = "";
         }
+    }
+
+    private static async Task CheckVSCodeAutomaticSelectionAsync(VSCodeProject project)
+    {
+        var folder = new VSCodeFolder("Second project", Path.Combine(project.Folder.Path, "second"));
+        var endpoint = project.Endpoint with { SessionId = Guid.NewGuid().ToString() };
+        var other = new VSCodeProject(endpoint, project.Context with
+        { SessionId = endpoint.SessionId, Folders = [folder], ActivePath = folder.Path, LastFocused = 0 }, folder);
+        IReadOnlyList<VSCodeProject> projects = [project, other];
+        using var section = new VSCodeSection(_ => Task.FromResult(projects),
+            (_, _, _) => Task.FromResult(new VSCodeRunResult(true, "")), _ => { });
+        await section.RefreshAsync();
+        if (section.SelectedProject != project || !await section.RunCommandAsync("synthetic command"))
+            throw new InvalidOperationException("The automatic project must accept the first synthetic command.");
+        other = other with { Context = other.Context with { LastFocused = 20 } };
+        projects = [project, other];
+        await section.RefreshAsync();
+        if (section.SelectedProject != other)
+            throw new InvalidOperationException("Sending a command must preserve automatic following of the active VS Code project.");
+        section.SelectProject(project.Id);
+        await section.RefreshAsync();
+        if (section.SelectedProject != project)
+            throw new InvalidOperationException("An explicit project selection must remain pinned when another window takes focus.");
     }
 
     private async Task CheckVSCodeFolderSelectionAsync(VSCodeProject project)

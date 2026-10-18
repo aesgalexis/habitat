@@ -28,7 +28,9 @@ function execution() {
 }
 
 (async () => {
-  const root = fs.mkdtempSync(path.resolve(__dirname, '../artifacts/vscode-checks-'));
+  const artifacts = path.resolve(__dirname, '../artifacts');
+  fs.mkdirSync(artifacts, { recursive: true });
+  const root = fs.mkdtempSync(path.join(artifacts, 'vscode-checks-'));
   const project = path.join(root, 'café project');
   const other = path.join(root, 'other');
   fs.mkdirSync(project); fs.mkdirSync(other);

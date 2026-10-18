@@ -1,7 +1,7 @@
-param()
+param([string]$OutputDirectory)
 $ErrorActionPreference = 'Stop'
 $extensionRoot = Join-Path (Split-Path -Parent $PSScriptRoot) 'vscode-extension'
-$extensionOutput = Join-Path (Split-Path -Parent $PSScriptRoot) 'artifacts\vscode'
+$extensionOutput = if ($OutputDirectory) { [IO.Path]::GetFullPath($OutputDirectory) } else { Join-Path (Split-Path -Parent $PSScriptRoot) 'artifacts\vscode' }
 $package = Get-Content -LiteralPath (Join-Path $extensionRoot 'package.json') -Raw | ConvertFrom-Json
 New-Item -ItemType Directory -Path $extensionOutput -Force | Out-Null
 $vsixPath = Join-Path $extensionOutput ("habitat-terminal-" + $package.version + '.vsix')

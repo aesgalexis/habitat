@@ -10,6 +10,20 @@ let tickRunning = false;
 let protectionChange = Promise.resolve();
 const openedChatRequests = new Map();
 
+// Shared by all worker channels. Chromium derivatives may hide their name in
+// the legacy user agent, so use brands and Brave's explicit API as well.
+async function habitatBrowser() {
+  if (typeof navigator === "undefined") return "unknown";
+  if (await navigator.brave?.isBrave?.()) return "brave";
+  const brands = navigator.userAgentData?.brands?.map(item => item.brand).join(" ") || "";
+  const agent = navigator.userAgent || "";
+  if (/Microsoft Edge/i.test(brands) || /Edg\//.test(agent)) return "edge";
+  if (/Opera/i.test(brands) || /OPR\//.test(agent)) return "opera";
+  if (/Vivaldi/i.test(brands) || /Vivaldi\//.test(agent)) return "vivaldi";
+  if (/Firefox\//.test(agent)) return "firefox";
+  return /Chrome\//.test(agent) ? "chrome" : "unknown";
+}
+
 chrome.alarms.onAlarm.addListener(alarm => {
   if (alarm.name === WATCHDOG) void startTransport();
 });
@@ -42,9 +56,10 @@ async function connectTransport() {
   const saved = await chrome.storage.local.get(["habitatTab","habitatUrl","habitatDisabled"]);
   if (saved.habitatDisabled) return {error:"The extension is disconnected"};
   const tab = await chooseBoundTab(saved);
-  if (!tab) { scheduleReconnect(); return {error:"Select a ChatGPT tab in Chrome"}; }
+  if (!tab) { scheduleReconnect(); return {error:"Select a ChatGPT tab in your selected browser"}; }
   const credentials = await pairTab(tab);
   if (!credentials) { scheduleReconnect(); return {error:"HABITAT desktop app is unavailable"}; }
+  const browser = await habitatBrowser();
 
   await protectBoundTab(tab);
   const currentBinding = await chrome.storage.local.get(["habitatDisabled","habitatTab","habitatUrl"]);
@@ -58,7 +73,7 @@ async function connectTransport() {
   habitatSocket = socket;
   socket.onopen = () => {
     retryCount = 0;
-    socket.send(JSON.stringify({kind:"auth",key:credentials.habitatKey}));
+    socket.send(JSON.stringify({kind:"auth",key:credentials.habitatKey,browser}));
   };
   socket.onmessage = event => {
     if (habitatSocket !== socket) return;
@@ -119,7 +134,7 @@ async function transportTick(socket, message, openChatId = null) {
       socket.send(JSON.stringify({kind:"chat-opened",id:openChatId,opened:openedChatRequests.get(openChatId)}));
     }
     if (tab.discarded || tab.frozen) {
-      heartbeat(socket, false, "Chrome suspended the linked tab. Open it once to resume.");
+      heartbeat(socket, false, "The browser suspended the linked tab. Open it once to resume.");
       return;
     }
     const page = await contactPage(tab.id, {kind:"habitat:probe"});

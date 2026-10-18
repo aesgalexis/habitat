@@ -102,9 +102,11 @@ if (args.Contains("--notepad-smoke"))
 var destinations = ComposerDestinations.Ordered;
 await CodexDeliveryChecks.RunAsync(Check);
 await CodexChatChecks.RunAsync(Check);
+CodexRetentionChecks.Run(Check);
 await VSCodeChecks.RunAsync(Check);
 await ExternalDestinationChecks.RunAsync(Check);
 ComposerDraftChecks.Run(Check);
+await ComposerCoordinatorChecks.RunAsync(Check);
 RunChecks.Run(Check);
 Check(destinations.Select((destination, index) => ComposerDestinations.Cycle(destination, 1) ==
     destinations[(index + 1) % destinations.Count]).All(result => result),
@@ -136,10 +138,10 @@ await SearchChecks.RunAsync(Check);
 await YouTubeSearchChecks.RunAsync(Check);
 if (args.Contains("--translation-browser-smoke")) await TranslationChecks.BrowserSmokeAsync(Check);
 Check(ComposerDestinations.SearchUri(ComposerDestination.Gmail, query)!.AbsoluteUri ==
-    "https://mail.google.com/mail/?view=cm&fs=1&body=" + Uri.EscapeDataString(query),
-    "Gmail opens a new draft with the exact encoded body and no recipient or send action");
+    "https://mail.google.com/mail/?authuser=#drafts",
+    "Gmail browser links open saved drafts without creating another message");
 Check(ComposerDestinations.SearchUri(ComposerDestination.Gmail, query, "person+test@example.com")!.Query.EndsWith(
-    "&authuser=person%2Btest%40example.com"), "Gmail uses the connected account when available");
+    "authuser=person%2Btest%40example.com"), "Gmail uses the connected account when available");
 Check(ComposerDestinations.SearchUri(ComposerDestination.GoogleMaps, query)!.AbsoluteUri ==
     "https://www.google.com/maps/search/?api=1&query=" + Uri.EscapeDataString(query),
     "Google Maps opens a correctly encoded place or address search");

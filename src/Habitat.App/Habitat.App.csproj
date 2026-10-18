@@ -67,6 +67,7 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../Habitat.Core/Habitat.Core.csproj" />
+    <ProjectReference Include="../Habitat.Activation/Habitat.Activation.csproj" />
   </ItemGroup>
 
   <!--
@@ -85,4 +86,8 @@
     <PublishTrimmed Condition="'$(Configuration)' == 'Debug'">False</PublishTrimmed>
     <PublishTrimmed>False</PublishTrimmed>
   </PropertyGroup>
+  <Target Name="PublishHotkeyCompanion" AfterTargets="Publish" Condition="'$(HabitatUiChecks)' != 'true'">
+    <MSBuild Projects="../Habitat.Hotkey/Habitat.Hotkey.csproj" Targets="Restore;Publish"
+             Properties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(SelfContained);PublishDir=$(PublishDir);Platform=AnyCPU" />
+  </Target>
 </Project>

@@ -1,11 +1,17 @@
-param([switch]$Install)
+param([switch]$Install, [string]$OutputDirectory)
 $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $dotnetHome = Join-Path $projectRoot ".dotnet-local"
 $nugetPackages = Join-Path $projectRoot ".nuget\packages"
 $project = Join-Path $projectRoot "src\Habitat.App\Habitat.App.csproj"
-$output = Join-Path $projectRoot ("artifacts\staged\build-" + [guid]::NewGuid().ToString("N"))
+$artifactsRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'artifacts'))
+$output = if ($OutputDirectory) { [IO.Path]::GetFullPath((Join-Path $projectRoot $OutputDirectory)) }
+    else { Join-Path $artifactsRoot ("staged\build-" + [guid]::NewGuid().ToString("N")) }
+if (-not $output.StartsWith($artifactsRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Build output must stay inside this project artifacts directory.'
+}
+if (Test-Path -LiteralPath $output) { throw 'Build output must be a new directory.' }
 
 $env:DOTNET_CLI_HOME = $dotnetHome
 $env:NUGET_PACKAGES = $nugetPackages

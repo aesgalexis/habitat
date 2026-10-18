@@ -84,6 +84,7 @@ public sealed partial class MainPage
     {
         _widgets.RowDefinitions.Add(new RowDefinition { Height = new GridLength(78) });
         _widgets.RowDefinitions.Add(new RowDefinition { Height = new GridLength(78) });
+        _widgets.RowDefinitions.Add(new RowDefinition { Height = new GridLength(78) });
         surface.Children.Add(SidebarToggle);
         SidebarToggle.Click += (_, _) =>
         {
@@ -109,7 +110,7 @@ public sealed partial class MainPage
         Grid.SetColumn(TasksPreview, 1);
         content.Children.Add(TasksPreview);
         TasksButton.Content = content;
-        Grid.SetRow(TasksButton, 1);
+        Grid.SetRow(TasksButton, 2);
         TasksButton.Height = 78;
         TasksButton.Padding = new Thickness(8);
         TasksButton.HorizontalContentAlignment = HorizontalAlignment.Stretch;
@@ -129,7 +130,7 @@ public sealed partial class MainPage
             _nextTaskRotation = DateTimeOffset.UtcNow + TaskRotationInterval;
         };
         _widgets.Children.Add(TasksButton);
-        Grid.SetRow(GmailWidget, 0);
+        Grid.SetRow(GmailWidget, 1);
 
         TasksPanel.Children.Add(new TextBlock { Text = "Tasks", FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         var inputRow = new Grid { ColumnSpacing = 8 };
@@ -179,6 +180,7 @@ public sealed partial class MainPage
         }
         var layout = TopWidgetLayout.Calculate(contentWidth, _tasksPanelOpen, _sidebarManualExpanded);
         _sidebarExpanded = layout.Expanded;
+        SizeWeatherWidget(layout);
         _widgets.Margin = new Thickness(0, 20, 0, 0);
         var expanded = layout.Expanded;
         _widgets.Width = layout.WidgetWidth;
@@ -195,7 +197,8 @@ public sealed partial class MainPage
         GmailWidget.Height = 78;
         // Both sidebar states own the same widget rows. Tasks must always open
         // below those rows, including on the very first layout after a click.
-        var widgetRowsHeight = _widgets.RowDefinitions.Sum(row => row.Height.Value) + _widgets.RowSpacing;
+        var widgetRowsHeight = _widgets.RowDefinitions.Sum(row => row.Height.Value) +
+            _widgets.RowSpacing * (_widgets.RowDefinitions.Count - 1);
         var tasksTop = _widgets.Margin.Top + widgetRowsHeight + 16;
         _taskArea.Margin = new Thickness(layout.TaskLeft, tasksTop, 0, 0);
         _taskArea.Width = layout.TaskWidth;
@@ -204,9 +207,8 @@ public sealed partial class MainPage
         // On narrow windows an open task drawer takes the content slot. Keep
         // the draft/history intact and restore them when the drawer closes.
         var drawerOnly = (_tasksPanelOpen || expanded) && contentWidth - layout.ContentInset - DestinationRailInset < 200;
-        _root.Visibility = _header.Visibility = drawerOnly ? Visibility.Collapsed : Visibility.Visible;
+        _root.Visibility = drawerOnly ? Visibility.Collapsed : Visibility.Visible;
         _root.Margin = new Thickness(layout.ContentInset, 0, DestinationRailInset, 0);
-        _header.MaxWidth = Math.Max(0, contentWidth - layout.ContentInset);
     }
 
     private void OpenTasks() => DispatcherQueue.TryEnqueue(

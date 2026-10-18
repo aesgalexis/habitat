@@ -13,12 +13,14 @@ internal sealed class AsyncOperationScope
     public CancellationToken Token => _token;
     public bool IsStopping { get { lock (_gate) return _stop is not null; } }
 
-    public Task RunAsync(Func<Task> operation)
+    public Task RunAsync(Func<Task> operation) => RunAsync(async () => { await operation(); return true; }, false);
+
+    public Task<T> RunAsync<T>(Func<Task<T>> operation, T stoppedResult)
     {
-        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
         lock (_gate)
         {
-            if (_stop is not null) return Task.CompletedTask;
+            if (_stop is not null) return Task.FromResult(stoppedResult);
             _pending.Add(completion.Task);
         }
         _ = ExecuteAsync();
@@ -26,7 +28,7 @@ internal sealed class AsyncOperationScope
 
         async Task ExecuteAsync()
         {
-            try { await operation(); completion.TrySetResult(); }
+            try { completion.TrySetResult(await operation()); }
             catch (OperationCanceledException exception) { completion.TrySetCanceled(exception.CancellationToken); }
             catch (Exception exception) { completion.TrySetException(exception); }
             finally { lock (_gate) _pending.Remove(completion.Task); }

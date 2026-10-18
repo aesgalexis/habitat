@@ -17,11 +17,22 @@ internal sealed class AppServices : IAsyncDisposable
     private Task _bridgeStart = Task.CompletedTask;
     private Task? _dispose;
     public AppDataPaths Paths { get; }
+    public GlobalHotkeyService GlobalHotkey { get; }
     public BridgeService Bridge { get; }
     public TaskStore Tasks { get; }
     public TaskSession TaskSession { get; }
     public WeatherService Weather { get; }
     public Func<Uri, Task<bool>> LaunchBrowser { get; }
+    internal BrowserLauncher Browsers { get; }
+    internal void UseBrowser(string browser)
+    {
+        Browsers.SelectedBrowser = browser;
+        RefreshBrowserPolicy();
+    }
+    internal void RefreshBrowserPolicy()
+    {
+        if (!Paths.IsIsolated && !Bridge.HasMessageInFlight) Bridge.UseBrowser(Browsers.BridgeFamily);
+    }
     public Func<string, Task<bool>> LaunchNotepad { get; }
     public Func<string, CancellationToken, Task<CodexDeliveryResult>> LaunchCodex { get; }
     internal ICodexChatService Codex { get; set; }
@@ -70,6 +81,7 @@ internal sealed class AppServices : IAsyncDisposable
         if (!paths.IsIsolated) throw new InvalidOperationException("UI checks require isolated infrastructure.");
 #endif
         Paths = paths;
+        GlobalHotkey = new GlobalHotkeyService(paths);
         Bridge = new BridgeService(paths.IsIsolated ? 0 : 8765);
         Tasks = paths.IsIsolated ? new TaskStore(paths.TasksPath) : new TaskStore();
         TaskSession = new TaskSession(Tasks);
@@ -79,9 +91,17 @@ internal sealed class AppServices : IAsyncDisposable
         Search = Bridge.Search;
         YouTubeSearch = Bridge.YouTubeSearch;
         SearchThumbnail = paths.IsIsolated ? _ => null : CreateSearchThumbnail;
-        LaunchBrowser = paths.IsIsolated ? _ => Task.FromResult(false) : async uri => await Launcher.LaunchUriAsync(uri);
+        Browsers = paths.IsIsolated ? new BrowserLauncher(() => [], () => null, _ => false)
+            : new BrowserLauncher(WindowsBrowsers.Discover, WindowsBrowsers.SystemDefault);
+        UseBrowser(Preferences.Load(paths.PreferencesPath).Browser);
+        LaunchBrowser = paths.IsIsolated ? _ => Task.FromResult(false) : uri =>
+        {
+            // Also follows changes to the Windows default browser between launches.
+            RefreshBrowserPolicy();
+            return Task.FromResult(Browsers.Open(uri));
+        };
         LaunchNotepad = paths.IsIsolated ? _ => Task.FromResult(false) : new NotepadLauncher().OpenAsync;
-        var codex = paths.IsIsolated ? null : new CodexLauncher();
+        var codex = paths.IsIsolated ? null : new CodexLauncher(paths: paths);
         LaunchCodex = codex is null ? (_, _) => Task.FromResult(CodexDeliveryResult.NotSent) : codex.OpenAsync;
         Codex = codex is null ? new DisabledCodexChatService() : codex;
         PowerShell = paths.IsIsolated ? new PowerShellLauncher(paths.LocalDirectory, _ => false) : new PowerShellLauncher();
@@ -109,7 +129,10 @@ internal sealed class AppServices : IAsyncDisposable
 
     public GmailAuthService CreateGmailAuth() => Paths.IsIsolated
         ? new GmailAuthService(new MemoryCredentials(), _isolatedHttp, _ => throw new InvalidOperationException("Browser sign-in is disabled in checks."))
-        : new GmailAuthService(new GmailCredentialStore());
+        : new GmailAuthService(new GmailCredentialStore(), openBrowser: async url =>
+        {
+            if (!await LaunchBrowser(new Uri(url))) throw new InvalidOperationException("Could not open the selected browser. Check Preferences > Browser.");
+        });
     public GmailService CreateGmail(GmailAuthService auth) => new(auth, _isolatedHttp);
     public bool NeedsLocationPermission => !Paths.IsIsolated && (_location?.NeedsPermission ?? true);
     public void ResetLocationAccess() => _location?.ResetAccess();

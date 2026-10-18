@@ -18,15 +18,36 @@ public sealed partial class MainPage
     };
 
     private bool HasDestinationSection => _destinationSections.TryGetValue(_destination, out var section) && section.HasContent;
-    private bool IsDestinationSectionVisible => HasDestinationSection || _destination is Services.ComposerDestination.VSCode or Services.ComposerDestination.Codex;
+    private bool IsDestinationSectionVisible => HasDestinationSection || _destination == Services.ComposerDestination.VSCode;
     private CodexSection CodexChat => (CodexSection)_destinationSections[Services.ComposerDestination.Codex];
 
     private void BuildDestinationSections()
     {
         var translate = new TranslateSection((text, target, token) => _services.Translation.TranslateAsync(text, target, token),
-            _services.CopyText, exception => _services.ReportError("Translate text", exception));
+            _services.CopyText, exception => _services.ReportError("Translate text", exception), uri => _launchBrowser(uri));
         translate.StateChanged += () => { PresentDestinationSection(); UpdateWritingLayout(); UpdateSendState(); };
+        translate.ClearRequested += () =>
+        {
+            _composerDrafts.Edit(Services.ComposerDestination.Translate, "");
+            if (_destination == Services.ComposerDestination.Translate) RestoreComposerDraft();
+            translate.Reset();
+            if (_destination == Services.ComposerDestination.Translate) FocusComposer();
+        };
         _destinationSections.Add(translate.Destination, translate);
+        var gmailDraft = new GmailDraftSection(_gmailSession.CreateDraftAsync, async () =>
+        {
+            _gmailSession.Initialize();
+            if (_gmailAuth?.IsConfigured != true) { await ShowGmailSetupAsync(); return; }
+            if (_gmailAuth?.IsConfigured == true)
+                await _gmailSession.SignInAsync(() => _preferences.GmailInboxOnly, _gmailCancellation.Token, authorizeDrafts: true);
+        }, () => _gmailAuth?.Email, uri => _launchBrowser(uri), exception => _services.ReportError("Gmail draft", exception));
+        gmailDraft.StateChanged += () => { PresentDestinationSection(); UpdateWritingLayout(); UpdateSendState(); };
+        gmailDraft.ClearRequested += () =>
+        {
+            _composerDrafts.Edit(Services.ComposerDestination.Gmail, "");
+            if (_destination == Services.ComposerDestination.Gmail) { RestoreComposerDraft(); FocusComposer(); }
+        };
+        _destinationSections.Add(gmailDraft.Destination, gmailDraft);
         var vscode = new VSCodeSection(_services.VSCode.DiscoverAsync, _services.VSCode.RunAsync,
             exception => _services.ReportError("VS Code terminal", exception),
             project => _services.VSCode.OpenAsync(project, uri => _launchBrowser(uri)),
@@ -36,7 +57,7 @@ public sealed partial class MainPage
             {
                 _preferences = _preferences with { VSCodeFolders = Services.VSCodeFolders.Remember(_preferences.VSCodeFolders, path) };
                 SavePreferences();
-            });
+            }, openLink: uri => _launchBrowser(uri));
         vscode.StateChanged += () => { PresentDestinationSection(); UpdateWritingLayout(); UpdateSendState(); };
         _destinationSections.Add(vscode.Destination, vscode);
         var search = new SearchSection((query, start, token) => _services.Search.SearchAsync(query, start, token),
@@ -59,8 +80,8 @@ public sealed partial class MainPage
         };
         _destinationSections.Add(codex.Destination, codex);
         _launchCodex = async (text, token) => (await codex.SendAsync(text, token)).Result;
-        Composer.TextChanged += (_, _) => ResetEmptySearch();
         _root.Children.Add(_destinationContent);
+        ConfigureComposerRoutes();
     }
 
     private void ResetSearch(Services.ComposerDestination target)

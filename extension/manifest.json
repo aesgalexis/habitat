@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "HABITAT · browser bridge",
-  "version": "0.7.2",
+  "version": "0.8.0",
   "minimum_chrome_version": "120",
   "description": "Connect HABITAT to ChatGPT and bring Google, YouTube and Translate results back to the desktop.",
   "permissions": [

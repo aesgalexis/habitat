@@ -31,9 +31,10 @@ async function startTranslationTransport() {
     if (!response.ok) throw Error("Desktop unavailable");
     const credentials = await response.json();
     if (typeof credentials.key !== "string") throw Error("Desktop unavailable");
+    const browser = typeof habitatBrowser === "function" ? await habitatBrowser() : "unknown";
     const socket = new WebSocket("ws://127.0.0.1:8765/translate-bridge");
     translationSocket = socket;
-    socket.onopen = () => socket.send(JSON.stringify({key:credentials.key, translationProtocol:1}));
+    socket.onopen = () => socket.send(JSON.stringify({key:credentials.key, translationProtocol:1, browser}));
     socket.onmessage = event => {
       if (translationSocket !== socket) return;
       try {
