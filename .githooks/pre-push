@@ -5,4 +5,7 @@ repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root"
 
 echo "HABITAT: validando antes de subir..."
+# Git can inherit PowerShell 7 module paths that Windows PowerShell cannot load.
+# Let powershell.exe initialize its own compatible module search path.
+unset PSModulePath
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1
