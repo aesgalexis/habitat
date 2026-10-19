@@ -11,7 +11,7 @@ La aplicación actual está desarrollada en **C# y WinUI 3 sobre .NET 10**. Incl
 Se está preparando la distribución mediante WinGet. El instalador, los
 manifiestos y el proceso de publicación están descritos en [docs/WINGET.md](docs/WINGET.md).
 HABITAT todavía no está disponible en el catálogo público de WinGet.
-La solicitud de alta de **0.9.1** está abierta en
+La solicitud de alta del paquete está abierta en
 [microsoft/winget-pkgs#455544](https://github.com/microsoft/winget-pkgs/pull/455544).
 Mientras se revisa, puedes descargar el instalador directamente de GitHub Releases.
 

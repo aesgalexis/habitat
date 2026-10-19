@@ -35,13 +35,14 @@ pendiente de la validación y aceptación de Microsoft.
 Se necesita .NET SDK 10 e Inno Setup 6.7.1. Desde PowerShell en el repositorio:
 
 ```powershell
-./scripts/build-installer.ps1 -Version 0.9.1
+$version = (Get-Content VERSION -Raw).Trim()
+./scripts/build-installer.ps1 -Version $version
 # Si ISCC.exe no está instalado en su ubicación habitual:
-./scripts/build-installer.ps1 -Version 0.9.1 -InnoCompilerPath 'C:\tools\inno\ISCC.exe'
+./scripts/build-installer.ps1 -Version $version -InnoCompilerPath 'C:\tools\inno\ISCC.exe'
 ```
 
-La versión se lee de VERSION y debe coincidir con ese archivo. La candidata inicial es 0.9.1.
-La salida es `artifacts/distribution/0.9.1/HABITAT-0.9.1-x64-setup.exe` y su
+La versión se lee de VERSION y debe coincidir con ese archivo. El árbol debe estar limpio y guardado en Git. La primera publicación fue 0.9.1; estos comandos usan la versión actual.
+La salida es `artifacts/distribution/<version>/HABITAT-<version>-x64-setup.exe` y su
 archivo `.sha256`. La carga verificada queda en un directorio nuevo bajo
 `artifacts/packaging`. No se modifica la instalación de desarrollo ni se abre
 la aplicación. Para repetir una compilación ya existente, indica un
@@ -57,7 +58,8 @@ Las licencias de los componentes de terceros incluidos siguen siendo aplicables.
 En una cuenta de prueba limpia, Windows Sandbox o un runner de CI:
 
 ```powershell
-./scripts/test-installer.ps1 -InstallerPath 'artifacts/distribution/0.9.1/HABITAT-0.9.1-x64-setup.exe'
+$version = (Get-Content VERSION -Raw).Trim()
+./scripts/test-installer.ps1 -InstallerPath "artifacts/distribution/$version/HABITAT-$version-x64-setup.exe"
 ```
 
 La comprobación instala bajo un directorio único de `artifacts/installer-smoke`,
@@ -95,12 +97,14 @@ Para reproducir el proceso en futuras publicaciones:
    el arranque en un Windows limpio antes de solicitar el alta.
 2. Publica el instalador final en una URL estable con su versión y una página
    pública del producto. No reemplaces el archivo de esa versión.
-3. Genera los manifiestos usando esos datos reales. Para la release actual:
+3. Descarga el EXE de la release pública y genera los manifiestos usando esos bytes reales. El binario de CI puede tener un hash distinto de la compilación local. Para la release correspondiente a VERSION:
 
 ```powershell
-./scripts/new-winget-manifest.ps1 -Version 0.9.1 `
-  -InstallerPath 'artifacts/distribution/v0.9.1/HABITAT-0.9.1-x64-setup.exe' `
-  -InstallerUrl 'https://github.com/aesgalexis/habitat/releases/download/v0.9.1/HABITAT-0.9.1-x64-setup.exe' `
+$version = (Get-Content VERSION -Raw).Trim()
+gh release download "v$version" --repo aesgalexis/habitat --pattern '*.exe' --dir "artifacts/public/$version"
+./scripts/new-winget-manifest.ps1 -Version $version `
+  -InstallerPath "artifacts/public/$version/HABITAT-$version-x64-setup.exe" `
+  -InstallerUrl "https://github.com/aesgalexis/habitat/releases/download/v$version/HABITAT-$version-x64-setup.exe" `
   -PackageUrl 'https://github.com/aesgalexis/habitat' `
   -OutputDirectory 'artifacts/winget-public' -VerifyDownload
 ```
@@ -119,7 +123,7 @@ Usa un directorio de salida nuevo para no sobrescribir candidatos anteriores.
    automática y la revisión de Microsoft. El comando por identificador estará
    disponible cuando se acepte y publique el manifiesto.
 
-La solicitud actual contiene exclusivamente los tres manifiestos de 0.9.1.
+La solicitud inicial se abrió con los tres manifiestos de 0.9.1; su versión vigente se consulta en la pull request.
 Su aceptación y la aparición del paquete en el catálogo dependen de Microsoft;
 el enlace de descarga directa ya está disponible públicamente.
 
