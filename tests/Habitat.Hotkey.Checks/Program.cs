@@ -1,7 +1,12 @@
 using Habitat.Activation;
 using System.Diagnostics;
 
-if (args.Contains("--wait-fixture")) { Thread.Sleep(3000); return; }
+if (args is ["--wait-fixture", var readyFile])
+{
+    File.WriteAllText(readyFile, "ready");
+    await Task.Delay(TimeSpan.FromSeconds(30));
+    return;
+}
 
 await CompanionShutdownChecks.RunAsync();
 

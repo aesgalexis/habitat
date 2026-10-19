@@ -30,18 +30,36 @@ internal static class CompanionShutdownChecks
         {
             Check(await CompanionShutdown.StopAsync(incompleteName) == 2, "Missing process identity must fail closed.");
         }
-        using var fixture = Process.Start(new ProcessStartInfo(Environment.ProcessPath!, "--wait-fixture")
-            { UseShellExecute = false, CreateNoWindow = true })!;
-        var matchingName = Channel();
-        var matchingStops = 0;
-        await using (var server = new ActivationChannel(matchingName, request =>
+        var readyFile = Path.Combine(AppContext.BaseDirectory, "companion-" + Guid.NewGuid().ToString("N") + ".ready");
+        var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true };
+        start.ArgumentList.Add("--wait-fixture");
+        start.ArgumentList.Add(readyFile);
+        using var fixture = Process.Start(start)!;
+        try
         {
-            if (request.Kind == "stop") { matchingStops++; fixture.Kill(); }
-            return Task.FromResult(new ActivationReply(true, Executable: Environment.ProcessPath, ProcessId: fixture.Id));
-        }))
+            using var startup = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            while (!File.Exists(readyFile))
+            {
+                if (fixture.HasExited) throw new Exception("Synthetic companion exited before readiness.");
+                await Task.Delay(20, startup.Token);
+            }
+            var matchingName = Channel();
+            var matchingStops = 0;
+            await using (var server = new ActivationChannel(matchingName, request =>
+            {
+                if (request.Kind == "stop") { matchingStops++; fixture.Kill(); }
+                return Task.FromResult(new ActivationReply(true, Executable: Environment.ProcessPath, ProcessId: fixture.Id));
+            }))
+            {
+                var result = await CompanionShutdown.StopAsync(matchingName);
+                Check(result == 0 && matchingStops == 1 && fixture.HasExited,
+                    $"Matching companion should receive one stop request and exit before uninstall continues. Result: {result}; stops: {matchingStops}; exited: {fixture.HasExited}.");
+            }
+        }
+        finally
         {
-            Check(await CompanionShutdown.StopAsync(matchingName) == 0 && matchingStops == 1 && fixture.HasExited,
-                "Matching companion should receive one stop request and exit before uninstall continues.");
+            if (!fixture.HasExited) { fixture.Kill(); await fixture.WaitForExitAsync(); }
+            File.Delete(readyFile);
         }
         Console.WriteLine("Companion shutdown checks passed with isolated channels and a synthetic child process.");
     }
