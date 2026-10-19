@@ -225,7 +225,13 @@ public sealed partial class MainPage
         if (open)
             DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
             {
-                if (_tasksPanelOpen) TaskInput.Focus(FocusState.Keyboard);
+                if (_tasksPanelOpen && !HasAppearanceOverlay)
+                {
+                    // The first opening must lay out the previously collapsed
+                    // drawer before WinUI can give its TextBox keyboard focus.
+                    _taskArea.UpdateLayout();
+                    TaskInput.Focus(FocusState.Keyboard);
+                }
             });
         else FocusComposer();
     }

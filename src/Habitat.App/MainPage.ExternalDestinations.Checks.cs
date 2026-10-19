@@ -30,6 +30,7 @@ public sealed partial class MainPage
                 SelectDestination(destination);
                 Composer.Text = text;
                 await Task.Delay(25);
+                DestinationRail.UpdateLayout();
                 var external = _externalDestinationButtons[destination];
                 var iconPosition = external.TransformToVisual(DestinationRail).TransformPoint(new());
                 var labelPosition = _destinationButtons[destination].TransformToVisual(DestinationRail).TransformPoint(new());
