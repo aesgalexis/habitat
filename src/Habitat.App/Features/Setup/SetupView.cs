@@ -24,7 +24,7 @@ internal sealed class SetupView : Grid
         var scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         var panel = new StackPanel { Spacing = 18, Padding = new Thickness(0, 0, 12, 8) };
-        panel.Children.Add(Text("Connect the tools you want to use. Tasks and local tools work immediately; each optional integration stays on this PC."));
+        panel.Children.Add(Text("Connect the tools you want to use. Tasks and local tools work immediately. Browser integrations use your Chrome session; Gmail, VS Code and Codex are optional."));
         panel.Children.Add(Card("1. Google Chrome", ChromeStatus, GetChrome));
         panel.Children.Add(Card("2. Chrome extension", Text("Install HABITAT · browser bridge, then choose Enable connection on its welcome page. Keep HABITAT and Chrome open. Chrome asks you to approve the installation."),
             InstallExtension, ConnectionStatus,
