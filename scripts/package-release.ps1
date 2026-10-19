@@ -28,9 +28,12 @@ $bundle = Join-Path $output ('bundle-' + [guid]::NewGuid().ToString('N'))
 $payload = Join-Path $bundle 'artifacts\staged\app'
 New-Item -ItemType Directory -Path $payload -Force | Out-Null
 Get-ChildItem -LiteralPath $stage -Force | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $payload -Recurse -Force }
-foreach ($name in 'HABITAT.vbs', 'HABITAT-Hotkey.vbs', 'Install-HABITAT.cmd', 'Install-HABITAT.ps1', 'README.md', 'CHANGELOG.md', 'LICENSE', 'VERSION', 'docs', 'extension') {
+foreach ($name in 'HABITAT.vbs', 'HABITAT-Hotkey.vbs', 'Install-HABITAT.cmd', 'Install-HABITAT.ps1', 'README.md', 'CHANGELOG.md', 'LICENSE', 'VERSION', 'docs') {
     Copy-Item -LiteralPath (Join-Path $repo $name) -Destination $bundle -Recurse -Force
 }
+Import-Module (Join-Path $PSScriptRoot 'Habitat.Extension.psm1') -Force
+Copy-HabitatChromeExtension -Source (Join-Path $repo 'extension') -Destination (Join-Path $bundle 'extension')
+Copy-Item -LiteralPath (Join-Path $repo 'packaging/GETTING_STARTED.txt') -Destination $bundle
 New-Item -ItemType Directory -Path (Join-Path $bundle 'scripts'), (Join-Path $bundle 'vscode-extension') -Force | Out-Null
 foreach ($name in 'Habitat.Release.psm1', 'apply-staged-update.ps1') {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $bundle 'scripts')

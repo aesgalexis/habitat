@@ -6,24 +6,12 @@ namespace Habitat;
 
 public sealed partial class MainPage
 {
-    private DateTimeOffset _nextBrowserPolicyRefresh;
-    private void RefreshBrowserPreference()
-    {
-        if (BrowserRequestBusy || DateTimeOffset.UtcNow < _nextBrowserPolicyRefresh) return;
-        _nextBrowserPolicyRefresh = DateTimeOffset.UtcNow.AddSeconds(5);
-        _services.RefreshBrowserPolicy();
-    }
-
     private async void ShowPreferences_Click(object sender, RoutedEventArgs e) => await RunOperationAsync(ShowPreferencesAsync);
-
-    private bool BrowserRequestBusy => _bridge?.HasMessageInFlight == true ||
-        _destinationSections.Values.Any(section => (section.Destination is Services.ComposerDestination.Google or
-            Services.ComposerDestination.YouTube or Services.ComposerDestination.Translate) && section.IsBusy);
 
     private async Task ShowPreferencesAsync()
     {
         if (HasAppearanceOverlay || _operations.IsStopping) return;
-        var view = new PreferencesView(_preferences, _services.Browsers.Installed, BrowserRequestBusy)
+        var view = new PreferencesView(_preferences)
         {
             Width = Math.Max(280, Math.Min(740, XamlRoot.Size.Width - 96)),
             Height = Math.Max(180, Math.Min(480, XamlRoot.Size.Height - 180))
@@ -68,7 +56,6 @@ public sealed partial class MainPage
         {
             Theme = view.Theme.SelectedIndex switch { 1 => "night", 2 => "hybrid", _ => "day" },
             Opacity = view.BackgroundOpacity.Value, TextOnly = view.TextOnly.IsOn,
-            Browser = BrowserRequestBusy ? _preferences.Browser : view.BrowserId,
             WeatherCity = view.WeatherCity.Text.Trim(), UseDeviceLocation = view.UseDeviceLocation.IsOn
         };
         if (!updatedPreferences.Save(_services.Paths.PreferencesPath, exception => _services.ReportError("Save preferences", exception)))
@@ -79,7 +66,6 @@ public sealed partial class MainPage
             return;
         }
         _preferences = updatedPreferences;
-        _services.UseBrowser(_preferences.Browser);
         ApplyPreferences();
         if (locationChanged)
         {

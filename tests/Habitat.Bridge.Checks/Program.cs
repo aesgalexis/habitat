@@ -242,6 +242,15 @@ using (var google = new ClientWebSocket())
         new { title = "Video ☕", url = "https://www.youtube.com/watch?v=abcdefghijk", snippet = "Channel · 12:34\nDescription" } }, nextStart = 40 });
     Check((await videoTask.WaitAsync(TimeSpan.FromSeconds(3))).Results.Single().Title == "Video ☕" && !webTask.IsCompleted,
         "YouTube returns video data while Google remains independently pending.");
+    var channelTask = bridge.YouTubeSearch.SearchAsync("Synthetic channel", 0, default);
+    var channelId = await RequestId(youtube);
+    await Send(youtube, new { kind = "search-result", id = channelId, results = new[] {
+        new { title = "Synthetic channel", url = "https://www.youtube.com/@synthetic", snippet = "@synthetic · 12K subscribers" },
+        new { title = "Video ☕", url = "https://www.youtube.com/watch?v=abcdefghijk", snippet = "Channel · 12:34" } }, nextStart = 20 });
+    var channelPage = await channelTask.WaitAsync(TimeSpan.FromSeconds(3));
+    Check(channelPage.Results.Count == 2 && channelPage.Results[0].Url == "https://www.youtube.com/@synthetic" &&
+        channelPage.NextStart == 20 && !webTask.IsCompleted,
+        "The YouTube bridge preserves a matching channel before videos and keeps video pagination independent.");
     bridge.YouTubeSearch.Reset();
     string? resetId = null;
     while (resetId is null)
@@ -263,45 +272,18 @@ using (var google = new ClientWebSocket())
 }
 Console.WriteLine($"All browser bridge checks passed: {checks}.");
 
-// Real local sockets verify that every extension channel obeys one browser policy.
-bridge.UseBrowser("edge");
+// Both the current Chrome extension and its older packets connect without a browser preference.
 foreach (var endpoint in new[] { "/bridge", "/translate-bridge", "/search-bridge", "/youtube-bridge" })
+foreach (var withIdentity in new[] { false, true })
 {
-    using var wrongBrowser = new ClientWebSocket();
-    await wrongBrowser.ConnectAsync(new Uri(address.Replace("http:", "ws:") + endpoint), default);
-    await Send(wrongBrowser, new { kind = "auth", key = bridge.PairKey, browser = "chrome", translationProtocol = 1, searchProtocol = 1 });
-    Check(await Receive(wrongBrowser) is null && wrongBrowser.CloseStatus == WebSocketCloseStatus.PolicyViolation,
-        $"The selected Edge browser rejects Chrome on {endpoint}.");
+    using var chrome = new ClientWebSocket();
+    await chrome.ConnectAsync(new Uri(address.Replace("http:", "ws:") + endpoint), default);
+    var auth = new Dictionary<string, object> { ["kind"] = "auth", ["key"] = bridge.PairKey,
+        ["translationProtocol"] = 1, ["searchProtocol"] = 1 };
+    if (withIdentity) auth["browser"] = "chrome";
+    await Send(chrome, auth);
+    using var tick = await Receive(chrome);
+    Check(tick is not null, $"Chrome connects to {endpoint} with browser metadata: {withIdentity}.");
+    chrome.Abort();
 }
-using (var accepted = new ClientWebSocket())
-{
-    await accepted.ConnectAsync(socketUrl, default);
-    await Send(accepted, new { kind = "auth", key = bridge.PairKey, browser = "edge" });
-    using (var tick = await Receive(accepted)) Check(tick is not null, "The selected browser connects to ChatGPT.");
-    await Send(accepted, new { kind = "heartbeat", ready = true });
-    await WaitUntil(() => bridge.IsConnected);
-    bridge.UseBrowser("chrome");
-    Check(!bridge.IsConnected && !bridge.HasBrowserConnection, "Changing the browser immediately invalidates the old ChatGPT connection.");
-    try { using var tick = await Receive(accepted); Check(tick is null, "The previous browser socket closes after changing preferences."); }
-    catch (WebSocketException) { Check(true, "The previous browser socket is aborted after changing preferences."); }
-}
-using (var accepted = new ClientWebSocket())
-{
-    await accepted.ConnectAsync(searchUrl, default);
-    await Send(accepted, new { key = bridge.PairKey, browser = "chrome", searchProtocol = 1 });
-    using (var tick = await Receive(accepted)) Check(tick is not null, "Search reconnects in the newly selected browser.");
-    var pending = bridge.Search.SearchAsync("Synthetic browser change", 0, default);
-    bridge.UseBrowser("edge");
-    try { await pending.WaitAsync(TimeSpan.FromSeconds(3)); throw new Exception("A stale search stayed connected."); }
-    catch (Habitat.Features.Search.BrowserSearchException) { Check(true, "Changing browsers releases pending work in the previous browser."); }
-}
-using (var wrongHttp = new HttpClient { BaseAddress = new Uri(address) })
-{
-    wrongHttp.DefaultRequestHeaders.Add("X-Habitat-Key", bridge.PairKey);
-    wrongHttp.DefaultRequestHeaders.Add("X-Habitat-Browser", "chrome");
-    using var denied = await wrongHttp.GetAsync("/next");
-    Check(denied.StatusCode == System.Net.HttpStatusCode.Forbidden, "Legacy HTTP polling cannot deliver to the wrong browser.");
-    using var deniedEvent = await wrongHttp.PostAsJsonAsync("/event", new { type = "response", id = "synthetic", text = "ignored" });
-    Check(deniedEvent.StatusCode == System.Net.HttpStatusCode.Forbidden, "Legacy HTTP events cannot come from the wrong browser.");
-}
-Console.WriteLine($"Browser preference bridge checks passed: {checks}.");
+Console.WriteLine($"Chrome bridge compatibility checks passed: {checks}.");

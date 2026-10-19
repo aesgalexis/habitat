@@ -83,4 +83,6 @@ if (-not $NoShortcuts) {
     $shortcut.Save()
 }
 Write-Host "HABITAT $version installed in $destination"
-Write-Host "Load the Chrome extension from: $(Join-Path $destination 'extension')"
+Write-Host 'Open Set up HABITAT from the app menu to connect Chrome and optional integrations.'
+Write-Host 'Chrome extension: https://chromewebstore.google.com/detail/ennnldolgdbbkgmpjjpkafeajihpimii'
+Write-Host "Manual installation folder (if the store listing is unavailable): $(Join-Path $destination 'extension')"

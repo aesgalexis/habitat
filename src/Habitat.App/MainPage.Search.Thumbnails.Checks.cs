@@ -81,6 +81,34 @@ public sealed partial class MainPage
             section.RequestClear();
             File.AppendAllText(logPath, $"PASS: YouTube thumbnails use native images and safe small JPEG URLs; initially {initial}/20 requested; scrolling loads visible rows once; thumbnail click, aspect ratio, mode switch, reset and image failures verified without network\n");
 
+            var channel = new SearchResult("Habitat Studio", "https://www.youtube.com/@habitatstudio", "@habitatstudio · 12K subscribers");
+            search.Page = new SearchPage([channel, search.Page.Results[0]], 20);
+            requests.Clear();
+            _services.SearchThumbnail = uri => { requests.Add(uri); return new WriteableBitmap(2, 2); };
+            foreach (var theme in new[] { ElementTheme.Light, ElementTheme.Dark })
+            {
+                RequestedTheme = theme;
+                Composer.Text = "Habitat Studio";
+                await LaunchDestinationAsync(ComposerDestination.YouTube, Composer.Text);
+                await Task.Delay(100);
+                section.View.UpdateLayout();
+                var titles = Descendants<HyperlinkButton>(section.View).ToArray();
+                if (section.Results[0] != channel || titles.Length != 2 || AutomationProperties.GetName(titles[0]) != channel.Title ||
+                    AutomationProperties.GetHelpText(titles[0]) != "Open channel in your browser. " + channel.Url ||
+                    !Descendants<TextBlock>(section.View).Any(block => block.Text == "Channel" && block.ActualHeight > 0) ||
+                    Descendants<Image>(section.View).Count() != 1 || !section.CanGoNext)
+                    throw new Exception("A matching channel must render before videos with an English label and accessible link, without a video thumbnail, in both themes.");
+                opened = null;
+                ((IInvokeProvider)new HyperlinkButtonAutomationPeer(titles[0]).GetPattern(PatternInterface.Invoke)).Invoke();
+                await Task.Delay(40);
+                if (opened?.AbsoluteUri != channel.Url || requests.Any(uri => uri.AbsoluteUri.Contains("habitatstudio")))
+                    throw new Exception("A channel click must open its exact channel URL and never request a video thumbnail for it.");
+            }
+            section.RequestClear();
+            if (section.HasContent || section.Results.Count != 0 || Composer.Text.Length != 0)
+                throw new Exception("Clearing channel results must restore the shared initial search screen.");
+            File.AppendAllText(logPath, "PASS: matching YouTube channel precedes videos in both themes, has an English Channel label and accessible browser link, uses no video thumbnail and clears with the shared search state\n");
+
             if (Environment.GetCommandLineArgs().Contains("--thumbnails-live-smoke"))
             {
                 search.Page = new SearchPage([new("Synthetic live thumbnail", "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "Small public JPEG check")]);

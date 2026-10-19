@@ -19,7 +19,7 @@ const source=new TextArea();
 const span={get textContent(){return output;},getBoundingClientRect:()=>({width:200,height:30}),closest:()=>({getAttribute:()=>target})};
 const copy={disabled:false,getBoundingClientRect:()=>({width:30,height:30})};
 const chrome={runtime:{getManifest:()=>({version:'0.5.3'})},alarms:{onAlarm:signal(),create:async()=>{}},storage:{onChanged:signal(),
-  local:{get:async()=>({habitatDisabled:false})},session:{get:async()=>session,set:async values=>Object.assign(session,values)}},
+  local:{get:async()=>({habitatConsentVersion:1,habitatDisabled:false})},session:{get:async()=>session,set:async values=>Object.assign(session,values)}},
   debugger:{attach:async(target,version)=>{if(attachFailure)throw Error('Another debugger is attached');
       assert.equal(version,'1.3');assert.ok(tabs.get(target.tabId).url.startsWith('https://translate.google.com/'));
       debuggerCalls.push({method:'attach',tabId:target.tabId});attached.add(target.tabId);},
@@ -52,6 +52,7 @@ const context=vm.createContext({chrome,WebSocket:Socket,URL,console,Promise,queu
   fetch:async url=>{check(url==='http://127.0.0.1:8765/pair','Only local pairing may use fetch; translation is performed through the page.');return {ok:true,json:async()=>({key:'synthetic'})};}});
 
 (async()=>{
+  vm.runInContext(fs.readFileSync(path.resolve(__dirname,'../extension/connection.js'),'utf8'),context);
   vm.runInContext(fs.readFileSync(path.resolve(__dirname,'../extension/translation.js'),'utf8'),context);
   for(let i=0;i<10;i++)await new Promise(resolve=>setImmediate(resolve));
   const socket=sockets[0];

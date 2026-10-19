@@ -18,8 +18,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Invalid extension manifest.' }
     node tests/extension-background.checks.cjs
     if ($LASTEXITCODE -ne 0) { throw 'Extension checks failed.' }
-    node tests/extension-browser.checks.cjs
-    if ($LASTEXITCODE -ne 0) { throw 'Browser identity checks failed.' }
+    node tests/extension-consent.checks.cjs
+    if ($LASTEXITCODE -ne 0) { throw 'Extension consent checks failed.' }
     node tests/extension-translation.checks.cjs
     if ($LASTEXITCODE -ne 0) { throw 'Translation extension checks failed.' }
     node --check vscode-extension/extension.js
@@ -39,6 +39,10 @@ try {
     }
     & (Join-Path $verifyRoot 'tests\release.checks.ps1')
     & (Join-Path $verifyRoot 'tests\packaging.checks.ps1')
+    $chromeOutput = Join-Path $verifyOutput ('chrome-' + [guid]::NewGuid().ToString('N'))
+    & (Join-Path $verifyRoot 'scripts\package-chrome-extension.ps1') -OutputDirectory $chromeOutput
+    $chromeZip = Get-ChildItem -LiteralPath $chromeOutput -Filter '*.zip' | Select-Object -First 1
+    & (Join-Path $verifyRoot 'tests\chrome-package.checks.ps1') -PackagePath $chromeZip.FullName
     & (Join-Path $verifyRoot 'tests\package.checks.ps1')
     if (-not $SkipBuild) {
         dotnet build Habitat.sln --configuration Release --no-restore -p:Platform=x64 -p:HabitatUiChecks=false `

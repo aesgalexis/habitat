@@ -7,8 +7,8 @@ internal sealed record Preferences(string Theme, double Opacity)
 {
     public ComposerDestination Destination { get; init; } = ComposerDestination.OpenAI;
     public bool TextOnly { get; init; } = true;
-    public string Browser { get; init; } = BrowserLauncher.Default;
     public bool GlobalHotkeyEnabled { get; init; } = true;
+    public bool SetupGuideSeen { get; init; }
     public string WeatherCity { get; init; } = "Palma, ES";
     public bool UseDeviceLocation { get; init; } = true;
     public bool GmailInboxOnly { get; init; } = true;
@@ -29,8 +29,7 @@ internal sealed record Preferences(string Theme, double Opacity)
             {
                 return saved with
                 {
-                    Opacity = Math.Clamp(saved.Opacity, 0, 100), Destination = ComposerDestinations.Normalize(saved.Destination),
-                    Browser = string.IsNullOrWhiteSpace(saved.Browser) ? BrowserLauncher.Default : saved.Browser
+                    Opacity = Math.Clamp(saved.Opacity, 0, 100), Destination = ComposerDestinations.Normalize(saved.Destination)
                 };
             }
         }

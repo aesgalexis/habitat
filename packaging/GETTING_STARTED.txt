@@ -1,14 +1,21 @@
 HABITAT
 
-Open HABITAT from the Windows Start menu.
+Open HABITAT from the Windows Start menu. The setup guide opens on first launch.
+Reopen it at any time: HABITAT menu > Set up HABITAT...
 
 Browser integration
-ChatGPT, search and translation require the included HABITAT browser extension.
+ChatGPT, search and translation require the HABITAT browser extension.
+Install from Chrome Web Store and approve the Chrome installation prompt:
+https://chromewebstore.google.com/detail/ennnldolgdbbkgmpjjpkafeajihpimii
+The store submission was pending review on 19 October 2026. If unavailable,
+use Open extension folder and Open Chrome extensions in the HABITAT setup guide.
 In Chrome 120 or later, open chrome://extensions, enable Developer mode, choose
-Load unpacked and select the browser-extension folder next to HABITAT.exe.
-Open a ChatGPT conversation in that browser to connect it to HABITAT.
-In another compatible Chromium browser, use its extensions page instead.
-WinGet installs the desktop application; it does not install browser extensions.
+Load unpacked and select the installed folder shown in the guide (browser-extension
+next to HABITAT.exe for EXE installations, extension at the root for ZIP installations).
+On the extension's welcome page, review the data disclosure and choose Enable
+connection. Open a ChatGPT conversation in Chrome to connect it to HABITAT.
+The desktop installer does not silently install Chrome or browser extensions.
+Keep only one copy of the extension enabled (store or unpacked).
 
 VS Code integration
 In VS Code, run Extensions: Install from VSIX and select the .vsix file in the
@@ -17,9 +24,15 @@ vscode-extension folder next to HABITAT.exe. Reload VS Code if requested.
 Gmail (optional)
 Open Gmail in HABITAT and choose Setup to import your own
 Google desktop OAuth client and sign in. No Google credentials are included.
+Codex is optional: install the Codex desktop app and sign in separately.
+Tasks, Notepad, Terminal and Run need no browser extension.
 
 Updates and uninstall
 Close HABITAT before updating or uninstalling. The installer can also request
 that Windows close applications using the installed files during an update.
 Uninstall HABITAT from Windows Settings. Your tasks and preferences are kept
 in your Windows user profile, separately from the application installation.
+
+Full instructions: https://github.com/aesgalexis/habitat/blob/main/docs/GETTING_STARTED.md
+Download updates: https://github.com/aesgalexis/habitat/releases/latest
+Support: https://github.com/aesgalexis/habitat/issues

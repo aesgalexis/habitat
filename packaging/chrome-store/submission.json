@@ -1,0 +1,20 @@
+{
+  "extensionVersion": "0.9.0",
+  "storeItemId": "ennnldolgdbbkgmpjjpkafeajihpimii",
+  "publisherId": "a22d2854-1ba1-46a3-966b-37dab27b2f83",
+  "dashboardUrl": "https://chrome.google.com/webstore/devconsole/a22d2854-1ba1-46a3-966b-37dab27b2f83/ennnldolgdbbkgmpjjpkafeajihpimii/edit/status",
+  "submittedDate": "2026-10-19",
+  "dateTimezone": "Europe/Madrid",
+  "lastObservedStatus": "pending-review",
+  "visibility": "unlisted",
+  "publishAutomaticallyAfterApproval": true,
+  "price": "free",
+  "category": "Productivity / Tools",
+  "listingLanguage": "en",
+  "packageName": "HABITAT-Browser-Bridge-0.9.0.zip",
+  "packageSha256": "CE03294C1421BA7BC41905B02192DA878B603E7818FA15C13D5619023424CC66",
+  "privacyPolicyUrl": "https://github.com/aesgalexis/habitat/blob/main/docs/EXTENSION_PRIVACY.md",
+  "privacyPolicyCommit": "4de1c0c8ac6398d5126b1723c66a21d18ed883cf",
+  "reviewerInstructionsSubmitted": "Windows, Chrome 120+. Install HABITAT: https://github.com/aesgalexis/habitat/releases/latest. In desktop 0.9.1: Preferences > Browser > Google Chrome. Enable connection on extension welcome page; keep app running. Google/YouTube/Translate: submit a synthetic query or translate Hello world; no account needed. ChatGPT: sign in on chatgpt.com, open a conversation, then submit a synthetic message from HABITAT. No HABITAT account or API key. Clear search closes its tab.",
+  "evidencePath": "artifacts/chrome-store/0.9.0/submission-pending-review.jpg"
+}

@@ -330,7 +330,7 @@ public sealed partial class MainPage
 
     private async Task ShowGmailSetupCoreAsync()
     {
-        if (_gmailSettingsOpen || _gmailBusy || _appearanceDialogOpen) return;
+        if (_gmailSettingsOpen || _gmailBusy || _appearanceDialogOpen || _setupDialogOpen) return;
         await RestoreGmailSessionAsync();
         if (_gmailCancellation.IsCancellationRequested) return;
         if (_gmailAuth is null) { OpenGmail(); return; }
@@ -355,7 +355,7 @@ public sealed partial class MainPage
         var panel = new StackPanel { Spacing = 14, MaxWidth = 400 };
         panel.Children.Add(state);
         panel.Children.Add(MailText("When ready: enable Gmail API in Google Cloud, configure the OAuth consent screen and add your account as a test user. Create an OAuth client of type Desktop app, download its JSON, then import it here.", 14));
-        panel.Children.Add(MailText("The reader requests read-only Gmail access. Saving drafts requires separate authorization from Draft email. Sign-in happens in your selected browser. Credentials are encrypted for your Windows account, outside the project.", 12));
+        panel.Children.Add(MailText("The reader requests read-only Gmail access. Saving drafts requires separate authorization from Draft email. Sign-in happens in Chrome. Credentials are encrypted for your Windows account, outside the project.", 12));
         panel.Children.Add(MailText("Standard Gmail API use is free within Google's quotas. No paid service is needed. Keep your Google Cloud project without billing enabled.", 12));
         var import = new Button { Content = "Import client JSON…", HorizontalAlignment = HorizontalAlignment.Left, IsEnabled = _gmailAuth is not null };
         panel.Children.Add(import);
@@ -364,7 +364,7 @@ public sealed partial class MainPage
         link.Click += async (_, _) => await RunOperationAsync(async () =>
         {
             if (!await _launchBrowser(new Uri("https://console.cloud.google.com/apis/credentials")))
-                SetStatus("Could not open the selected browser. Check Preferences > Browser.", StatusTone.Warning);
+                SetStatus("Could not open Chrome. Check that Google Chrome is installed, then retry.", StatusTone.Warning);
         });
         panel.Children.Add(link);
         var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Gmail setup", Content = panel,

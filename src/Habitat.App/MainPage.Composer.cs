@@ -34,7 +34,6 @@ public sealed partial class MainPage
 
     private Task SendOpenAIAsync(ComposerCoordinator.Submission request)
     {
-        _services.RefreshBrowserPolicy();
         var text = request.Text.Trim();
         if (text.Length == 0) return OpenChatWindowAsync();
         if (_bridge is null) return Task.CompletedTask;

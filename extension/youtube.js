@@ -1,4 +1,4 @@
-// Read video search results from the user's real YouTube page, without playing videos.
+// Read matching channels and video results from the user's real YouTube search page.
 function isYouTubeSearchPage(value) {
   try { const url = new URL(value); return url.origin === "https://www.youtube.com" && url.pathname === "/results"; }
   catch (_) { return false; }
@@ -24,7 +24,7 @@ const youtubeSearchTransport = createSearchTransport({
 });
 
 // Serialized and executed by Chrome in the search tab's isolated content world.
-// Only visible page text and canonical video URLs leave the page.
+// Only visible page text and canonical channel/video URLs leave the page.
 function readYouTubeSearchPage(query, start) {
   const url = new URL(location.href);
   const clean = (value, max = 2000) => (value || "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -40,6 +40,38 @@ function readYouTubeSearchPage(query, start) {
     const bounds = node.getBoundingClientRect();
     return bounds.width > 0 && bounds.height > 0 && getComputedStyle(node).visibility !== "hidden";
   };
+  const normalize = value => clean(value).normalize("NFKC").toLowerCase();
+  const searchTerm = normalize(query), handleTerm = searchTerm.replace(/^@/, "");
+  const channelUrl = value => {
+    try {
+      const target = new URL(value, location.href);
+      const path = target.pathname.replace(/\/$/, "");
+      if (target.origin === url.origin && !target.username && !target.password &&
+          /^\/(?:@[\p{L}\p{M}\p{N}._·-]+|channel\/UC[A-Za-z0-9_-]{22}|(?:c|user)\/[\p{L}\p{M}\p{N}._·-]+)$/u.test(decodeURIComponent(path)))
+        return target.origin + path;
+    } catch (_) {}
+    return null;
+  };
+  const channels = [], seenChannels = new Set();
+  for (const row of root.querySelectorAll("ytd-channel-renderer, yt-lockup-view-model")) {
+    if (!visible(row) || row.closest('ytd-ad-slot-renderer, ytd-promoted-sparkles-web-renderer, ytd-display-ad-renderer')) continue;
+    const link = row.querySelector('a#main-link[href], a.yt-lockup-metadata-view-model__title[href], h3 a[href]');
+    if (!visible(link)) continue;
+    const target = channelUrl(link.href);
+    if (!target || seenChannels.has(target)) continue;
+    const titleNode = row.querySelector('#channel-title, ytd-channel-name #text');
+    const title = clean(visible(titleNode) ? titleNode.textContent : link.textContent, 600);
+    const metadata = [...row.querySelectorAll('#subscribers, #video-count, .yt-content-metadata-view-model__metadata-row')]
+      .filter(visible).map(node => clean(node.textContent)).filter(Boolean);
+    const path = decodeURIComponent(new URL(target).pathname);
+    const handles = [path.startsWith('/@') ? path.slice(2) : "", ...metadata.filter(value => value.startsWith('@'))];
+    if (!title || normalize(title) !== searchTerm &&
+        !handles.some(handle => handle && normalize(handle).replace(/^@/, "") === handleTerm)) continue;
+    const description = row.querySelector('#description, #description-text, .metadata-snippet-text');
+    const snippet = [...new Set(metadata)].join(' · ') + (visible(description) ? "\n" + clean(description.textContent) : "");
+    channels.push({title, url:target, snippet:snippet.trim().slice(0, 2000)});
+    seenChannels.add(target);
+  }
   const results = [], seen = new Set();
   const rows = root.querySelectorAll("ytd-video-renderer, yt-lockup-view-model");
   for (const row of rows) {
@@ -69,8 +101,12 @@ function readYouTubeSearchPage(query, start) {
   // order for this document/query so Previous page never turns into a later page.
   let snapshot = globalThis.__habitatYouTubeSearch;
   if (!snapshot || snapshot.query !== query) {
-    snapshot = {query, results:[], positions:new Map()};
+    snapshot = {query, results:[], positions:new Map(), channels:new Map()};
     globalThis.__habitatYouTubeSearch = snapshot;
+  }
+  snapshot.channels ??= new Map();
+  for (const channel of channels) {
+    if (snapshot.channels.has(channel.url) || snapshot.channels.size < 10) snapshot.channels.set(channel.url, channel);
   }
   for (const item of results) {
     const position = snapshot.positions.get(item.url);
@@ -94,7 +130,8 @@ function readYouTubeSearchPage(query, start) {
   }
   const page = loaded.slice(start, start + pageSize);
   const nextStart = start + page.length;
-  return {ready:page.length > 0 || empty, results:page, stage:"read:rows:" + rows.length + ";videos:" + loaded.length + ";start:" + start,
+  const pageResults = start === 0 ? [...snapshot.channels.values(), ...page] : page;
+  return {ready:pageResults.length > 0 || empty, results:pageResults, stage:"read:rows:" + rows.length + ";videos:" + loaded.length + ";start:" + start,
     nextStart:nextStart <= 990 && (loaded.length > nextStart || continuation) ? nextStart : null};
 }
 

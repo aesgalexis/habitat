@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connect HABITAT to Chrome</title>
+  <link rel="icon" href="icons/icon32.png">
+  <link rel="stylesheet" href="welcome.css">
+</head>
+<body>
+  <main>
+    <header><img src="icons/icon48.png" width="48" height="48" alt=""><span>HABITAT <small>Browser Bridge</small></span></header>
+    <h1>Your browser, connected<br>to your workspace.</h1>
+    <p class="intro">Use your existing Chrome session for ChatGPT, Google, YouTube and Google Translate inside the HABITAT desktop app.</p>
+    <section aria-labelledby="data-heading">
+      <h2 id="data-heading">What this connection shares</h2>
+      <ul>
+        <li><strong>ChatGPT:</strong> HABITAT can send the messages you submit to your linked conversation and read the resulting replies, conversation address, model name and connection status.</li>
+        <li><strong>Search and translation:</strong> HABITAT sends your search queries or source text to Google, YouTube or Google Translate and reads their results.</li>
+        <li><strong>Local desktop connection:</strong> these messages and results pass between Chrome and HABITAT on this computer at <code>127.0.0.1:8765</code>. There is no HABITAT cloud service, advertising or analytics.</li>
+      </ul>
+      <p>The websites receive the text needed for your requests and apply their own account settings and privacy policies. HABITAT does not read your passwords or Gmail through this extension.</p>
+      <p>Chrome's debugger permission keeps search and translation pages active in the background. It is attached only to the page used for that request and released afterwards.</p>
+    </section>
+    <p class="requirement">Requires the free HABITAT app for Windows and Chrome 120 or later. ChatGPT also requires you to sign in on chatgpt.com. No API key is needed.</p>
+    <div class="actions"><button id="enable" type="button">Enable connection</button><button id="disable" type="button" class="secondary">Keep disconnected</button></div>
+    <p id="status" role="status" aria-live="polite">The extension stays disconnected until you enable it.</p>
+    <footer><a href="privacy.html" target="_blank" rel="noopener">Privacy policy</a><a href="https://github.com/aesgalexis/habitat/releases/latest" target="_blank" rel="noopener">Download HABITAT</a><a href="https://github.com/aesgalexis/habitat/issues" target="_blank" rel="noopener">Help and support</a></footer>
+  </main>
+  <script src="welcome.js"></script>
+</body>
+</html>

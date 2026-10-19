@@ -1,9 +1,10 @@
 // Use Chrome’s active ChatGPT chat. Never create or rename a conversation.
-importScripts("transport.js");
+importScripts("connection.js", "transport.js");
 importScripts("translation.js");
 importScripts("search-transport.js", "search.js", "youtube.js");
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   (async () => {
+    if (!await habitatConnectionEnabled()) return {error:"Open the HABITAT extension and enable the connection first"};
     if (request.kind === "connect" && sender.id === chrome.runtime.id &&
         sender.url?.startsWith(chrome.runtime.getURL(""))) {
       return await startTransport();
@@ -46,7 +47,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const run = async credentials => {
       const url = "http://127.0.0.1:8765/" + (request.kind === "next" ? "next" : "event");
       const init = {method: request.kind === "next" ? "GET" : "POST",
-        headers:{"X-Habitat-Key":credentials.habitatKey,"Content-Type":"application/json","X-Habitat-Browser":await habitatBrowser()}};
+        headers:{"X-Habitat-Key":credentials.habitatKey,"Content-Type":"application/json"}};
       if (request.kind === "event") init.body=JSON.stringify(request.event);
       return fetch(url,init);
     };
@@ -64,7 +65,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return true;
 });
 
-chrome.runtime.onInstalled.addListener(() => { void pairMostRecentChat(); });
+chrome.runtime.onInstalled.addListener(() => {
+  void (async () => {
+    const saved = await chrome.storage.local.get("habitatConsentVersion");
+    if (saved.habitatConsentVersion !== HABITAT_CONSENT_VERSION)
+      await chrome.tabs.create({url:chrome.runtime.getURL("welcome.html")});
+    else await pairMostRecentChat();
+  })();
+});
 chrome.runtime.onStartup.addListener(() => { void pairMostRecentChat(); });
 void closeReloadTabs();
 void startTransport();
@@ -98,6 +106,7 @@ function isConversationUrl(value) {
 
 async function pairTab(tab) {
   try {
+    if (!await habitatConnectionEnabled()) return null;
     const response=await fetch("http://127.0.0.1:8765/pair",{
       headers:{"X-Habitat-Pair":"1"},cache:"no-store"
     });

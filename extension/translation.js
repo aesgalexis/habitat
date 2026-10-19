@@ -12,7 +12,7 @@ const translationPageLeases = new Map();
 
 chrome.alarms.onAlarm.addListener(alarm => { if (alarm.name === TRANSLATION_ALARM) void startTranslationTransport(); });
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && changes.habitatDisabled) {
+  if (area === "local" && (changes.habitatDisabled || changes.habitatConsentVersion)) {
     const old = translationSocket;
     translationSocket = null;
     translationJob = null;
@@ -25,16 +25,15 @@ async function startTranslationTransport() {
   if (translationStarting) return translationStarting;
   translationStarting = (async () => {
     if (translationSocket && translationSocket.readyState <= WebSocket.OPEN) return;
-    if ((await chrome.storage.local.get("habitatDisabled")).habitatDisabled) return;
+    if (!await habitatConnectionEnabled()) return;
     await chrome.alarms.create(TRANSLATION_ALARM, {periodInMinutes:0.5});
     const response = await fetch("http://127.0.0.1:8765/pair", {headers:{"X-Habitat-Pair":"1"}, cache:"no-store"});
     if (!response.ok) throw Error("Desktop unavailable");
     const credentials = await response.json();
     if (typeof credentials.key !== "string") throw Error("Desktop unavailable");
-    const browser = typeof habitatBrowser === "function" ? await habitatBrowser() : "unknown";
     const socket = new WebSocket("ws://127.0.0.1:8765/translate-bridge");
     translationSocket = socket;
-    socket.onopen = () => socket.send(JSON.stringify({key:credentials.key, translationProtocol:1, browser}));
+    socket.onopen = () => socket.send(JSON.stringify({key:credentials.key, translationProtocol:1}));
     socket.onmessage = event => {
       if (translationSocket !== socket) return;
       try {

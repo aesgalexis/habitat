@@ -5,6 +5,10 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $installerRepo = Split-Path -Parent $PSScriptRoot
+$changes = git -C $installerRepo status --porcelain
+if ($LASTEXITCODE -ne 0 -or $changes) { throw 'Build release installers from a clean committed working tree.' }
+$commit = git -C $installerRepo rev-parse HEAD
+if ($LASTEXITCODE -ne 0) { throw 'Could not determine the source commit.' }
 $sourceVersion = (Get-Content -LiteralPath (Join-Path $installerRepo 'VERSION') -Raw).Trim()
 if (-not $Version) { $Version = $sourceVersion }
 if ($Version -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$' -or $Version -ne $sourceVersion) {
@@ -47,16 +51,20 @@ Copy-Item -LiteralPath (Join-Path $installerRepo 'LICENSE') -Destination (Join-P
 Copy-Item -LiteralPath (Join-Path $installerRepo 'packaging/GETTING_STARTED.txt') -Destination $payload
 $browserExtension = Join-Path $payload 'browser-extension'
 New-Item -ItemType Directory -Path $browserExtension -Force | Out-Null
-# Only ship extension assets; never copy local configuration or build outputs.
-foreach ($file in Get-ChildItem -LiteralPath (Join-Path $installerRepo 'extension') -File) {
-    if ($file.Extension -in '.js', '.json', '.html', '.css', '.png', '.svg') {
-        Copy-Item -LiteralPath $file.FullName -Destination $browserExtension
-    }
-}
+Import-Module (Join-Path $PSScriptRoot 'Habitat.Extension.psm1') -Force
+Copy-HabitatChromeExtension -Source (Join-Path $installerRepo 'extension') -Destination $browserExtension
+Copy-Item -LiteralPath (Join-Path $installerRepo 'docs/GETTING_STARTED.md') -Destination $payload
 & (Join-Path $PSScriptRoot 'build-vscode-extension.ps1') -OutputDirectory (Join-Path $payload 'vscode-extension')
+$bridge = Get-Content -LiteralPath (Join-Path $browserExtension 'manifest.json') -Raw | ConvertFrom-Json
+$vscode = Get-Content -LiteralPath (Join-Path $installerRepo 'vscode-extension/package.json') -Raw | ConvertFrom-Json
+$release = [ordered]@{ version = $Version; runtime = 'win-x64'; sourceCommit = $commit.Trim(); browserExtensionVersion = $bridge.version; vscodeExtensionVersion = $vscode.version }
+[IO.File]::WriteAllText((Join-Path $payload 'release.json'), ($release | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
 Import-Module (Join-Path $PSScriptRoot 'Habitat.Release.psm1') -Force
 New-HabitatBuildManifest $payload
 Test-HabitatBuildManifest $payload
+$changes = git -C $installerRepo status --porcelain
+$finalCommit = git -C $installerRepo rev-parse HEAD
+if ($LASTEXITCODE -ne 0 -or $changes -or $finalCommit -ne $commit) { throw 'Source files changed while building the installer.' }
 & $InnoCompilerPath '/Qp' "/DHabitatVersion=$Version" "/DHabitatPublisher=$($metadata.Publisher)" `
     "/DHabitatAppId=$($metadata.AppId)" "/DHabitatPackageUrl=$($metadata.PackageUrl)" `
     "/DPayloadDirectory=$payload" "/DInstallerOutputDirectory=$OutputDirectory" `

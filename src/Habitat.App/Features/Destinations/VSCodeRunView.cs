@@ -86,9 +86,9 @@ internal sealed class VSCodeRunView
             {
                 try
                 {
-                    if (!await _openLink(uri)) _summary.Text = "Could not open link. Check Preferences > Browser.";
+                    if (!await _openLink(uri)) _summary.Text = "Could not open link. Check that Google Chrome is installed, then retry.";
                 }
-                catch (Exception) { _summary.Text = "Could not open link. Check Preferences > Browser."; }
+                catch (Exception) { _summary.Text = "Could not open link. Check that Google Chrome is installed, then retry."; }
             };
             AutomationProperties.SetName(link, "Open " + uri.AbsoluteUri);
             _links.Children.Add(link);

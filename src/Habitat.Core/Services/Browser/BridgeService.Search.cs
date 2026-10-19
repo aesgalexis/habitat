@@ -16,7 +16,7 @@ public sealed partial class BridgeService
     {
         if (!context.WebSockets.IsWebSocketRequest) { context.Response.StatusCode = 400; return; }
         using var socket = await context.WebSockets.AcceptWebSocketAsync();
-        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, BrowserToken);
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
         var owner = new object();
         Task? receive = null;
         try
@@ -26,7 +26,7 @@ public sealed partial class BridgeService
             using var auth = await ReadSocketJsonAsync(socket, timeout.Token);
             if (auth is null || !auth.RootElement.TryGetProperty("key", out var key) || key.ValueKind != JsonValueKind.String ||
                 !IsAuthorized(key.GetString() ?? "") || !auth.RootElement.TryGetProperty("searchProtocol", out var protocol) ||
-                protocol.ValueKind != JsonValueKind.Number || !protocol.TryGetInt32(out var version) || version != 1 || !IsBrowserAllowed(context.Request, auth))
+                protocol.ValueKind != JsonValueKind.Number || !protocol.TryGetInt32(out var version) || version != 1)
             {
                 await socket.CloseOutputAsync(WebSocketCloseStatus.PolicyViolation, "Unauthorized", lifetime.Token);
                 return;

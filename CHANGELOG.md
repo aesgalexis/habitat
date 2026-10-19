@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.10.0 — 2026-10-19
+
+- Todos los destinos web se abren en Google Chrome. Eliminado el selector de navegador y corregida la desconexión al usar el navegador predeterminado de Windows; las preferencias anteriores conservan los demás ajustes.
+- Guía inicial **Set up HABITAT…**, disponible también en el menú, con detección de Chrome, acceso a la extensión de la tienda, alternativa descomprimida y estado independiente de las cuatro conexiones.
+- Instrucciones completas para instalar en otro PC, conectar ChatGPT y configurar las integraciones opcionales de Gmail, VS Code y Codex.
+- Browser bridge **0.9.0** con consentimiento explícito antes de conectar, pantalla de bienvenida, desconexión de todos los canales y política de privacidad. Enviada a Chrome Web Store como Unlisted; pendiente de aprobación de Google al preparar esta versión.
+- EXE y ZIP incluyen los mismos recursos de la extensión, iconos y privacidad, sin utilidades de desarrollo. Ambos formatos identifican el commit fuente y las versiones de las extensiones.
+- YouTube reconoce canales coincidentes con la consulta y mejora la presentación de miniaturas y títulos; se conservan bloques de 20 vídeos.
+- Verificación del asistente con almacenamiento aislado y comprobación de los paquetes, sus recursos y sus runtimes autocontenidos.
+
 ## 0.9.1 — 2026-10-18
 
 Primera distribución instalable del escritorio WinUI 3 / .NET 10, con todas las funciones descritas en 0.9.0, ZIP y EXE autocontenidos, extensiones y SHA-256.

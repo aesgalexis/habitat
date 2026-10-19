@@ -11,17 +11,15 @@ internal sealed class PreferencesView : Grid
     internal ListView Categories { get; } = new() { SelectionMode = ListViewSelectionMode.Single, IsItemClickEnabled = false };
     internal ComboBox Theme { get; }
     internal Slider BackgroundOpacity { get; }
-    internal ComboBox Browser { get; }
     internal ToggleSwitch TextOnly { get; }
     internal ToggleSwitch GlobalHotkey { get; }
     internal ToggleSwitch UseDeviceLocation { get; }
     internal TextBox WeatherCity { get; }
     internal HyperlinkButton LocationSettings { get; }
-    internal string BrowserId => ((ComboBoxItem)Browser.SelectedItem).Tag as string ?? BrowserLauncher.Default;
     internal string Category => ((ListViewItem)Categories.SelectedItem).Tag as string ?? "Appearance";
     private readonly ScrollViewer _scroll = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
 
-    public PreferencesView(Habitat.Preferences saved, IReadOnlyList<InstalledBrowser> browsers, bool browserBusy)
+    public PreferencesView(Habitat.Preferences saved)
     {
         ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(148) });
         ColumnDefinitions.Add(new ColumnDefinition());
@@ -40,22 +38,6 @@ internal sealed class PreferencesView : Grid
         BackgroundOpacity.ValueChanged += (_, args) => opacityValue.Text = $"Background opacity · {args.NewValue:0}%";
         AddCategory("Appearance", "\uE790", "Personalize the look and feel of HABITAT.",
             Card(Theme, Description("Hybrid adjusts the contrast to the background behind the window.")), Card(opacityValue, BackgroundOpacity));
-
-        Browser = new ComboBox { Header = "Open web destinations with", HorizontalAlignment = HorizontalAlignment.Stretch, IsEnabled = !browserBusy };
-        AutomationProperties.SetName(Browser, "Browser for web destinations");
-        Browser.Items.Add(new ComboBoxItem { Content = "System default", Tag = BrowserLauncher.Default });
-        foreach (var browser in browsers) Browser.Items.Add(new ComboBoxItem { Content = browser.Name, Tag = browser.Id });
-        var selected = Browser.Items.Cast<ComboBoxItem>().FirstOrDefault(item => string.Equals(item.Tag as string, saved.Browser, StringComparison.OrdinalIgnoreCase));
-        if (selected is null)
-        {
-            selected = new ComboBoxItem { Content = "Saved browser (unavailable)", Tag = saved.Browser };
-            Browser.Items.Add(selected);
-        }
-        Browser.SelectedItem = selected;
-        AddCategory("Browser", "\uE774", "Use the same browser for all web destinations.", Card(Browser,
-            Description("Applies to destination links, search results, Gmail and Google sign-in. System default follows your Windows browser setting.")),
-            Card(Description("ChatGPT, search and translation inside HABITAT require the HABITAT extension in the selected browser. These integrations currently support Chrome and compatible Chromium browsers. Install or reload the extension there, then connect ChatGPT.")),
-            Description(browserBusy ? "Wait for the current request to finish before changing the browser." : "Changes take effect when you close Preferences. Open tabs stay in their current browser."));
 
         UseDeviceLocation = new ToggleSwitch { Header = "Use current location (GPS / Windows)", IsOn = saved.UseDeviceLocation };
         WeatherCity = new TextBox { Header = saved.UseDeviceLocation ? "Fallback city" : "Weather location", Text = saved.WeatherCity,

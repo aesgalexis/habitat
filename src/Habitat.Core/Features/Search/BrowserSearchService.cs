@@ -5,7 +5,7 @@ namespace Habitat.Features.Search;
 internal sealed record BrowserSearchRequest(string Id, string Query, int Start);
 internal sealed class BrowserSearchException(string message) : Exception(message);
 
-// Search pages are read in your selected browser by the authenticated extension, without HTTP APIs.
+// Search pages are read in Chrome by the authenticated extension, without HTTP APIs.
 internal sealed class BrowserSearchService(TimeProvider? clock = null, ComposerDestination destination = ComposerDestination.Google) : ISearchService
 {
     internal ComposerDestination Destination { get; } = destination is ComposerDestination.Google or ComposerDestination.YouTube
@@ -33,7 +33,7 @@ internal sealed class BrowserSearchService(TimeProvider? clock = null, ComposerD
         TaskCompletionSource<SearchPage> completion;
         lock (_gate)
         {
-            if (!IsConnected) throw new BrowserSearchException($"Open your selected browser and reload the HABITAT extension to connect {Provider} Search, then retry.");
+            if (!IsConnected) throw new BrowserSearchException($"Open Chrome and reload the HABITAT extension to connect {Provider} Search, then retry.");
             if (_request is not null) throw new BrowserSearchException("Wait for the current search to finish.");
             LastDiagnostic = null;
             _request = new BrowserSearchRequest(Guid.NewGuid().ToString("N"), query, start);
@@ -88,6 +88,11 @@ internal sealed class BrowserSearchService(TimeProvider? clock = null, ComposerD
         System.Text.RegularExpressions.Regex.IsMatch(uri.Query, @"^\?v=[A-Za-z0-9_-]{11}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
     internal static Uri? ThumbnailUri(string? videoUrl) => IsVideoLink(videoUrl)
         ? new Uri("https://i.ytimg.com/vi/" + new Uri(videoUrl!).Query[3..] + "/mqdefault.jpg") : null;
+    internal static bool IsChannelLink(string? value) => IsSafeLink(value) && Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+        uri.Scheme == "https" && uri.Host == "www.youtube.com" && uri.IsDefaultPort && uri.Query.Length == 0 && uri.Fragment.Length == 0 &&
+        System.Text.RegularExpressions.Regex.IsMatch(Uri.UnescapeDataString(uri.AbsolutePath),
+            @"^/(?:@[\p{L}\p{M}\p{N}._·-]+|channel/UC[A-Za-z0-9_-]{22}|(?:c|user)/[\p{L}\p{M}\p{N}._·-]+)$",
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     internal void Complete(object owner, string? id, SearchResult[]? results, int? nextStart, string? error, string? diagnostic = null)
     {
@@ -98,7 +103,8 @@ internal sealed class BrowserSearchService(TimeProvider? clock = null, ComposerD
             if (!string.IsNullOrEmpty(error)) _completion.TrySetException(new BrowserSearchException(PageError(error)));
             else if (results is { Length: <= 30 } && results.All(item => item is not null &&
                 !string.IsNullOrWhiteSpace(item.Title) && item.Title.Length <= 600 &&
-                item.Snippet is { Length: <= 2000 } && (Destination == ComposerDestination.YouTube ? IsVideoLink(item.Url) : IsSafeLink(item.Url))) &&
+                item.Snippet is { Length: <= 2000 } && (Destination == ComposerDestination.YouTube
+                    ? IsVideoLink(item.Url) || request.Start == 0 && IsChannelLink(item.Url) : IsSafeLink(item.Url))) &&
                 (nextStart is null || nextStart > request.Start && nextStart <= 990))
                 _completion.TrySetResult(new SearchPage(results.ToArray(), nextStart));
             else _completion.TrySetException(new BrowserSearchException(PageError("result")));
@@ -111,22 +117,22 @@ internal sealed class BrowserSearchService(TimeProvider? clock = null, ComposerD
         {
             if (!ReferenceEquals(_owner, owner)) return;
             _owner = null;
-            _completion?.TrySetException(new BrowserSearchException("The selected browser disconnected. Reconnect the HABITAT extension, then retry."));
+            _completion?.TrySetException(new BrowserSearchException("Chrome disconnected. Reconnect the HABITAT extension, then retry."));
         }
     }
 
     private string PageError(string error) => error switch
     {
-        "consent" => $"Open the {Provider} search tab in your selected browser and complete its consent screen, then retry.",
-        "blocked" => $"Open the {Provider} search tab in your selected browser and complete its verification, then retry.",
+        "consent" => $"Open the {Provider} search tab in Chrome and complete its consent screen, then retry.",
+        "blocked" => $"Open the {Provider} search tab in Chrome and complete its verification, then retry.",
         "permission" => $"Reload the HABITAT extension and allow access to {Host}, then retry.",
         "background-permission" => $"Reload the HABITAT extension and allow its background search permission, then retry.",
         "background-unavailable" => $"Could not keep {Provider} active in the background. Close its DevTools or reload the HABITAT extension, then retry.",
         "page-changed" => $"The {Provider} search tab changed. Retry to open a new search tab.",
-        "timeout" => $"{Provider} did not return search results. Check its tab in your selected browser, then retry.",
-        _ => $"Could not read {Provider} search results. Open the search in your selected browser or retry."
+        "timeout" => $"{Provider} did not return search results. Check its tab in Chrome, then retry.",
+        _ => $"Could not read {Provider} search results. Open the search in Chrome or retry."
     };
 
     internal static string ErrorMessage(Exception exception, ComposerDestination destination = ComposerDestination.Google) => exception is BrowserSearchException
-        ? exception.Message : $"Could not search {(destination == ComposerDestination.YouTube ? "YouTube" : "Google")}. Check your selected browser and try again.";
+        ? exception.Message : $"Could not search {(destination == ComposerDestination.YouTube ? "YouTube" : "Google")}. Check Chrome and try again.";
 }

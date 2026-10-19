@@ -95,7 +95,7 @@ public sealed partial class BridgeService : IAsyncDisposable
 
             server.MapGet("/next", (HttpRequest request) =>
             {
-                if (!IsAuthorized(request) || !IsBrowserAllowed(request))
+                if (!IsAuthorized(request))
                 {
                     return Results.Json(new { error = "Unauthorized" }, statusCode: StatusCodes.Status403Forbidden);
                 }
@@ -116,7 +116,7 @@ public sealed partial class BridgeService : IAsyncDisposable
 
             server.MapPost("/event", async (HttpRequest request) =>
             {
-                if (!IsAuthorized(request) || !IsBrowserAllowed(request))
+                if (!IsAuthorized(request))
                 {
                     return Results.Json(new { error = "Unauthorized" }, statusCode: StatusCodes.Status403Forbidden);
                 }
@@ -199,8 +199,7 @@ public sealed partial class BridgeService : IAsyncDisposable
     {
         if (!context.WebSockets.IsWebSocketRequest) { context.Response.StatusCode = 400; return; }
         using var socket = await context.WebSockets.AcceptWebSocketAsync();
-        var browserToken = BrowserToken;
-        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, browserToken);
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
         var owner = new object();
         Task? receive = null;
         try
@@ -211,12 +210,12 @@ public sealed partial class BridgeService : IAsyncDisposable
             authTimeout.CancelAfter(TimeSpan.FromSeconds(5));
             using var auth = await ReadSocketJsonAsync(socket, authTimeout.Token);
             if (auth is null || !auth.RootElement.TryGetProperty("kind", out var kind) || kind.GetString() != "auth" ||
-                !auth.RootElement.TryGetProperty("key", out var key) || !IsAuthorized(key.GetString() ?? "") || !IsBrowserAllowed(context.Request, auth))
+                !auth.RootElement.TryGetProperty("key", out var key) || !IsAuthorized(key.GetString() ?? ""))
             {
                 await socket.CloseOutputAsync(WebSocketCloseStatus.PolicyViolation, "Unauthorized", lifetime.Token);
                 return;
             }
-            receive = ReceiveHeartbeatsAsync(socket, owner, lifetime.Token, browserToken);
+            receive = ReceiveHeartbeatsAsync(socket, owner, lifetime.Token);
             while (!receive.IsCompleted && socket.State == WebSocketState.Open)
             {
                 OutgoingMessage? message;
@@ -252,7 +251,7 @@ public sealed partial class BridgeService : IAsyncDisposable
         }
     }
 
-    private async Task ReceiveHeartbeatsAsync(WebSocket socket, object owner, CancellationToken cancellationToken, CancellationToken browserToken)
+    private async Task ReceiveHeartbeatsAsync(WebSocket socket, object owner, CancellationToken cancellationToken)
     {
         var lastModel = "";
         while (socket.State == WebSocketState.Open)
@@ -272,7 +271,6 @@ public sealed partial class BridgeService : IAsyncDisposable
             var ready = root.TryGetProperty("ready", out var value) && value.ValueKind == JsonValueKind.True;
             lock (_stateLock)
             {
-                if (browserToken != _browserLifetime.Token) return;
                 // Socket traffic alone is NOT a connection. The worker must
                 // have received a fresh acknowledgement from the bound page.
                 _lastPoll = ready ? UtcNow : DateTimeOffset.MinValue;

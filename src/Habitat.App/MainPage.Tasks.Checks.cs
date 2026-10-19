@@ -16,6 +16,26 @@ public sealed partial class MainPage
                 throw new InvalidOperationException("UI checks did not receive isolated services.");
             File.AppendAllText(path, "PASS: isolated services, empty in-memory Gmail credentials and explicit data paths\n");
             await _initialTaskLoad;
+            if (Environment.GetCommandLineArgs().Contains("--setup-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
+                await CheckSetupUiAsync(path);
+            if (Environment.GetCommandLineArgs().Contains("--setup-ui-only"))
+            {
+                await StopAsync();
+                await _services.DisposeAsync();
+                window.Close();
+                Application.Current.Exit();
+                return;
+            }
+            if (Environment.GetCommandLineArgs().Contains("--chrome-store-assets"))
+            {
+                await ExportChromeStoreAssetsAsync(window);
+                File.AppendAllText(path, "PASS: Chrome Web Store screenshots rendered from native controls with isolated sample content\n");
+                await StopAsync();
+                await _services.DisposeAsync();
+                window.Close();
+                Application.Current.Exit();
+                return;
+            }
             if (Environment.GetCommandLineArgs().Contains("--preferences-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
                 await CheckPreferencesUiAsync(path);
             if (Environment.GetCommandLineArgs().Contains("--preferences-ui-only"))

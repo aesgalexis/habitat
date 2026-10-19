@@ -10,26 +10,12 @@ let tickRunning = false;
 let protectionChange = Promise.resolve();
 const openedChatRequests = new Map();
 
-// Shared by all worker channels. Chromium derivatives may hide their name in
-// the legacy user agent, so use brands and Brave's explicit API as well.
-async function habitatBrowser() {
-  if (typeof navigator === "undefined") return "unknown";
-  if (await navigator.brave?.isBrave?.()) return "brave";
-  const brands = navigator.userAgentData?.brands?.map(item => item.brand).join(" ") || "";
-  const agent = navigator.userAgent || "";
-  if (/Microsoft Edge/i.test(brands) || /Edg\//.test(agent)) return "edge";
-  if (/Opera/i.test(brands) || /OPR\//.test(agent)) return "opera";
-  if (/Vivaldi/i.test(brands) || /Vivaldi\//.test(agent)) return "vivaldi";
-  if (/Firefox\//.test(agent)) return "firefox";
-  return /Chrome\//.test(agent) ? "chrome" : "unknown";
-}
-
 chrome.alarms.onAlarm.addListener(alarm => {
   if (alarm.name === WATCHDOG) void startTransport();
 });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
-  if (changes.habitatTab || changes.habitatUrl || changes.habitatDisabled) {
+  if (changes.habitatTab || changes.habitatUrl || changes.habitatDisabled || changes.habitatConsentVersion) {
     closeTransport();
     void startTransport();
   }
@@ -51,15 +37,18 @@ async function startTransport() {
 }
 
 async function connectTransport() {
+  if (!await habitatConnectionEnabled()) {
+    const saved = await chrome.storage.local.get("habitatDisabled");
+    return {error:saved.habitatDisabled ? "The extension is disconnected" : "Open the HABITAT extension and enable the connection first"};
+  }
   if (habitatSocket && habitatSocket.readyState <= WebSocket.OPEN) return {ok:true};
   await chrome.alarms.create(WATCHDOG, {periodInMinutes:0.5});
   const saved = await chrome.storage.local.get(["habitatTab","habitatUrl","habitatDisabled"]);
   if (saved.habitatDisabled) return {error:"The extension is disconnected"};
   const tab = await chooseBoundTab(saved);
-  if (!tab) { scheduleReconnect(); return {error:"Select a ChatGPT tab in your selected browser"}; }
+  if (!tab) { scheduleReconnect(); return {error:"Select a ChatGPT tab in Chrome"}; }
   const credentials = await pairTab(tab);
   if (!credentials) { scheduleReconnect(); return {error:"HABITAT desktop app is unavailable"}; }
-  const browser = await habitatBrowser();
 
   await protectBoundTab(tab);
   const currentBinding = await chrome.storage.local.get(["habitatDisabled","habitatTab","habitatUrl"]);
@@ -73,7 +62,7 @@ async function connectTransport() {
   habitatSocket = socket;
   socket.onopen = () => {
     retryCount = 0;
-    socket.send(JSON.stringify({kind:"auth",key:credentials.habitatKey,browser}));
+    socket.send(JSON.stringify({kind:"auth",key:credentials.habitatKey}));
   };
   socket.onmessage = event => {
     if (habitatSocket !== socket) return;

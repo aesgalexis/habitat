@@ -13,6 +13,24 @@ function Invoke-SilentInstaller([string]$Executable, [string[]]$InstallerArgumen
     if ($process.ExitCode -ne 0) { throw "Installer exited with $($process.ExitCode). Logs: $smokeRoot" }
 }
 function Test-InstalledPayload {
+    $release = Get-Content -LiteralPath (Join-Path $installation 'release.json') -Raw | ConvertFrom-Json
+    $expectedVersion = (Get-Content -LiteralPath (Join-Path $smokeRepo 'VERSION') -Raw).Trim()
+    $expectedCommit = git -C $smokeRepo rev-parse HEAD
+    if ($release.version -ne $expectedVersion -or $release.runtime -ne 'win-x64' -or $release.sourceCommit -ne $expectedCommit) {
+        throw 'Installer release metadata differs from its source.'
+    }
+    Import-Module (Join-Path $smokeRepo 'scripts/Habitat.Extension.psm1') -Force
+    $extensionRoot = Join-Path $installation 'browser-extension'
+    foreach ($file in Get-HabitatChromeExtensionFiles) {
+        if (-not (Test-Path -LiteralPath (Join-Path $extensionRoot $file) -PathType Leaf)) { throw "Missing bundled extension resource: $file" }
+    }
+    if (@(Get-ChildItem -LiteralPath $extensionRoot -File -Recurse).Count -ne @(Get-HabitatChromeExtensionFiles).Count -or
+        -not (Test-Path -LiteralPath (Join-Path $installation 'GETTING_STARTED.md'))) { throw 'EXE includes unexpected extension files or lacks its setup guide.' }
+    $bridge = Get-Content -LiteralPath (Join-Path $extensionRoot 'manifest.json') -Raw | ConvertFrom-Json
+    if ($bridge.version -ne $release.browserExtensionVersion -or
+        -not (Test-Path -LiteralPath (Join-Path $installation "vscode-extension/habitat-terminal-$($release.vscodeExtensionVersion).vsix"))) {
+        throw 'Installed integration versions differ from release metadata.'
+    }
     $manifest = Get-Content -LiteralPath (Join-Path $installation 'build-manifest.json') -Raw | ConvertFrom-Json
     foreach ($entry in $manifest.files) {
         $file = Join-Path $installation $entry.path

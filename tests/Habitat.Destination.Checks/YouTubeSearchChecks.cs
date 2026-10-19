@@ -22,8 +22,30 @@ internal static class YouTubeSearchChecks
         service.Complete(owner, request.Id, [video], 40, null);
         var page = await pending;
         check(page.Results.Single() == video && page.NextStart == 40, "YouTube titles, canonical video URLs and page metadata return as plain text");
+        foreach (var link in new[] { "https://www.youtube.com/@habitat", "https://www.youtube.com/@caf%C3%A9",
+            "https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv", "https://www.youtube.com/c/Habitat", "https://www.youtube.com/user/Habitat" })
+        {
+            var channel = new SearchResult("Habitat", link, "@habitat · 12K subscribers\nChannel description");
+            check(BrowserSearchService.IsChannelLink(link) && BrowserSearchService.ThumbnailUri(link) is null,
+                "Canonical channel links are recognized without requesting a video thumbnail: " + link);
+            pending = service.SearchAsync("Habitat", 0, default);
+            service.Complete(owner, service.Pending(owner)!.Id, [channel, video], 20, null);
+            page = await pending;
+            check(page.Results.SequenceEqual(new[] { channel, video }) && page.NextStart == 20,
+                "Matching channels precede videos without changing the loaded-video offset");
+        }
+        pending = service.SearchAsync("Habitat", 0, default);
+        service.Complete(owner, service.Pending(owner)!.Id, [new("Habitat", "https://www.youtube.com/@habitat", "")], null, null);
+        check((await pending).Results.Count == 1, "A channel-only result page succeeds without video results");
+        pending = service.SearchAsync("Habitat", 20, default);
+        service.Complete(owner, service.Pending(owner)!.Id, [new("Habitat", "https://www.youtube.com/@habitat", "")], null, null);
+        try { await pending; throw new Exception("Channel accepted on a later video page."); }
+        catch (BrowserSearchException) { check(true, "Channel matches belong only to the first video page"); }
         foreach (var link in new[] { "https://example.com/watch?v=abcdefghijk", "https://www.youtube.com/redirect?q=https://example.com",
-            "https://www.youtube.com/watch?v=invalid", "https://www.youtube.com/watch?v=abcdefghijk&list=arbitrary", "javascript:alert(1)" })
+            "https://www.youtube.com/watch?v=invalid", "https://www.youtube.com/watch?v=abcdefghijk&list=arbitrary", "javascript:alert(1)",
+            "https://example.com/@habitat", "https://www.youtube.com/@habitat/videos", "https://www.youtube.com/channel/invalid",
+            "https://www.youtube.com/@habitat?tracking=1", "https://www.youtube.com/@habitat#fragment", "https://user@www.youtube.com/@habitat",
+            "http://www.youtube.com/@habitat", "https://www.youtube.com:444/@habitat", "https://www.youtube.com/@bad%2Fpath" })
         {
             check(BrowserSearchService.ThumbnailUri(link) is null, "Unsafe video links cannot request arbitrary thumbnail URLs");
             pending = service.SearchAsync("Unsafe video link", 0, default);
@@ -69,8 +91,9 @@ internal static class YouTubeSearchChecks
         try
         {
             var page = await bridge.YouTubeSearch.SearchAsync("Microsoft Windows developer", 0, timeout.Token);
-            check(page.Results.Count > 0 && page.Results.All(item => BrowserSearchService.IsVideoLink(item.Url)),
-                "The real YouTube search page returns video titles and canonical links through Chrome");
+            check(page.Results.Any(item => BrowserSearchService.IsVideoLink(item.Url)) &&
+                page.Results.All(item => BrowserSearchService.IsVideoLink(item.Url) || BrowserSearchService.IsChannelLink(item.Url)),
+                "The real YouTube search page returns videos and canonical video/channel links through Chrome");
             check(page.Results.Any(item => item.Snippet.Length > 0), "Real YouTube video results include channel, metadata or description");
             Console.WriteLine($"Live YouTube: {page.Results.Count} videos; details: {page.Results.Count(item => item.Snippet.Length > 0)}; next: {page.NextStart}");
             if (page.NextStart is not { } next) throw new Exception("Expected more results for the synthetic YouTube query.");

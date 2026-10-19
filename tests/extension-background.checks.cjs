@@ -13,7 +13,7 @@ async function workerChecks() {
   const first={id:101,windowId:1,url:'https://chatgpt.com/c/first',active:true,autoDiscardable:true};
   const second={id:202,windowId:2,url:'https://chatgpt.com/c/second',active:false,autoDiscardable:true};
   const local={habitatTab:202,habitatUrl:second.url,habitatKey:'key',habitatSession:{messageCount:999}};
-  const session={},commands=[],sockets=[],timers=new Set(),activations=[],windowUpdates=[];
+  const session={},commands=[],sockets=[],timers=new Set(),activations=[],windowUpdates=[],setupPages=[];
   let allowActivation=false;
   let pageBusy=false,available=true,protocol=6,injections=0;
   const chrome={runtime:{id:'test-extension',onMessage:signal(),onInstalled:signal(),onStartup:signal(),getURL:p=>'chrome-extension://test-extension/'+p},
@@ -23,7 +23,7 @@ async function workerChecks() {
       get:async id=>[first,second].find(t=>t.id===id),
       update:async(id,values)=>{check(Object.keys(values).every(k=>k==='autoDiscardable'||allowActivation&&k==='active'),'Activate only after an explicit external action; never navigate.');
         if(values.active)activations.push(id);Object.assign([first,second].find(t=>t.id===id),values);},
-      create:async()=>{throw Error('Must never create a tab');},remove:async()=>{},
+      create:async values=>{check(values.url==='chrome-extension://test-extension/welcome.html','Only the consent page may open automatically.');setupPages.push(values.url);return {id:999};},remove:async()=>{},
       sendMessage:async(id,request)=>{commands.push({id,request});if(!available)throw Error('No content script');
         return request.kind==='habitat:probe'?{protocol,ready:true,busy:pageBusy,url:[first,second].find(t=>t.id===id).url,model:'test-model'}:{accepted:true};}},
     windows:{get:async()=>({state:'minimized'}),update:async(id,values)=>{windowUpdates.push({id,values});}},
@@ -41,6 +41,11 @@ async function workerChecks() {
   context.importScripts=(...files)=>files.forEach(file=>vm.runInContext(fs.readFileSync(path.join(extension,file),'utf8'),context));
   vm.runInContext(fs.readFileSync(path.join(extension,'background.js'),'utf8'),context);
   await settled();
+  check(sockets.length===0 && commands.length===0 && injections===0 && local.habitatTab===202,
+    'A fresh installation cannot connect, inspect the chat or replace its binding before consent.');
+  chrome.runtime.onInstalled.listeners[0]();await settled();
+  check(setupPages.length===1 && sockets.length===0,'Installation opens the disclosure page and leaves every channel disconnected.');
+  await chrome.storage.local.set({habitatConsentVersion:1});await settled();
   check(local.habitatTab===101,'Use the active chat instead of the previously dedicated chat.');
   const chatSocket=()=>sockets.findLast(socket=>socket.url.endsWith('/bridge'));
   async function tick(message=null){context.socket=chatSocket();context.message=message;await vm.runInContext('transportTick(socket,message)',context);await settled();}
@@ -111,8 +116,9 @@ async function workerChecks() {
   local.habitatTab=999;
   check(await vm.runInContext('chooseBoundTab(savedBinding)',context)===null,'Do not substitute a random background chat when the linked tab is missing.');
   local.habitatTab=202;
-  local.habitatDisabled=true;await vm.runInContext('closeTransport()',context);await settled();
+  await chrome.storage.local.set({habitatDisabled:true});await settled();
   check((await vm.runInContext('startTransport()',context)).error.includes('disconnected'),'Respect Disconnect.');
+  check(sockets.every(socket=>socket.readyState===3),'Disconnect closes ChatGPT, Google, YouTube and Translate channels.');
   check(first.autoDiscardable===true && second.autoDiscardable===true,'Restore tab protection on disconnect.');
   for(const timer of timers)clearTimeout(timer);
 }

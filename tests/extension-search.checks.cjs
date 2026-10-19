@@ -50,7 +50,7 @@ const document = {querySelector:selector=> {
   return null;
 }};
 const chrome = {alarms:{onAlarm:signal(),create:async()=>{}}, storage:{onChanged:signal(),
-  local:{get:async()=>({habitatDisabled:false})}, session:{get:async()=>session,set:async values=>Object.assign(session,values),
+  local:{get:async()=>({habitatConsentVersion:1,habitatDisabled:false})}, session:{get:async()=>session,set:async values=>Object.assign(session,values),
     remove:async key=>{delete session[key];}}},
   tabs:{get:async id=>{if(!tabs.has(id))throw Error('Tab closed');return {...tabs.get(id)};},
     remove:async id=>{removals.push(id);tabs.delete(id);},
@@ -73,6 +73,7 @@ function job(query='café & snow 雪',start=0) { context.job={id:(++jobNumber).t
 async function dispatch() { await vm.runInContext('googleSearchTransport.dispatch(socket,job)',context);return context.socket.sent.at(-1); }
 
 (async()=>{
+  vm.runInContext(fs.readFileSync(path.resolve(__dirname,'../extension/connection.js'),'utf8'),context);
   vm.runInContext(fs.readFileSync(path.resolve(__dirname,'../extension/search-transport.js'),'utf8'),context);
   vm.runInContext(fs.readFileSync(path.resolve(__dirname,'../extension/search.js'),'utf8'),context);
   for(let i=0;i<10;i++)await new Promise(resolve=>setImmediate(resolve));

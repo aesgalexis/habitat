@@ -11,7 +11,9 @@ HABITAT usa **SemVer: MAJOR.MINOR.PATCH**. `VERSION` es la fuente de la versión
 
 La primera distribución instalable del escritorio es **0.9.1**: recoge el estado funcional de 0.9.0 y corrige su comprobación del changelog en clones Windows con CRLF. `v0.9.0` se conserva como etiqueta histórica sin paquetes publicados. La versión 1.0.0 queda para un estado con compatibilidad y distribución consideradas estables. Una etiqueta publicada es inmutable: si una publicación requiere cambios, se incrementa la versión. Las etiquetas siguen el formato `vMAJOR.MINOR.PATCH` y apuntan a un commit de `main` ya verificado.
 
-La extensión de Chrome (`extension/manifest.json`, actualmente 0.8.0) y la de VS Code (`vscode-extension/package.json`, actualmente 0.2.0) tienen versiones independientes porque se instalan y actualizan por separado. Cada paquete registra las versiones incluidas en `release.json`. La versión del protocolo del puente es un contrato independiente de la versión de producto.
+La extensión de Chrome (`extension/manifest.json`, actualmente 0.9.0) y la de VS Code (`vscode-extension/package.json`, actualmente 0.2.0) tienen versiones independientes porque se instalan y actualizan por separado. Cada paquete registra las versiones incluidas en `release.json`. La versión del protocolo del puente es un contrato independiente de la versión de producto.
+
+La versión 0.10.0 añade la guía de primera puesta en marcha y utiliza exclusivamente Chrome para los destinos web. La extensión 0.9.0 está enviada a Chrome Web Store como Unlisted; el enlace estará disponible tras la aprobación de Google. Se mantiene la carga manual incluida mientras tanto. Consulta [la guía para otro PC](GETTING_STARTED.md).
 
 ## Instalar una publicación
 
@@ -23,7 +25,7 @@ Usa siempre el mismo formato para actualizar una instalación. Los instaladores 
 2. Comprueba el ZIP con `Get-FileHash .\HABITAT-<version>-win-x64.zip -Algorithm SHA256` y compara el resultado con el archivo `.sha256`.
 3. Extrae **todo** el ZIP en una carpeta temporal y ejecuta `Install-HABITAT.cmd` desde tu sesión normal de Windows. No necesita SDK, Git, Node.js ni permisos de administrador.
 4. El instalador comprueba el manifiesto, instala en `%LOCALAPPDATA%\Programs\HABITAT`, crea una entrada en el menú Inicio y abre HABITAT. Puedes borrar la carpeta temporal después.
-5. Carga la carpeta `extension` de la **instalación**, no la temporal, desde `chrome://extensions`. Para VS Code, instala el `.vsix` incluido en `vscode-extension`.
+5. Sigue **Set up HABITAT…**, disponible en el primer arranque y en el menú. Abre la tienda de Chrome o, si aún no está disponible, la carpeta `extension` de la **instalación** y `chrome://extensions` para cargarla manualmente. Activa **Enable connection** y abre tu conversación de ChatGPT en Chrome. Para VS Code, instala el `.vsix` incluido en `vscode-extension`.
 
 Se distribuye para Windows x64, con mínimo de plataforma Windows 10 1809 declarado por el proyecto; se recomienda Windows 10 2004 o posterior, o Windows 11. Solo se verifica en el equipo de desarrollo y el runner Windows de CI; no se afirma una certificación de todas esas versiones. El ZIP contiene los runtimes .NET y Windows App SDK. La distribución actual no tiene firma de código ni instalador MSI/MSIX.
 
@@ -47,7 +49,7 @@ Para retirar una instalación ZIP, desactiva primero **Preferences… → Global
 4. Publica y lleva el commit verificado a `main`. Las etiquetas de publicación deben salir de esa rama; `codex/autosave` sigue siendo la rama de checkpoints.
 5. En un árbol limpio, ejecuta `scripts\package-release.ps1`. Publica WinUI y el residente, comprueba las versiones de los ensamblados, empaqueta ambas extensiones y genera el ZIP y su SHA-256 en `artifacts\packages`.
 6. Verifica el paquete real con `tests\package.checks.ps1 -PackagePath artifacts\packages\HABITAT-<version>-win-x64.zip`. Comprueba integridad, metadatos, binarios, extensiones e instalación aislada sin arranque.
-7. Para comprobar también el EXE localmente, instala Inno Setup 6.7.1 y ejecuta `scripts\build-installer.ps1`; lee la versión de `VERSION`. Verifica su ciclo silencioso con `scripts\test-installer.ps1 -InstallerPath artifacts\distribution\<version>\HABITAT-<version>-x64-setup.exe` en una cuenta sin instalación EXE previa.
+7. Para comprobar también el EXE localmente, instala Inno Setup 6.7.1 y ejecuta `scripts\build-installer.ps1`; lee la versión de `VERSION` y exige un árbol limpio. Verifica su ciclo silencioso con `scripts\test-installer.ps1 -InstallerPath artifacts\distribution\<version>\HABITAT-<version>-x64-setup.exe` en una cuenta sin instalación EXE previa.
 8. Crea la etiqueta anotada `v<version>` en ese commit y súbela. `.github/workflows/release.yml` vuelve a verificar, empaqueta ambos formatos, comprueba sus instalaciones y adjunta el ZIP, el EXE y sus hashes a una GitHub Release.
 
 Los binarios se guardan como **assets de GitHub Releases del repositorio**, no en el historial de Git. El código del instalador, la receta de compilación y el criterio de versiones sí están versionados. El código fuente de cada versión queda fijado por su etiqueta. `release.json` identifica el commit fuente y las versiones de las extensiones; `build-manifest.json` verifica tamaño y SHA-256 de todos los archivos de la aplicación antes de activar una publicación.

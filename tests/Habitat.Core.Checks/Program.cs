@@ -10,6 +10,7 @@ void Check(bool condition, string message) { if (!condition) throw new Exception
 var root = Path.Combine(AppContext.BaseDirectory, "isolated-core", Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(root);
 BrowserChecks.Run(root, Check);
+InstallationChecks.Run(root, Check);
 var paths = AppDataPaths.Isolated(root);
 Check(paths.IsIsolated && paths.LocalDirectory == root && paths.DesktopDirectory == root && paths.TasksPath.StartsWith(root), "Isolated paths never resolve desktop data.");
 

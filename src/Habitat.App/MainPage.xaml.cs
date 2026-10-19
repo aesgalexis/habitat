@@ -57,7 +57,7 @@ public sealed partial class MainPage : Page
     private bool _appearanceDialogOpen;
     private DateTimeOffset _nextHybridProbe = DateTimeOffset.MinValue;
 
-    internal bool HasAppearanceOverlay => _appearanceDialogOpen || _gmailSettingsOpen || _terminalConfirmationOpen;
+    internal bool HasAppearanceOverlay => _appearanceDialogOpen || _gmailSettingsOpen || _terminalConfirmationOpen || _setupDialogOpen;
 
     internal MainPage(AppServices services, IWindowHost? windowHost = null)
     {
@@ -121,6 +121,9 @@ public sealed partial class MainPage : Page
         var preferences = new MenuFlyoutItem { Text = "Preferences…" };
         preferences.Click += ShowPreferences_Click;
         OptionsMenu.Items.Add(preferences);
+        var setup = new MenuFlyoutItem { Text = "Set up HABITAT…" };
+        setup.Click += async (_, _) => await RunOperationAsync(ShowSetupAsync);
+        OptionsMenu.Items.Add(setup);
         var gmail = new MenuFlyoutItem { Text = "Gmail…" };
         gmail.Click += (_, _) => OpenGmail();
         OptionsMenu.Items.Add(gmail);
@@ -309,6 +312,7 @@ public sealed partial class MainPage : Page
         SetStatus("Starting bridge…", StatusTone.Active);
         _timer.Start();
         FocusComposer();
+        if (!_preferences.SetupGuideSeen) _ = RunOperationAsync(ShowSetupAsync);
     }
 
     private async void MainPage_Unloaded(object sender, RoutedEventArgs e)
@@ -346,14 +350,13 @@ public sealed partial class MainPage : Page
 
     private void Timer_Tick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
     {
-        RefreshBrowserPreference();
         TickGmail();
         TickTasks(DateTimeOffset.UtcNow);
-        if (!_weatherRefreshing && !_appearanceDialogOpen && DateTimeOffset.UtcNow >= _nextWeatherRefresh)
+        if (!_weatherRefreshing && !HasAppearanceOverlay && DateTimeOffset.UtcNow >= _nextWeatherRefresh)
         {
             _ = RefreshWeatherAsync();
         }
-        if (_preferences.Theme == "hybrid" && !_appearanceDialogOpen && DateTimeOffset.UtcNow >= _nextHybridProbe)
+        if (_preferences.Theme == "hybrid" && !HasAppearanceOverlay && DateTimeOffset.UtcNow >= _nextHybridProbe)
         {
             RefreshHybridAppearance();
             _nextHybridProbe = DateTimeOffset.UtcNow.AddMilliseconds(750);
@@ -367,7 +370,7 @@ public sealed partial class MainPage : Page
         if (_bridge.TryExpireMessage(BridgeProtocol.RequestTimeout))
         {
             AddMessage("SYSTEM", "The request timed out. Check ChatGPT before sending it again.", MessageTone.Muted);
-            SetStatus("Timed out — check your selected browser", StatusTone.Danger);
+            SetStatus("Timed out — check Chrome", StatusTone.Danger);
         }
         else if (!_bridge.HasMessageInFlight && _destination == ComposerDestination.OpenAI)
         {

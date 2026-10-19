@@ -192,13 +192,15 @@ internal sealed class SearchSection : IDestinationSection
     private void AddResult(SearchResult result)
     {
         var row = new StackPanel { Spacing = 4 };
+        var isChannel = Destination == ComposerDestination.YouTube && BrowserSearchService.IsChannelLink(result.Url);
+        if (isChannel) row.Children.Add(new TextBlock { Text = "Channel", FontSize = 12, Opacity = 0.8 });
         var address = new TextBlock { Text = result.Url, FontSize = 12, Opacity = 0.7,
             TextTrimming = TextTrimming.CharacterEllipsis, IsTextSelectionEnabled = true };
         row.Children.Add(address);
         var title = new HyperlinkButton { Content = new TextBlock { Text = result.Title, TextWrapping = TextWrapping.Wrap, FontSize = 18 },
             Padding = new Thickness(0), HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left };
         AutomationProperties.SetName(title, result.Title);
-        AutomationProperties.SetHelpText(title, "Open result in your browser. " + result.Url);
+        AutomationProperties.SetHelpText(title, (isChannel ? "Open channel in your browser. " : "Open result in your browser. ") + result.Url);
         title.Click += async (_, _) => await OpenResultAsync(result);
         row.Children.Add(title);
         if (result.Snippet.Length > 0) row.Children.Add(new TextBlock { Text = result.Snippet, FontSize = 14,

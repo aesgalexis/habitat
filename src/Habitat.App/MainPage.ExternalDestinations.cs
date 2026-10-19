@@ -30,7 +30,6 @@ public sealed partial class MainPage
 
     private async Task OpenChatWindowAsync()
     {
-        _services.RefreshBrowserPolicy();
         try
         {
             if (!await _openChat()) SetStatus("Could not open the linked ChatGPT conversation. Reconnect the browser extension.", StatusTone.Warning);

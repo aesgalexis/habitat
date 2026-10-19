@@ -10,7 +10,7 @@ function createSearchTransport(config) {
 
   chrome.alarms.onAlarm.addListener(alarm => { if (alarm.name === SEARCH_ALARM) void startSearchTransport(); });
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && changes.habitatDisabled) {
+    if (area === "local" && (changes.habitatDisabled || changes.habitatConsentVersion)) {
       const old = searchSocket;
       searchSocket = null;
       searchJob = null;
@@ -24,16 +24,15 @@ function createSearchTransport(config) {
     if (searchStarting) return searchStarting;
     searchStarting = (async () => {
       if (searchSocket && searchSocket.readyState <= WebSocket.OPEN) return;
-      if ((await chrome.storage.local.get("habitatDisabled")).habitatDisabled) return;
+      if (!await habitatConnectionEnabled()) return;
       await chrome.alarms.create(SEARCH_ALARM, {periodInMinutes:0.5});
       const response = await fetch("http://127.0.0.1:8765/pair", {headers:{"X-Habitat-Pair":"1"}, cache:"no-store"});
       if (!response.ok) throw Error("Desktop unavailable");
       const credentials = await response.json();
       if (typeof credentials.key !== "string") throw Error("Desktop unavailable");
-      const browser = typeof habitatBrowser === "function" ? await habitatBrowser() : "unknown";
       const socket = new WebSocket("ws://127.0.0.1:8765/" + config.endpoint);
       searchSocket = socket;
-      socket.onopen = () => socket.send(JSON.stringify({key:credentials.key, searchProtocol:1, browser}));
+      socket.onopen = () => socket.send(JSON.stringify({key:credentials.key, searchProtocol:1}));
       socket.onmessage = event => {
         if (searchSocket !== socket) return;
         try {

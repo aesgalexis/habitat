@@ -78,9 +78,9 @@ public sealed partial class MainPage
             Conversation.Children.Clear();
             SelectDestination(ComposerDestination.Translate);
 
-            fake.Error = new BrowserTranslationException("Open your selected browser and reconnect the HABITAT extension, then retry.");
+            fake.Error = new BrowserTranslationException("Open Chrome and reconnect the HABITAT extension, then retry.");
             await section.SubmitAsync(original);
-            if (!section.StatusText.StartsWith("Open your selected browser") || section.CanCopy || section.IsBusy || Composer.Text != original)
+            if (!section.StatusText.StartsWith("Open Chrome") || section.CanCopy || section.IsBusy || Composer.Text != original)
                 throw new InvalidOperationException("Service failure must be recoverable without altering the draft or exposing stale results.");
             fake.Error = null;
             await section.RetryAsync();

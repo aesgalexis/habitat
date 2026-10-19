@@ -10,7 +10,7 @@ const tabs = new Map([[1,{id:1,url:'https://www.youtube.com/watch?v=personal123'
   [2,{id:2,url:'https://www.google.com/search?q=personal',active:false,status:'complete'}]]);
 let nextId = 10, clock = 0, injections = 0, mode = 'results', denied = false;
 let loaded = 15, total = 47, scrolls = 0, holdCreation = null, holdRead = null;
-let virtualStart = 0;
+let virtualStart = 0, channelRows = [];
 let attachFailure = false, emulationFailure = false;
 const attached = new Set(), emulated = new Set();
 const visible = {getBoundingClientRect:()=>({width:400,height:50})};
@@ -25,9 +25,16 @@ function row(index, options = {}) {
       selector.startsWith('ytd-thumbnail-overlay-time-status-renderer #text') ? node('12:34') : node('Description & 雪 '+index),
     querySelectorAll:()=>[node('1K views'),node('2 days ago')]};
 }
+function channelRow(title, href, options = {}) {
+  const link = {...visible,textContent:title,href};
+  return {...visible,getBoundingClientRect:()=>({width:options.hidden?0:400,height:50}),
+    closest:()=>options.ad ? {} : null,
+    querySelector:selector=>selector.startsWith('a#main-link') ? link : selector.startsWith('#channel-title') ? options.modern ? null : node(title) : node('Channel description 雪'),
+    querySelectorAll:()=>[node(options.handle || '@habitatstudio'),node('12K subscribers · 50 videos')]};
+}
 const continuation = {...visible,scrollIntoView:()=>{scrolls++;loaded=Math.min(total,loaded+20);}};
 const root = {
-  querySelectorAll:selector=> selector.startsWith('ytd-video-renderer') ? mode==='empty' ? [] : [row(1,{ad:true}),row(2,{hidden:true}),
+  querySelectorAll:selector=> selector.startsWith('ytd-channel-renderer') ? channelRows : selector.startsWith('ytd-video-renderer') ? mode==='empty' || mode==='channels-only' ? [] : [row(1,{ad:true}),row(2,{hidden:true}),
     row(3,{href:'https://example.com/watch?v='+videoId(3)}),row(4,{href:'javascript:alert(1)'}),
     ...Array.from({length:Math.max(0,Math.min(loaded,total)-virtualStart)},(_,i)=>row(i+virtualStart+1)),row(1)] : selector==='ytd-continuation-item-renderer' && loaded<total ? [continuation] : [],
   querySelector:()=>mode==='empty'?{textContent:'No results found. Try different keywords.'}:null
@@ -39,7 +46,7 @@ const document = {querySelector:selector=>{
   return null;
 }};
 function navigate(url){location.href=url;loaded=15;virtualStart=0;delete context.__habitatYouTubeSearch;}
-const chrome = {alarms:{onAlarm:signal(),create:async()=>{}},storage:{onChanged:signal(),local:{get:async()=>({})},
+const chrome = {alarms:{onAlarm:signal(),create:async()=>{}},storage:{onChanged:signal(),local:{get:async()=>({habitatConsentVersion:1})},
   session:{get:async()=>session,set:async values=>Object.assign(session,values),remove:async key=>{delete session[key];}}},
   tabs:{get:async id=>{if(!tabs.has(id))throw Error('Tab closed');return {...tabs.get(id)};},
     create:async values=>{creates.push(values);if(holdCreation)await holdCreation;const tab={id:nextId++,windowId:7,status:'complete',...values};
@@ -69,7 +76,7 @@ async function dispatch(){await vm.runInContext('youtubeSearchTransport.dispatch
 async function reset(){context.resetId=(++number).toString(16).padStart(32,'0');
   await vm.runInContext('youtubeSearchTransport.reset(socket,resetId)',context);return context.socket.sent.at(-1);}
 (async()=>{
-  for(const file of ['search-transport.js','youtube.js'])vm.runInContext(fs.readFileSync(path.resolve(__dirname,'../extension/'+file),'utf8'),context);
+  for(const file of ['connection.js','search-transport.js','youtube.js'])vm.runInContext(fs.readFileSync(path.resolve(__dirname,'../extension/'+file),'utf8'),context);
   for(let i=0;i<10;i++)await new Promise(resolve=>setImmediate(resolve));
   context.socket=sockets[0];
   check(context.socket.url==='ws://127.0.0.1:8765/youtube-bridge' && context.socket.sent[0].searchProtocol===1,
@@ -96,6 +103,47 @@ async function reset(){context.resetId=(++number).toString(16).padStart(32,'0');
   tabs.get(own).url+='&app=desktop';
   job('café & snow 雪',0);page=await dispatch();
   check(page.results[0].url.endsWith(videoId(1)) && updates.length===0,'Previous page preserves its original order after YouTube recycles offscreen rows or adds URL parameters.');
+  channelRows = [channelRow('Different channel','https://www.youtube.com/@unrelated',{handle:'@unrelated'}),
+    channelRow('Habitat Studio','https://www.youtube.com/@advert',{ad:true}),
+    channelRow('Habitat Studio','https://www.youtube.com/@hidden',{hidden:true}),
+    channelRow('Habitat Studio','https://example.com/@habitatstudio'),
+    channelRow('Habitat Studio','javascript:alert(1)'),
+    channelRow('Habitat Studio','https://www.youtube.com/playlist?list=example'),
+    channelRow('Habitat Studio','https://www.youtube.com/@habitatstudio?tracking=1'),
+    channelRow('Habitat Studio','https://www.youtube.com/@habitatstudio')];
+  job('  HABITAT   Studio  ');page=await dispatch();
+  check(page.results.length===21 && page.results[0].title==='Habitat Studio' &&
+    page.results[0].url==='https://www.youtube.com/@habitatstudio' && page.results[1].url.endsWith(videoId(1)) && page.nextStart===20,
+    'An exact channel-name match ignores case and extra spaces, appears before all 20 videos and skips unrelated, hidden, promoted, unsafe and duplicate channels.');
+  check(page.results[0].snippet==='@habitatstudio · 12K subscribers · 50 videos\nChannel description 雪',
+    'A channel keeps its handle, public metadata and description as plain text.');
+  channelRows=[];
+  job('  HABITAT   Studio  ',20);page=await dispatch();
+  check(page.results.length===20 && page.results[0].url.endsWith(videoId(21)) && page.nextStart===40,
+    'Channel matches do not repeat on later pages or consume video pagination offsets.');
+  virtualStart=20;
+  job('  HABITAT   Studio  ');page=await dispatch();
+  check(page.results.length===21 && page.results[0].url==='https://www.youtube.com/@habitatstudio' && page.results[1].url.endsWith(videoId(1)),
+    'Returning to the first page restores its matched channel even after YouTube recycles the channel row.');
+  channelRows=[channelRow('A different display name','https://www.youtube.com/@caf%C3%A9',{handle:'@café'})];
+  job(' @CAFÉ ');page=await dispatch();
+  check(page.results[0].title==='A different display name' && page.results[0].url==='https://www.youtube.com/@caf%C3%A9',
+    'A Unicode handle matches independently of the channel display name.');
+  job('café');page=await dispatch();
+  check(page.results[0].title==='A different display name','A channel handle also matches without its leading @.');
+  channelRows=[channelRow('Modern channel','https://www.youtube.com/@modern',{modern:true,handle:'@modern'})];
+  job('Modern channel');page=await dispatch();
+  check(page.results[0].title==='Modern channel' && page.results[0].url==='https://www.youtube.com/@modern',
+    'The modern channel layout reads its title from the channel link when the legacy title element is absent.');
+  job('Unrelated search');page=await dispatch();
+  check(page.results.length===20 && page.results.every(item=>item.url.includes('/watch?')),
+    'A new query clears previous matched channels and keeps the existing video-only results when no channel matches.');
+  mode='channels-only';total=0;
+  channelRows=[channelRow('Only channel','https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv')];
+  job('Only channel');page=await dispatch();
+  check(page.results.length===1 && page.results[0].title==='Only channel' && page.nextStart===null && !page.error,
+    'A matching channel is a valid result even when YouTube returns no videos.');
+  mode='results';total=47;channelRows=[];
   const initialWindow=tabs.get(own).windowId;
   job('A different query & café 雪');page=await dispatch();
   check(page.results.length===20 && creates.length===1 && session.habitatYouTubeTab===own &&

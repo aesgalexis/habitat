@@ -30,6 +30,13 @@ if ($PackagePath) {
     }
     $bridge = Get-Content -LiteralPath (Join-Path $package 'extension\manifest.json') -Raw | ConvertFrom-Json
     if ($bridge.version -ne $metadata.browserExtensionVersion) { throw 'Packaged browser version does not match.' }
+    Import-Module (Join-Path $repo 'scripts/Habitat.Extension.psm1') -Force
+    $extensionRoot = Join-Path $package 'extension'
+    foreach ($file in Get-HabitatChromeExtensionFiles) {
+        if (-not (Test-Path -LiteralPath (Join-Path $extensionRoot $file) -PathType Leaf)) { throw "Missing bundled extension resource: $file" }
+    }
+    if (@(Get-ChildItem -LiteralPath $extensionRoot -File -Recurse).Count -ne @(Get-HabitatChromeExtensionFiles).Count -or
+        -not (Test-Path -LiteralPath (Join-Path $package 'docs/GETTING_STARTED.md'))) { throw 'ZIP includes unexpected extension files or lacks its setup guide.' }
     $vsix = Join-Path $package "vscode-extension\habitat-terminal-$($metadata.vscodeExtensionVersion).vsix"
     $archive = [IO.Compression.ZipFile]::OpenRead($vsix)
     try {
