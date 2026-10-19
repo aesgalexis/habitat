@@ -13,7 +13,7 @@ internal static class InstallationChecks
             var empty = InstallationFiles.Find(app);
             check(empty.ChromeExtensionDirectory is null && empty.VSCodeExtensionDirectory is null, "Incomplete installation offers recovery instead of fabricated asset paths.");
             var chrome = Path.Combine(install, layout == "exe" ? "browser-extension" : "extension");
-            var vscode = Path.Combine(install, "vscode-extension");
+            var vscode = layout == "development" ? Path.Combine(install, "artifacts", "vscode") : Path.Combine(install, "vscode-extension");
             Directory.CreateDirectory(chrome);
             Directory.CreateDirectory(vscode);
             File.WriteAllText(Path.Combine(chrome, "manifest.json"), "{}");

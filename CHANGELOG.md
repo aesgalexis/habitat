@@ -9,6 +9,7 @@
 - EXE y ZIP incluyen los mismos recursos de la extensión, iconos y privacidad, sin utilidades de desarrollo. Ambos formatos identifican el commit fuente y las versiones de las extensiones.
 - YouTube reconoce canales coincidentes con la consulta y mejora la presentación de miniaturas y títulos; se conservan bloques de 20 vídeos.
 - Verificación del asistente con almacenamiento aislado y comprobación de los paquetes, sus recursos y sus runtimes autocontenidos.
+- El cierre de diálogos y las respuestas pendientes conservan el foco del campo de Tasks mientras su panel está abierto.
 
 ## 0.9.1 — 2026-10-18
 

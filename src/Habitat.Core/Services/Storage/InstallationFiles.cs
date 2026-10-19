@@ -14,7 +14,7 @@ internal sealed record InstallationFiles(string? ChromeExtensionDirectory, strin
         var candidates = new[] { root, Path.GetFullPath(Path.Combine(root, "../../..")), Path.GetFullPath(Path.Combine(root, "../..")) };
         var chrome = candidates.SelectMany(path => new[] { Path.Combine(path, "browser-extension"), Path.Combine(path, "extension") })
             .FirstOrDefault(path => File.Exists(Path.Combine(path, "manifest.json")) && File.Exists(Path.Combine(path, "welcome.html")));
-        var vscode = candidates.Select(path => Path.Combine(path, "vscode-extension"))
+        var vscode = candidates.SelectMany(path => new[] { Path.Combine(path, "vscode-extension"), Path.Combine(path, "artifacts", "vscode") })
             .FirstOrDefault(path => Directory.Exists(path) && Directory.EnumerateFiles(path, "*.vsix").Any());
         return new(chrome, vscode);
     }

@@ -111,12 +111,17 @@ public sealed partial class MainPage
                 CheckConversationRetentionUi(path);
             }
             SetTasksOpen(true);
+            // A late destination completion or dialog close cannot steal focus.
+            FocusComposer();
             await Task.Delay(700);
             if (!_tasksPanelOpen || _taskArea.Visibility != Visibility.Visible || TasksButton.Flyout is not null ||
                 _taskArea.XamlRoot != XamlRoot || _taskArea.Parent != Content)
                 throw new InvalidOperationException("Tasks did not open directly on the app surface.");
             if (!ReferenceEquals(Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot), TaskInput))
-                throw new InvalidOperationException("New task input did not receive focus.");
+            {
+                var focused = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot);
+                throw new InvalidOperationException($"New task input did not retain focus. Actual: {focused?.GetType().Name ?? "none"}; composer: {ReferenceEquals(focused, Composer)}; input: {TaskInput.ActualWidth}x{TaskInput.ActualHeight}; area: {_taskArea.ActualWidth}x{_taskArea.ActualHeight}, max: {_taskArea.MaxHeight}; modal: {HasAppearanceOverlay}; window: {ActualWidth}x{ActualHeight}.");
+            }
             File.AppendAllText(path, "PASS: inline panel rendered on the app surface and input focused\n");
             // Synthetic in-memory tasks only: this check never calls TaskStore.Save.
             _tasks = [new(Guid.NewGuid(), "Pending check", false, DateTimeOffset.UtcNow),

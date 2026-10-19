@@ -656,7 +656,7 @@ public sealed partial class MainPage : Page
     {
         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
         {
-            if (_appearanceDialogOpen || _gmailPanelOpen || _gmailSettingsOpen || _gmailCancellation.IsCancellationRequested) return;
+            if (HasAppearanceOverlay || _tasksPanelOpen || _gmailPanelOpen || _gmailCancellation.IsCancellationRequested) return;
             Composer.Focus(FocusState.Keyboard);
             Composer.Select(Composer.Text.Length, 0);
         });
