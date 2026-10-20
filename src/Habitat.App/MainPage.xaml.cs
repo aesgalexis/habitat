@@ -140,6 +140,10 @@ public sealed partial class MainPage : Page
         var copy = new MenuFlyoutItem { Text = "Copy code" };
         copy.Click += CopyPairingCode_Click;
         OptionsMenu.Items.Add(copy);
+        OptionsMenu.Items.Add(new MenuFlyoutSeparator());
+        var about = new MenuFlyoutItem { Text = "About HABITAT…" };
+        about.Click += async (_, _) => await RunOperationAsync(ShowAboutAsync);
+        OptionsMenu.Items.Add(about);
         OptionsMenu.Closed += (_, _) => FocusComposer();
         OverflowButton.Flyout = OptionsMenu;
 

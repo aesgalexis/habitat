@@ -91,6 +91,8 @@ Después de instalarla, recarga las ventanas de VS Code ya abiertas con **Develo
 
 ## Apariencia y escritura
 
+**About HABITAT…**, al final del menú, muestra la versión instalada, plataforma, autor, licencia MIT, enlaces al proyecto y soporte, información de privacidad y créditos. **Copy app details** copia la versión y los datos del sistema para informar de incidencias.
+
 Desde **Preferences…** puedes elegir **Day**, **Night** o **Hybrid** y ajustar la opacidad del fondo. El valor por defecto es **Hybrid con un 15 % de opacidad**. Hybrid adapta el contraste al fondo de la ventana. La apariencia y la posición y tamaño de la ventana se conservan entre ejecuciones; las preferencias ya guardadas se mantienen.
 
 Las preferencias se organizan mediante una barra lateral con **Appearance**, **Location**, **ChatGPT** y **Shortcuts**. Cada categoría conserva los cambios al pasar a otra; se guardan al cerrar **Preferences**. El atajo global se aplica al cambiar su interruptor, como antes.

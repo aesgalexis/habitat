@@ -16,6 +16,16 @@ public sealed partial class MainPage
                 throw new InvalidOperationException("UI checks did not receive isolated services.");
             File.AppendAllText(path, "PASS: isolated services, empty in-memory Gmail credentials and explicit data paths\n");
             await _initialTaskLoad;
+            if (Environment.GetCommandLineArgs().Contains("--about-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
+                await CheckAboutUiAsync(path);
+            if (Environment.GetCommandLineArgs().Contains("--about-ui-only"))
+            {
+                await StopAsync();
+                await _services.DisposeAsync();
+                window.Close();
+                Application.Current.Exit();
+                return;
+            }
             if (Environment.GetCommandLineArgs().Contains("--updates-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
                 await CheckUpdatesUiAsync(path);
             if (Environment.GetCommandLineArgs().Contains("--updates-ui-only"))

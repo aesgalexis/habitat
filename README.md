@@ -86,6 +86,8 @@ After installation, reload open VS Code windows with **Developer: Reload Window*
 
 ## Appearance and writing
 
+**About HABITAT…**, at the bottom of the menu, shows the installed version, platform, author, MIT license, project and support links, privacy information, and credits. **Copy app details** copies the version and system details for issue reports.
+
 In **Preferences…**, choose **Day**, **Night**, or **Hybrid** and adjust background opacity. The default is **Hybrid with 15% opacity**. Hybrid adapts contrast to the window background. Appearance, window position, and window size persist between runs; existing saved preferences are preserved.
 
 Preferences are organized using a sidebar with **Appearance**, **Location**, **ChatGPT**, and **Shortcuts**. Each category preserves changes when switching to another; they are saved when **Preferences** closes. As before, the global shortcut takes effect when its switch changes.
