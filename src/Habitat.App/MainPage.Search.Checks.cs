@@ -9,7 +9,7 @@ namespace Habitat;
 
 public sealed partial class MainPage
 {
-    private async Task CheckSearchUiAsync(string logPath, ComposerDestination target = ComposerDestination.Google)
+    private async Task CheckSearchUiAsync(string logPath, string target = ComposerDestination.Google)
     {
         var isYouTube = target == ComposerDestination.YouTube;
         var provider = isYouTube ? "YouTube" : "Google";

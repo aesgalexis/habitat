@@ -5,7 +5,7 @@ namespace Habitat.Features.Destinations;
 
 internal interface IDestinationSection : IDisposable
 {
-    ComposerDestination Destination { get; }
+    string Destination { get; }
     FrameworkElement View { get; }
     bool IsBusy { get; }
     bool HasContent { get; }

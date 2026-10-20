@@ -202,7 +202,8 @@ public sealed partial class MainPage
         var tasksTop = _widgets.Margin.Top + widgetRowsHeight + 16;
         _taskArea.Margin = new Thickness(layout.TaskLeft, tasksTop, 0, 0);
         _taskArea.Width = layout.TaskWidth;
-        _taskArea.MaxHeight = Math.Max(0, surface.ActualHeight - tasksTop - 24);
+        _taskArea.MaxHeight = Math.Max(0, surface.ActualHeight - tasksTop - 24 -
+            (UpdateButton.Visibility == Visibility.Visible ? UpdateButton.Height + 12 : 0));
         _sidebarDivider.Margin = new Thickness(layout.ContentInset - 12, 20, 0, 24);
         // On narrow windows an open task drawer takes the content slot. Keep
         // the draft/history intact and restore them when the drawer closes.

@@ -11,11 +11,13 @@ public sealed partial class MainPage
 
     private void ConfigureComposerRoutes()
     {
-        foreach (var destination in ComposerDestinations.Ordered)
+        foreach (var destination in _destinationCatalog.Available)
         {
             foreach (var external in new[] { false, true })
             {
-                if (destination == ComposerDestination.OpenAI)
+                if (_destinationCatalog.WindowsApp(destination) is not null)
+                    _composer.Register(destination, external, OpenWindowsAppAsync, _ => false, exclusive: true, allowEmpty: true);
+                else if (destination == ComposerDestination.OpenAI)
                     _composer.Register(destination, external, SendOpenAIAsync,
                         text => !(external && string.IsNullOrWhiteSpace(text)) && _bridge is not { HasMessageInFlight: false }, external);
                 else if (destination == ComposerDestination.Codex)
@@ -29,7 +31,24 @@ public sealed partial class MainPage
                         _ => _destinationSections.TryGetValue(destination, out var view) && view.IsBusy, true);
             }
         }
-        _composer.StateChanged += UpdateSendState;
+    }
+
+    private Task OpenWindowsAppAsync(ComposerCoordinator.Submission request)
+    {
+        if (_destinationCatalog.WindowsApp(request.Destination) is not { } app) return Task.CompletedTask;
+        try
+        {
+            if (!_services.LaunchWindowsApp(app, request.Text))
+                SetStatus($"Could not open {app.Name}. Check that the application is installed or add it again in Preferences.", StatusTone.Warning);
+            else if (app.PassText && request.Text.Length > 0) { request.Accept(); request.Clear(); }
+        }
+        catch (Exception exception)
+        {
+            _services.ReportError("Open Windows application", exception);
+            SetStatus($"Could not open {app.Name}. Check the application in Preferences and try again.", StatusTone.Warning);
+        }
+        finally { if (!request.External) FocusComposer(); }
+        return Task.CompletedTask;
     }
 
     private Task SendOpenAIAsync(ComposerCoordinator.Submission request)
@@ -39,14 +58,14 @@ public sealed partial class MainPage
         if (_bridge is null) return Task.CompletedTask;
         if (!_bridge.TryQueueMessage(ComposerCoordinator.OpenAIText(text, _preferences.TextOnly), out var reason, request.External))
         {
-            SetStatus(reason, StatusTone.Warning);
+            SetOpenAIStatus(reason, StatusTone.Warning);
             FocusComposer();
             return Task.CompletedTask;
         }
         AddMessage("YOU", text, MessageTone.User);
         request.Accept();
         request.Clear();
-        SetStatus("Sending to browser…", StatusTone.Active);
+        SetOpenAIStatus("Sending to browser…", StatusTone.Active);
         UpdateSendState();
         if (!request.External) FocusComposer();
         return Task.CompletedTask;
@@ -107,7 +126,7 @@ public sealed partial class MainPage
         finally { if (!request.External) FocusComposer(); }
     }
 
-    private static string DestinationLaunchError(ComposerDestination destination) => destination == ComposerDestination.Run
+    private static string DestinationLaunchError(string destination) => destination == ComposerDestination.Run
         ? "Could not run this command. Check the name or path and try again."
         : $"Could not open {ComposerDestinations.Label(destination)}. Try again.";
 

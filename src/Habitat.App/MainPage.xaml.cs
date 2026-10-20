@@ -63,9 +63,12 @@ public sealed partial class MainPage : Page
     {
         _services = services;
         _composer = new(_composerDrafts, RestoreComposerDraft);
+        _composer.StateChanged += UpdateSendState;
+        _composer.IsEnabled = id => _destinationCatalog.Enabled.Contains(id);
         _conversationView = new(_conversation, ToneBrush, TextBrush);
         _windowHost = windowHost;
         _preferences = Preferences.Load(services.Paths.PreferencesPath);
+        _destinationCatalog = new(_preferences.EnabledDestinations, _preferences.WindowsApps);
         _taskStore = services.Tasks;
         _taskSession = services.TaskSession;
         _weatherSession = new WeatherSession(services.Weather, services.GetLocationAsync);
@@ -199,6 +202,7 @@ public sealed partial class MainPage : Page
         surface.Children.Add(_widgets);
         BuildWeatherInterface(_widgets);
         BuildDestinationInterface(surface);
+        BuildUpdateInterface(surface);
         surface.SizeChanged += (_, _) => SizeTopWidgets(surface);
         Content = surface;
         PaintSurface();
@@ -307,10 +311,13 @@ public sealed partial class MainPage : Page
 
     private void MainPage_Loaded(object sender, RoutedEventArgs e)
     {
+        // Freeze the migrated selection so future catalog additions remain opt-in.
+        SavePreferences();
         _ = RunOperationAsync(ApplyGlobalHotkeyAsync);
         ApplyPreferences();
-        SetStatus("Starting bridge…", StatusTone.Active);
+        UpdateDestinationStatus();
         _timer.Start();
+        TickUpdates(DateTimeOffset.UtcNow);
         FocusComposer();
         if (!_preferences.SetupGuideSeen) _ = RunOperationAsync(ShowSetupAsync);
     }
@@ -343,7 +350,10 @@ public sealed partial class MainPage : Page
     private void SendCurrentMessage(bool openExternally = false)
     {
         if (_operations.IsStopping || _composer.IsExclusiveBusy) return;
-        if (!_composer.CanSend(_destination, Composer.Text, openExternally) || string.IsNullOrWhiteSpace(Composer.Text))
+        if (_destination.Length == 0)
+        { _ = RunOperationAsync(() => ShowPreferencesAsync("Destinations")); return; }
+        if (!_composer.CanSend(_destination, Composer.Text, openExternally) ||
+            string.IsNullOrWhiteSpace(Composer.Text) && _destinationCatalog.WindowsApp(_destination) is null)
         { FocusComposer(); return; }
         _ = LaunchDestinationAsync(_destination, Composer.Text, openExternally);
     }
@@ -352,6 +362,7 @@ public sealed partial class MainPage : Page
     {
         TickGmail();
         TickTasks(DateTimeOffset.UtcNow);
+        TickUpdates(DateTimeOffset.UtcNow);
         if (!_weatherRefreshing && !HasAppearanceOverlay && DateTimeOffset.UtcNow >= _nextWeatherRefresh)
         {
             _ = RefreshWeatherAsync();
@@ -370,12 +381,11 @@ public sealed partial class MainPage : Page
         if (_bridge.TryExpireMessage(BridgeProtocol.RequestTimeout))
         {
             AddMessage("SYSTEM", "The request timed out. Check ChatGPT before sending it again.", MessageTone.Muted);
-            SetStatus("Timed out — check Chrome", StatusTone.Danger);
+            SetOpenAIStatus("Timed out — check Chrome", StatusTone.Danger);
         }
         else if (!_bridge.HasMessageInFlight && _destination == ComposerDestination.OpenAI)
         {
-            SetStatus(_bridge.IsConnected ? "Extension connected" : _bridge.ConnectionIssue,
-                _bridge.IsConnected ? StatusTone.Success : StatusTone.Warning);
+            UpdateDestinationStatus();
         }
 
         UpdateSendState();
@@ -451,22 +461,22 @@ public sealed partial class MainPage : Page
             switch (bridgeEvent.Type)
             {
                 case "received":
-                    SetStatus("The browser received the message…", StatusTone.Active);
+                    SetOpenAIStatus("The browser received the message…", StatusTone.Active);
                     break;
                 case "started":
-                    SetStatus($"{_activeModel} is responding…", StatusTone.Active);
+                    SetOpenAIStatus($"{_activeModel} is responding…", StatusTone.Active);
                     break;
                 case "response":
                     AddMessage(_activeModel, bridgeEvent.Text ?? string.Empty, MessageTone.Assistant);
-                    SetStatus("Response received", StatusTone.Success);
+                    SetOpenAIStatus("Response received", StatusTone.Success);
                     break;
                 case "error":
                     AddMessage("SYSTEM", bridgeEvent.Text ?? "Unknown error", MessageTone.Muted);
-                    SetStatus("Bridge error", StatusTone.Danger);
+                    SetOpenAIStatus("Bridge error", StatusTone.Danger);
                     break;
                 case "status":
                     var text = bridgeEvent.Text ?? string.Empty;
-                    SetStatus(text[..Math.Min(100, text.Length)], StatusTone.Active);
+                    SetOpenAIStatus(text[..Math.Min(100, text.Length)], StatusTone.Active);
                     break;
                 case "model":
                     break;
@@ -480,7 +490,8 @@ public sealed partial class MainPage : Page
         DispatcherQueue.TryEnqueue(() =>
         {
             AddMessage("SYSTEM", error, MessageTone.Muted);
-            SetStatus("Could not start the bridge", StatusTone.Danger);
+            _bridgeStartupFailed = true;
+            SetOpenAIStatus("Could not start the bridge", StatusTone.Danger);
         });
     }
 
@@ -494,6 +505,30 @@ public sealed partial class MainPage : Page
     private void SetStatus(string text, StatusTone tone)
     {
         _windowHost?.SetStatusPresentation(text, tone.ToString());
+    }
+
+    private (string Text, StatusTone Tone) _openAIStatus = ("Sending to browser…", StatusTone.Active);
+    private bool _bridgeStartupFailed;
+
+    private void SetOpenAIStatus(string text, StatusTone tone)
+    {
+        _openAIStatus = (text, tone);
+        if (_destination == ComposerDestination.OpenAI) SetStatus(text, tone);
+    }
+
+    private void UpdateDestinationStatus()
+    {
+        if (_destination == ComposerDestination.OpenAI)
+        {
+            if (_bridge?.HasMessageInFlight == true || _bridgeStartupFailed)
+                SetStatus(_openAIStatus.Text, _openAIStatus.Tone);
+            else
+                SetStatus(_bridge?.IsConnected == true ? "Extension connected" : _bridge?.ConnectionIssue ?? "Reconnecting to ChatGPT…",
+                    _bridge?.IsConnected == true ? StatusTone.Success : StatusTone.Warning);
+        }
+        else if (_destination == ComposerDestination.Codex && !string.IsNullOrWhiteSpace(CodexChat.StatusText))
+            SetStatus(CodexChat.StatusText, StatusTone.Active);
+        else SetStatus("Ready", StatusTone.Success);
     }
 
     private static string NormalizeModelName(string value)
@@ -552,6 +587,7 @@ public sealed partial class MainPage : Page
     {
         UpdateExternalDestinationState();
         if (_operations.IsStopping || _composer.IsExclusiveBusy) { SendButton.IsEnabled = false; return; }
+        if (_destination.Length == 0) { SendButton.IsEnabled = true; return; }
         if (_destination == ComposerDestination.Codex)
         {
             SendButton.Content = _codexSendCancellation is not null || CodexChat.IsSubmitting ? "Sending to Codex…" :
@@ -734,6 +770,7 @@ public sealed partial class MainPage : Page
         PaintWeather();
         PaintGmail();
         PaintTasks();
+        PaintUpdateButton();
 
         var menuStyle = new Style(typeof(MenuFlyoutPresenter));
         menuStyle.Setters.Add(new Setter(Control.BackgroundProperty, menuBackground));

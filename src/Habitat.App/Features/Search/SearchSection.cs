@@ -31,7 +31,7 @@ internal sealed class SearchSection : IDestinationSection
     private int? _nextStart;
     private int _revision;
     private bool _userCanceled, _disposed;
-    public ComposerDestination Destination { get; }
+    public string Destination { get; }
     private string Provider => Destination == ComposerDestination.YouTube ? "YouTube" : "Google";
     public FrameworkElement View => _view;
     public bool IsBusy => _request is not null;
@@ -44,7 +44,7 @@ internal sealed class SearchSection : IDestinationSection
     internal bool CanGoPrevious => _previous.IsEnabled;
 
     public SearchSection(Func<string, int, CancellationToken, Task<SearchPage>> search,
-        Func<Uri, Task<bool>> open, Action<Exception> reportError, ComposerDestination destination = ComposerDestination.Google,
+        Func<Uri, Task<bool>> open, Action<Exception> reportError, string destination = ComposerDestination.Google,
         Func<Uri, ImageSource?>? thumbnailSource = null)
     {
         Destination = destination;

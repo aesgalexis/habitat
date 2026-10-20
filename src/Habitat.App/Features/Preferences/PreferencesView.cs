@@ -16,10 +16,12 @@ internal sealed class PreferencesView : Grid
     internal ToggleSwitch UseDeviceLocation { get; }
     internal TextBox WeatherCity { get; }
     internal HyperlinkButton LocationSettings { get; }
+    internal DestinationsView Destinations { get; }
     internal string Category => ((ListViewItem)Categories.SelectedItem).Tag as string ?? "Appearance";
     private readonly ScrollViewer _scroll = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
 
-    public PreferencesView(Habitat.Preferences saved)
+    public PreferencesView(Habitat.Preferences saved, Func<Task<IReadOnlyList<WindowsAppDestination>>>? discoverApps = null,
+        Func<Task<string?>>? browseApp = null)
     {
         ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(148) });
         ColumnDefinitions.Add(new ColumnDefinition());
@@ -58,12 +60,20 @@ internal sealed class PreferencesView : Grid
         AutomationProperties.SetName(GlobalHotkey, "Global shortcut (Ctrl+H)");
         AddCategory("Shortcuts", "\uE765", "Access HABITAT from any application.", Card(GlobalHotkey,
             Description("Open HABITAT from any app and place selected text in the editor. Starts with Windows. Nothing is sent automatically.")));
+        Destinations = new(saved, discoverApps ?? (() => Task.FromResult<IReadOnlyList<WindowsAppDestination>>([])),
+            browseApp ?? (() => Task.FromResult<string?>(null)));
+        AddCategory("Destinations", "\uE8A7", "Choose and order your destinations. Removing one keeps its settings so you can add it again.", Destinations);
         Categories.SelectionChanged += (_, _) =>
         {
             _scroll.Content = ((ListViewItem)Categories.SelectedItem).Content is StackPanel label ? label.Tag : null;
             _scroll.ChangeView(null, 0, null, true);
         };
         Categories.SelectedIndex = 0;
+    }
+
+    internal void SelectCategory(string name)
+    {
+        Categories.SelectedItem = Categories.Items.Cast<ListViewItem>().FirstOrDefault(item => item.Tag as string == name) ?? Categories.Items[0];
     }
 
     private void AddCategory(string name, string glyph, string description, params UIElement[] controls)

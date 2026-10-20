@@ -24,7 +24,7 @@ internal sealed class CodexSection : IDestinationSection
     private bool _active, _disposed, _canStartNew;
     private int _sendRevision;
     private string _rendered = "";
-    public ComposerDestination Destination => ComposerDestination.Codex;
+    public string Destination => ComposerDestination.Codex;
     public FrameworkElement View => _view;
     public bool IsSubmitting { get; private set; }
     public bool IsBusy => IsSubmitting || _session.IsWaiting || _session.Current?.IsRunning is true;

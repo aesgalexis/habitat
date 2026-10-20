@@ -8,6 +8,16 @@ if (args.Length > 0 && args[0] == "app-server" && args.Contains("--stdio"))
     return;
 }
 
+if (args.Contains("--windows-apps-smoke"))
+{
+    if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
+    var applications = await WindowsApps.DiscoverAsync();
+    if (applications.Count == 0 || applications.Any(app => !app.IsValid))
+        throw new InvalidOperationException("Windows did not return valid installed applications.");
+    Console.WriteLine($"PASS: {applications.Count} installed Windows applications discovered without launching any application.");
+    return;
+}
+
 static void Check(bool condition, string name)
 {
     if (!condition) throw new InvalidOperationException(name);
@@ -100,6 +110,7 @@ if (args.Contains("--notepad-smoke"))
 }
 
 var destinations = ComposerDestinations.Ordered;
+await DestinationCatalogChecks.RunAsync(Check);
 await CodexDeliveryChecks.RunAsync(Check);
 await CodexChatChecks.RunAsync(Check);
 CodexRetentionChecks.Run(Check);
@@ -154,7 +165,7 @@ File.WriteAllText(path, "{\"Theme\":\"night\",\"Opacity\":35,\"TextOnly\":false}
 var legacy = Preferences.Load(path);
 Check(legacy.Destination == ComposerDestination.OpenAI && !legacy.TextOnly,
     "Existing preferences default to OpenAI and preserve chat options");
-foreach (var destination in Enum.GetValues<ComposerDestination>())
+foreach (var destination in ComposerDestinations.Ordered.ToArray())
 {
     (legacy with { Destination = destination }).Save(path);
     Check(Preferences.Load(path).Destination == destination && Preferences.Load(path).Theme == "night",

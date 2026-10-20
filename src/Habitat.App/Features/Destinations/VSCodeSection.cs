@@ -37,7 +37,7 @@ internal sealed class VSCodeSection : IDestinationSection
     private readonly DispatcherQueueTimer _timer;
     private bool _refreshing, _binding, _disposed;
     private string? _displayedFolder;
-    public ComposerDestination Destination => ComposerDestination.VSCode;
+    public string Destination => ComposerDestination.VSCode;
     public FrameworkElement View => _view;
     public bool IsBusy { get; private set; }
     public bool HasContent => VSCodeFolders.Normalize(SelectedFolder?.Path) is { } folder && _submittedFolders.Contains(folder);

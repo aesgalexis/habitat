@@ -8,14 +8,18 @@ public sealed partial class MainPage
 {
     private async void ShowPreferences_Click(object sender, RoutedEventArgs e) => await RunOperationAsync(ShowPreferencesAsync);
 
-    private async Task ShowPreferencesAsync()
+    private Task ShowPreferencesAsync() => ShowPreferencesAsync(null);
+
+    private async Task ShowPreferencesAsync(string? category)
     {
         if (HasAppearanceOverlay || _operations.IsStopping) return;
-        var view = new PreferencesView(_preferences)
+        var view = new PreferencesView(_preferences, _services.DiscoverWindowsAppsAsync,
+            () => _services.PickWindowsAppAsync(_windowHost?.Handle ?? 0))
         {
             Width = Math.Max(280, Math.Min(740, XamlRoot.Size.Width - 96)),
             Height = Math.Max(180, Math.Min(480, XamlRoot.Size.Height - 180))
         };
+        if (category is not null) view.SelectCategory(category);
         var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Preferences", Content = view,
             CloseButtonText = "Close", DefaultButton = ContentDialogButton.Close };
         dialog.Resources["ContentDialogMaxWidth"] = 840d;
@@ -56,7 +60,13 @@ public sealed partial class MainPage
         {
             Theme = view.Theme.SelectedIndex switch { 1 => "night", 2 => "hybrid", _ => "day" },
             Opacity = view.BackgroundOpacity.Value, TextOnly = view.TextOnly.IsOn,
-            WeatherCity = view.WeatherCity.Text.Trim(), UseDeviceLocation = view.UseDeviceLocation.IsOn
+            WeatherCity = view.WeatherCity.Text.Trim(), UseDeviceLocation = view.UseDeviceLocation.IsOn,
+            EnabledDestinations = view.Destinations.EnabledDestinations,
+            WindowsApps = view.Destinations.Applications, DefaultDestination = view.Destinations.DefaultDestination
+        };
+        updatedPreferences = updatedPreferences with
+        {
+            Destination = new Services.DestinationCatalog(updatedPreferences.EnabledDestinations, updatedPreferences.WindowsApps).Select(_destination)
         };
         if (!updatedPreferences.Save(_services.Paths.PreferencesPath, exception => _services.ReportError("Save preferences", exception)))
         {
@@ -66,6 +76,7 @@ public sealed partial class MainPage
             return;
         }
         _preferences = updatedPreferences;
+        ApplyDestinationPreferences();
         ApplyPreferences();
         if (locationChanged)
         {

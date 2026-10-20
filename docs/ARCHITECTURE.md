@@ -127,6 +127,8 @@ En el ensayo sintético de 1.000 tareas y 200 revisiones, la verificación final
 
 ## Compilación y actualización
 
+`AppUpdateService` comprueba versiones en la API pública de GitHub al cargar la página y cada seis horas, integrado en el temporizador existente. Compara numéricamente la versión del ensamblado con etiquetas estables y exige un instalador Windows subido. No usa credenciales ni ejecuta contenido remoto. El icono **Update HABITAT** se muestra abajo del sidebar cuando hay una versión nueva y abre su página oficial para descarga manual. Los errores conservan el aviso en memoria y programan un reintento tras una hora. La petición tiene un límite de 15 segundos, evita solapamientos y se cancela y espera con el resto de operaciones al cerrar. Las pruebas aisladas no hacen consultas reales.
+
 1. `build-winui.ps1` publica en un directorio nuevo bajo `artifacts/staged`.
 2. Se genera y valida `build-manifest.json` con tamaño y SHA-256 de cada archivo.
 3. El instalador copia y vuelve a verificar una versión independiente en `artifacts/releases/release-<id>`.

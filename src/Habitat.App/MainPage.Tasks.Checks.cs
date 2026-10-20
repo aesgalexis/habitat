@@ -16,6 +16,26 @@ public sealed partial class MainPage
                 throw new InvalidOperationException("UI checks did not receive isolated services.");
             File.AppendAllText(path, "PASS: isolated services, empty in-memory Gmail credentials and explicit data paths\n");
             await _initialTaskLoad;
+            if (Environment.GetCommandLineArgs().Contains("--updates-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
+                await CheckUpdatesUiAsync(path);
+            if (Environment.GetCommandLineArgs().Contains("--updates-ui-only"))
+            {
+                await StopAsync();
+                await _services.DisposeAsync();
+                window.Close();
+                Application.Current.Exit();
+                return;
+            }
+            if (Environment.GetCommandLineArgs().Contains("--status-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
+                await CheckDestinationStatusAsync(path);
+            if (Environment.GetCommandLineArgs().Contains("--status-ui-only"))
+            {
+                await StopAsync();
+                await _services.DisposeAsync();
+                window.Close();
+                Application.Current.Exit();
+                return;
+            }
             if (Environment.GetCommandLineArgs().Contains("--setup-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
                 await CheckSetupUiAsync(path);
             if (Environment.GetCommandLineArgs().Contains("--setup-ui-only"))
@@ -37,7 +57,10 @@ public sealed partial class MainPage
                 return;
             }
             if (Environment.GetCommandLineArgs().Contains("--preferences-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
+            {
                 await CheckPreferencesUiAsync(path);
+                await CheckDestinationPreferencesUiAsync(path);
+            }
             if (Environment.GetCommandLineArgs().Contains("--preferences-ui-only"))
             {
                 await StopAsync();

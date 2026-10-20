@@ -17,7 +17,7 @@ La solicitud de alta del paquete está abierta en
 [microsoft/winget-pkgs#455544](https://github.com/microsoft/winget-pkgs/pull/455544).
 Mientras se revisa, puedes descargar el instalador directamente de GitHub Releases.
 
-1. Descarga `HABITAT-0.10.0-x64-setup.exe` y su SHA-256 desde [GitHub Releases](https://github.com/aesgalexis/habitat/releases/latest), comprueba el hash y ejecuta el instalador desde tu sesión normal de Windows. Usa los assets de la publicación; el ZIP **Source code** no contiene la aplicación compilada.
+1. Descarga `HABITAT-0.11.0-x64-setup.exe` y su SHA-256 desde [GitHub Releases](https://github.com/aesgalexis/habitat/releases/latest), comprueba el hash y ejecuta el instalador desde tu sesión normal de Windows. Usa los assets de la publicación; el ZIP **Source code** no contiene la aplicación compilada.
 2. Instala en `%LOCALAPPDATA%\Programs\HABITAT`, añade HABITAT al menú Inicio y registra su desinstalador. Incluye .NET y Windows App SDK; no requiere SDK ni permisos de administrador. Compatible con Windows x64, Windows 10 2004 o posterior y Windows 11.
 3. Abre **Set up HABITAT…** (aparece la primera vez y permanece en el menú). Detecta Chrome, abre la extensión de [Chrome Web Store](https://chromewebstore.google.com/detail/ennnldolgdbbkgmpjjpkafeajihpimii) y muestra el estado de cada conexión. Aprueba la instalación en Chrome y pulsa **Enable connection**.
 4. La extensión 0.9.0 está enviada como Unlisted y pendiente de revisión de Google al preparar esta versión. Si el enlace aún no está disponible, el asistente abre la carpeta incluida y `chrome://extensions` para cargarla descomprimida. Chrome no se instala ni añade extensiones silenciosamente.
@@ -25,7 +25,9 @@ Mientras se revisa, puedes descargar el instalador directamente de GitHub Releas
 
 El paquete incluye browser bridge **0.9.0** y el VSIX **HABITAT Terminal 0.2.0**. El instalador todavía no tiene firma de código. Consulta la [guía para otro PC](docs/GETTING_STARTED.md) y los [detalles de distribución](docs/RELEASING.md). Si prefieres trabajar desde el código fuente, clona el repositorio y sigue **Compilar**.
 
-Como alternativa, extrae todo `HABITAT-0.10.0-win-x64.zip` y ejecuta `Install-HABITAT.cmd`. Usa siempre el mismo formato para actualizar: EXE y ZIP mantienen disposiciones distintas y rechazan sobrescribirse entre sí. Ambos conservan los datos de usuario; el ZIP conserva además la publicación anterior para recuperación. La preparación para WinGet se documenta en [WINGET.md](docs/WINGET.md).
+Como alternativa, extrae todo `HABITAT-0.11.0-win-x64.zip` y ejecuta `Install-HABITAT.cmd`. Usa siempre el mismo formato para actualizar: EXE y ZIP mantienen disposiciones distintas y rechazan sobrescribirse entre sí. Ambos conservan los datos de usuario; el ZIP conserva además la publicación anterior para recuperación. La preparación para WinGet se documenta en [WINGET.md](docs/WINGET.md).
+
+HABITAT busca versiones estables nuevas para Windows al arrancar y cada seis horas mientras permanece abierto. Cuando hay una actualización, el icono **Update HABITAT**, al final del sidebar, abre su descarga oficial. La descarga y la instalación siguen siendo manuales. Los fallos se reintentan tras una hora.
 
 ## Ejecutar
 
@@ -128,6 +130,18 @@ Si Windows no obtiene una posición o deniega el acceso, usa la ciudad guardada 
 El icono **Open in new window** aparece únicamente a la izquierda de la barra del destino seleccionado. Ejecuta su acción con el texto actual del editor, aunque aún no se haya pulsado el botón principal, y muestra la ventana externa: Gmail abre un borrador sin enviarlo; Google y YouTube abren la búsqueda; Maps conserva las rutas; Translate abre Google Translate con el idioma elegido y conserva el original. Notepad, Codex, Terminal y Run usan sus lanzadores habituales. Terminal mantiene la confirmación previa; VS Code ejecuta directamente en el proyecto seleccionado. Con el editor vacío abre una página inicial, un documento o borrador nuevo, una shell vacía o el diálogo Run. VS Code abre el proyecto seleccionado; sin proyecto abre la aplicación. Las etiquetas de ayuda describen la acción concreta en inglés. Ambos botones impiden acciones duplicadas mientras se entrega y un fallo conserva el borrador; una revisión posterior nunca se borra por una entrega anterior.
 
 **Send and open ChatGPT** necesita la extensión de navegador **0.7.1** o posterior: selecciona la conversación vinculada y restaura su ventana antes de enviar una vez. El botón principal conserva el envío en segundo plano. Sin texto, el icono solo abre esa conversación; sin conexión al navegador abre la página inicial de ChatGPT. **Run command and open VS Code** necesita **HABITAT Terminal 0.1.1** o posterior para mostrar la ventana exacta después de entregar el comando. Si falla la apertura tras una entrega aceptada, lo indica y no repite el comando. Recarga las extensiones después de actualizarlas.
+
+## Destinos personalizados
+
+El estado de la ventana se actualiza al iniciar y cambiar de destino: un destino en reposo muestra **Ready**. La conexión y los avisos del puente de ChatGPT se muestran en OpenAI; sus respuestas en segundo plano se conservan sin reemplazar el indicador de otro destino.
+
+En **Preferences… → Destinations** puedes añadir, quitar y ordenar los destinos de la barra derecha. **Move up / Move down** cambia el orden y **On startup** permite abrir un destino concreto o recordar el último utilizado con **Last used destination**. La rueda recorre únicamente los destinos añadidos. **Remove** conserva la configuración y el contenido de la sesión; puedes recuperar el destino desde **Available destinations → Add destination**. Si quitas todos, el botón central **Add destination** abre directamente esta categoría, sin borrar el borrador.
+
+**Add Windows application…** consulta las aplicaciones instaladas de Windows, incluidas las de Microsoft Store. También puedes usar **Browse…** para elegir un ejecutable `.exe` o un acceso directo `.lnk`, y darle un nombre propio. La lista se consulta al abrir este selector; no se inicia ninguna aplicación al añadirla. Los cambios se aplican al cerrar Preferences y se conservan al reiniciar. Los destinos nuevos del catálogo no se incorporan automáticamente a tu selección.
+
+Por defecto, **Open [application]** abre la aplicación, incluso con el editor vacío, y conserva el borrador. Por ejemplo, Paint se puede añadir como lanzador; este modo no inserta texto ni dibuja automáticamente. Para ejecutables que admitan texto por línea de comandos, **Pass editor text as one argument** pasa el contenido completo como un único argumento literal y limpia el borrador solo si Windows acepta el lanzamiento. Esto confirma la apertura, no que la aplicación haya procesado el texto. Los accesos directos y aplicaciones de Store se abren sin argumentos. Un fallo conserva el borrador para reintentar o recuperar el destino desde Preferences.
+
+La configuración utiliza identificadores estables y migra los antiguos valores numéricos sin cambiar la selección existente. Las pruebas de destinos usan ejecutables sintéticos y lanzadores interceptados, sin abrir aplicaciones reales. `dotnet run --project tests\Habitat.Destination.Checks -- --windows-apps-smoke` comprueba explícitamente la enumeración de aplicaciones instaladas sin abrirlas. **--preferences-ui-only** comprueba la gestión, persistencia, creación de destinos Windows y la disposición inicial común con almacenamiento aislado dentro de `artifacts`.
 
 ## Tareas
 

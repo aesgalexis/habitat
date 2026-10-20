@@ -17,6 +17,8 @@ La versión 0.10.0 añade la guía de primera puesta en marcha y utiliza exclusi
 
 ## Instalar una publicación
 
+La versión **0.11.0** incorpora el aviso automático de versiones nuevas mediante **Update HABITAT**, los destinos personalizados y la gestión de aplicaciones de Windows. La descarga e instalación de actualizaciones siguen siendo manuales; la instalación automática opcional queda pendiente.
+
 La publicación incluye dos alternativas: el instalador `HABITAT-<version>-x64-setup.exe`, con desinstalación registrada en Windows, y el ZIP con su instalador PowerShell. Ambos son autocontenidos, se instalan por usuario y tienen un SHA-256 adjunto. El EXE necesita Windows 10 2004 o posterior y admite instalación silenciosa. Consulta [la preparación para WinGet](WINGET.md).
 
 Usa siempre el mismo formato para actualizar una instalación. Los instaladores rechazan mezclar las disposiciones del EXE y el ZIP en una misma carpeta. Para cambiar de formato, cierra HABITAT y el residente, retira la instalación anterior conservando los datos de usuario y después instala el otro formato.
@@ -42,6 +44,8 @@ Para actualizar el ZIP, repite su instalación sobre la misma ruta. Se conserva 
 Para retirar una instalación ZIP, desactiva primero **Preferences… → Global shortcut (Ctrl+H)**, cierra HABITAT y elimina su carpeta y la entrada del menú Inicio. Para retirar el EXE, utiliza la desinstalación registrada en Windows. Los datos de usuario se conservan.
 
 ## Preparar y publicar
+
+La aplicación consulta la última release pública de GitHub al arrancar y cada seis horas mientras permanece abierta. Solo avisa si su versión estable es superior a la instalada y tiene un EXE o ZIP de Windows ya subido. El icono **Update HABITAT**, al pie del sidebar, abre la página de esa versión para descargar manualmente el formato correspondiente. No instala ni descarga en segundo plano. Los fallos de red o de metadatos se registran sin interrumpir y se reintentan tras una hora; un aviso ya encontrado se conserva durante esos fallos.
 
 1. Trabaja en una rama y revisa todos los cambios, incluidos archivos nuevos. No incluyas credenciales, datos de usuario ni salidas de `artifacts` en Git.
 2. Actualiza `VERSION`, `CHANGELOG.md`, las instrucciones de instalación del README y, si corresponde, las versiones de las extensiones.

@@ -21,7 +21,7 @@ internal sealed class GmailDraftSection : IDestinationSection
     private readonly AsyncOperationScope _operations = new();
     private GmailDraft? _saved;
     private bool _disposed;
-    public ComposerDestination Destination => ComposerDestination.Gmail;
+    public string Destination => ComposerDestination.Gmail;
     public FrameworkElement View => _view;
     public bool IsBusy { get; private set; }
     public bool HasContent { get; private set; }

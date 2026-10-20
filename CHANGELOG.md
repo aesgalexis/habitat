@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.11.0 — 2026-10-20
+
+- Aviso automático de nuevas versiones: consulta GitHub al abrir HABITAT y cada seis horas mientras está abierto. El icono **Update HABITAT**, al final del sidebar, muestra la versión disponible y abre su página oficial para descargar el EXE o ZIP correspondiente. La descarga y la instalación siguen siendo manuales.
+- La comprobación ignora versiones anteriores, borradores, betas y publicaciones sin instalador Windows terminado. Los fallos de conexión conservan el aviso conocido y se reintentan tras una hora; las consultas pendientes se cancelan al cerrar.
+- **Preferences… → Destinations** permite añadir, quitar y ordenar los destinos, elegir uno al arrancar o recordar el último. Quitar un destino conserva su configuración y el contenido de la sesión; los antiguos perfiles migran a identificadores estables.
+- Destinos para aplicaciones de Windows, incluidas las de Microsoft Store, con selección de ejecutables y accesos directos. Por defecto abren la aplicación y conservan el borrador; los ejecutables compatibles pueden recibir el texto como un único argumento literal.
+- Los destinos en reposo muestran **Ready** desde el arranque. La conexión, el progreso y los errores de ChatGPT permanecen en OpenAI y sus respuestas en segundo plano no sustituyen el estado de otro destino.
+- Pruebas con versiones sintéticas y almacenamiento aislado para comprobar intervalos, fallos de red, cancelación, accesibilidad, ambos temas, posición del icono y espacio reservado para Tasks. Las extensiones mantienen sus versiones: Chrome **0.9.0** y VS Code **0.2.0**.
+
 ## 0.10.0 — 2026-10-19
 
 - Todos los destinos web se abren en Google Chrome. Eliminado el selector de navegador y corregida la desconexión al usar el navegador predeterminado de Windows; las preferencias anteriores conservan los demás ajustes.

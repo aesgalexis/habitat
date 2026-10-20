@@ -32,7 +32,7 @@ internal sealed class TranslateSection : IDestinationSection
     private bool _userCanceled;
     private bool _disposed;
     private bool _opening;
-    public ComposerDestination Destination => ComposerDestination.Translate;
+    public string Destination => ComposerDestination.Translate;
     public FrameworkElement View => _view;
     public bool IsBusy => _request is not null;
     public bool HasContent { get; private set; }

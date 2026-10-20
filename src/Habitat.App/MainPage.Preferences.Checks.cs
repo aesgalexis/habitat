@@ -18,9 +18,9 @@ public sealed partial class MainPage
             if (_activeDialog?.Content is not PreferencesView view || !_appearanceDialogOpen)
                 throw new InvalidOperationException("Preferences did not open the categorized view.");
             var names = view.Categories.Items.Cast<ListViewItem>().Select(item => item.Tag as string).ToArray();
-            if (!names.SequenceEqual(new[] { "Appearance", "Location", "ChatGPT", "Shortcuts" }))
+            if (!names.SequenceEqual(new[] { "Appearance", "Location", "ChatGPT", "Shortcuts", "Destinations" }))
                 throw new InvalidOperationException("Preference categories changed or mixed UI languages.");
-            foreach (var index in new[] { 1, 2, 3, 0 })
+            foreach (var index in new[] { 1, 2, 3, 4, 0 })
             {
                 view.Categories.SelectedIndex = index;
                 await Task.Delay(30);
@@ -49,6 +49,7 @@ public sealed partial class MainPage
             _activeDialog?.Hide();
             if (showing is not null) await showing;
             _preferences = original;
+            ApplyDestinationPreferences();
             SavePreferences();
             ApplyPreferences();
         }

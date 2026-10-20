@@ -12,7 +12,8 @@ public sealed partial class MainPage
     {
         foreach (var (destination, button) in _externalDestinationButtons)
         {
-            var label = ComposerDestinations.ExternalActionLabel(destination, !string.IsNullOrWhiteSpace(Composer.Text));
+            var label = _destinationCatalog.WindowsApp(destination) is { } app ? $"Open {app.Name}" :
+                ComposerDestinations.ExternalActionLabel(destination, !string.IsNullOrWhiteSpace(Composer.Text));
             ToolTipService.SetToolTip(button, label);
             AutomationProperties.SetName(button, label);
             AutomationProperties.SetHelpText(button, destination == ComposerDestination.Gmail
@@ -23,7 +24,8 @@ public sealed partial class MainPage
 
     private Task OpenSelectedDestinationAsync()
     {
-        if (_operations.IsStopping || HasAppearanceOverlay || !_externalDestinationButtons[_destination].IsEnabled)
+        if (_operations.IsStopping || HasAppearanceOverlay ||
+            !_externalDestinationButtons.TryGetValue(_destination, out var button) || !button.IsEnabled)
             return Task.CompletedTask;
         return LaunchDestinationAsync(_destination, Composer.Text, openExternally: true);
     }

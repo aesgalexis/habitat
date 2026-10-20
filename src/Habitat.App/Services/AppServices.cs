@@ -22,6 +22,7 @@ internal sealed class AppServices : IAsyncDisposable
     public TaskStore Tasks { get; }
     public TaskSession TaskSession { get; }
     public WeatherService Weather { get; }
+    internal AppUpdateService Updates { get; set; }
     public Func<Uri, Task<bool>> LaunchBrowser { get; }
     internal bool OpenSetupFolder(string? path) => !Paths.IsIsolated && path is not null && Directory.Exists(path) &&
         StartSetupProcess(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
@@ -39,6 +40,18 @@ internal sealed class AppServices : IAsyncDisposable
     internal ICodexChatService Codex { get; set; }
     public PowerShellLauncher PowerShell { get; }
     public RunLauncher Run { get; }
+    internal Func<WindowsAppDestination, string, bool> LaunchWindowsApp { get; set; }
+    internal Task<IReadOnlyList<WindowsAppDestination>> DiscoverWindowsAppsAsync() => Paths.IsIsolated
+        ? Task.FromResult<IReadOnlyList<WindowsAppDestination>>([]) : WindowsApps.DiscoverAsync();
+    internal async Task<string?> PickWindowsAppAsync(nint owner)
+    {
+        if (Paths.IsIsolated || owner == 0) return null;
+        var picker = new Windows.Storage.Pickers.FileOpenPicker { CommitButtonText = "Select application" };
+        picker.FileTypeFilter.Add(".exe");
+        picker.FileTypeFilter.Add(".lnk");
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, owner);
+        return (await picker.PickSingleFileAsync())?.Path;
+    }
     public VSCodeService VSCode { get; }
     private readonly VSCodeFolderLauncher _vsCodeFolders;
     internal ITranslationService Translation { get; set; }
@@ -88,6 +101,7 @@ internal sealed class AppServices : IAsyncDisposable
         TaskSession = new TaskSession(Tasks);
         if (paths.IsIsolated) _isolatedHttp = new HttpClient(new DisabledNetwork());
         Weather = new WeatherService(_isolatedHttp);
+        Updates = new AppUpdateService(_isolatedHttp, reportError: exception => ReportError("Check for updates", exception));
         Translation = Bridge.Translation;
         Search = Bridge.Search;
         YouTubeSearch = Bridge.YouTubeSearch;
@@ -101,6 +115,7 @@ internal sealed class AppServices : IAsyncDisposable
         Codex = codex is null ? new DisabledCodexChatService() : codex;
         PowerShell = paths.IsIsolated ? new PowerShellLauncher(paths.LocalDirectory, _ => false) : new PowerShellLauncher();
         Run = paths.IsIsolated ? new RunLauncher(paths.LocalDirectory, _ => false) : new RunLauncher();
+        LaunchWindowsApp = paths.IsIsolated ? (_, _) => false : new WindowsAppLauncher().Open;
         VSCode = new VSCodeService(Path.Combine(paths.LocalDirectory, "vscode"), paths.IsIsolated ? new DisabledNetwork() : null);
         _vsCodeFolders = paths.IsIsolated ? new VSCodeFolderLauncher("code.exe", _ => false) : new VSCodeFolderLauncher();
     }
@@ -144,7 +159,7 @@ internal sealed class AppServices : IAsyncDisposable
             try { await _bridgeStart; }
             finally { await Bridge.DisposeAsync(); }
         }
-        finally { Weather.Dispose(); VSCode.Dispose(); _isolatedHttp?.Dispose(); await Codex.DisposeAsync(); }
+        finally { Updates.Dispose(); Weather.Dispose(); VSCode.Dispose(); _isolatedHttp?.Dispose(); await Codex.DisposeAsync(); }
     }
 
     private sealed class MemoryCredentials : IGmailCredentialStore

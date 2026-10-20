@@ -6,9 +6,9 @@ internal sealed record BrowserSearchRequest(string Id, string Query, int Start);
 internal sealed class BrowserSearchException(string message) : Exception(message);
 
 // Search pages are read in Chrome by the authenticated extension, without HTTP APIs.
-internal sealed class BrowserSearchService(TimeProvider? clock = null, ComposerDestination destination = ComposerDestination.Google) : ISearchService
+internal sealed class BrowserSearchService(TimeProvider? clock = null, string destination = ComposerDestination.Google) : ISearchService
 {
-    internal ComposerDestination Destination { get; } = destination is ComposerDestination.Google or ComposerDestination.YouTube
+    internal string Destination { get; } = destination is ComposerDestination.Google or ComposerDestination.YouTube
         ? destination : throw new ArgumentOutOfRangeException(nameof(destination));
     private string Provider => Destination == ComposerDestination.YouTube ? "YouTube" : "Google";
     private string Host => Destination == ComposerDestination.YouTube ? "www.youtube.com" : "www.google.com";
@@ -81,7 +81,7 @@ internal sealed class BrowserSearchService(TimeProvider? clock = null, ComposerD
         Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme is "https" or "http" && uri.UserInfo.Length == 0;
     internal static Uri PageUri(string query, int start) => new("https://www.google.com/search?q=" +
         Uri.EscapeDataString(query) + "&udm=14&hl=en&start=" + start);
-    internal static Uri PageUri(ComposerDestination destination, string query, int start) => destination == ComposerDestination.YouTube
+    internal static Uri PageUri(string destination, string query, int start) => destination == ComposerDestination.YouTube
         ? new Uri("https://www.youtube.com/results?search_query=" + Uri.EscapeDataString(query) + "&hl=en") : PageUri(query, start);
     internal static bool IsVideoLink(string? value) => IsSafeLink(value) && Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
         uri.Scheme == "https" && uri.Host == "www.youtube.com" && uri.IsDefaultPort && uri.Fragment.Length == 0 && uri.AbsolutePath == "/watch" &&
@@ -133,6 +133,6 @@ internal sealed class BrowserSearchService(TimeProvider? clock = null, ComposerD
         _ => $"Could not read {Provider} search results. Open the search in Chrome or retry."
     };
 
-    internal static string ErrorMessage(Exception exception, ComposerDestination destination = ComposerDestination.Google) => exception is BrowserSearchException
+    internal static string ErrorMessage(Exception exception, string destination = ComposerDestination.Google) => exception is BrowserSearchException
         ? exception.Message : $"Could not search {(destination == ComposerDestination.YouTube ? "YouTube" : "Google")}. Check Chrome and try again.";
 }

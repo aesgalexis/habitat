@@ -24,7 +24,7 @@ public sealed partial class MainPage
             SendCurrentMessage();
             if (Composer.Text != draft || _bridge!.HasMessageInFlight)
                 throw new InvalidOperationException("A disconnected OpenAI send must preserve the shared draft.");
-            foreach (var destination in Enum.GetValues<ComposerDestination>())
+            foreach (var destination in ComposerDestinations.Ordered.ToArray())
             {
                 SelectDestination(destination);
                 if (Composer.Text != draft ||
@@ -38,16 +38,16 @@ public sealed partial class MainPage
             await Task.Delay(100);
             SizeTopWidgets((Microsoft.UI.Xaml.Controls.Grid)Content);
             var surface = (Microsoft.UI.Xaml.Controls.Grid)Content;
-            var selector = DestinationRail.TransformToVisual(surface).TransformPoint(new Windows.Foundation.Point());
-            if (Math.Abs(selector.Y + DestinationRail.ActualHeight / 2 - surface.ActualHeight / 2) > 1 ||
-                Math.Abs(selector.X + DestinationRail.ActualWidth - (surface.ActualWidth - surface.Padding.Right)) > 1 ||
-                DestinationRail.Children.Count != Enum.GetValues<ComposerDestination>().Length || DestinationRail.Spacing < 16 ||
-                !ReferenceEquals(DestinationRail.Parent, Content))
+            var selector = _destinationRailScroll.TransformToVisual(surface).TransformPoint(new Windows.Foundation.Point());
+            if (Math.Abs(selector.Y + _destinationRailScroll.ActualHeight / 2 - surface.ActualHeight / 2) > 1 ||
+                Math.Abs(selector.X + _destinationRailScroll.ActualWidth - (surface.ActualWidth - surface.Padding.Right)) > 1 ||
+                DestinationRail.Children.Count != ComposerDestinations.Ordered.ToArray().Length || DestinationRail.Spacing < 16 ||
+                !ReferenceEquals(_destinationRailScroll.Parent, Content))
                 throw new InvalidOperationException("Destinations must be separated and vertically centered at the right edge.");
             File.AppendAllText(logPath, "PASS: destination labels, exclusive selection, draft preservation, persistence and separated right-side placement\n");
 
             Composer.Text = "";
-            foreach (var destination in Enum.GetValues<ComposerDestination>())
+            foreach (var destination in ComposerDestinations.Ordered.ToArray())
             {
                 SelectDestination(destination);
                 await Task.Delay(60);

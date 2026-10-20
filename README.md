@@ -12,7 +12,7 @@ The current application is built with **C# and WinUI 3 on .NET 10**. It includes
 
 WinGet distribution is being prepared. The installer, manifests, and publishing process are documented in [docs/WINGET.md](docs/WINGET.md). HABITAT is not yet available in the public WinGet catalog. The package submission is open at [microsoft/winget-pkgs#455544](https://github.com/microsoft/winget-pkgs/pull/455544). While it is under review, you can download the installer directly from GitHub Releases.
 
-1. Download `HABITAT-0.10.0-x64-setup.exe` and its SHA-256 from [GitHub Releases](https://github.com/aesgalexis/habitat/releases/latest), verify the hash, and run the installer from your normal Windows session. Use the release assets; the **Source code** ZIP does not contain the compiled application.
+1. Download `HABITAT-0.11.0-x64-setup.exe` and its SHA-256 from [GitHub Releases](https://github.com/aesgalexis/habitat/releases/latest), verify the hash, and run the installer from your normal Windows session. Use the release assets; the **Source code** ZIP does not contain the compiled application.
 2. The installer installs to `%LOCALAPPDATA%\Programs\HABITAT`, adds HABITAT to the Start menu, and registers its uninstaller. It includes .NET and Windows App SDK; no SDK or administrator privileges are required. Supports Windows x64, Windows 10 version 2004 or later, and Windows 11.
 3. Open **Set up HABITAT…** (shown on first launch and always available in the menu). It detects Chrome, opens the extension in the [Chrome Web Store](https://chromewebstore.google.com/detail/ennnldolgdbbkgmpjjpkafeajihpimii), and shows each connection's status. Approve installation in Chrome and click **Enable connection**.
 4. At the time of this release, extension 0.9.0 has been submitted as Unlisted and is awaiting Google's review. If the link is not available yet, the setup wizard opens the included folder and `chrome://extensions` so you can load it unpacked. Chrome is not installed and extensions are not added silently.
@@ -20,7 +20,9 @@ WinGet distribution is being prepared. The installer, manifests, and publishing 
 
 The package includes browser bridge **0.9.0** and the **HABITAT Terminal 0.2.0** VSIX. The installer is not yet code-signed. See the [guide for another PC](docs/GETTING_STARTED.md) and [distribution details](docs/RELEASING.md). To work from source, clone the repository and follow [Build](#build).
 
-Alternatively, extract all of `HABITAT-0.10.0-win-x64.zip` and run `Install-HABITAT.cmd`. Always use the same format when updating: EXE and ZIP installations use different layouts and refuse to overwrite each other. Both preserve user data; the ZIP also keeps the previous release for recovery. WinGet preparation is documented in [WINGET.md](docs/WINGET.md).
+Alternatively, extract all of `HABITAT-0.11.0-win-x64.zip` and run `Install-HABITAT.cmd`. Always use the same format when updating: EXE and ZIP installations use different layouts and refuse to overwrite each other. Both preserve user data; the ZIP also keeps the previous release for recovery. WinGet preparation is documented in [WINGET.md](docs/WINGET.md).
+
+HABITAT checks for newer stable Windows releases at startup and every six hours while open. When an update is available, an **Update HABITAT** icon appears at the bottom of the sidebar and opens its official download page. Downloading and installing remain manual. Failed checks retry after one hour.
 
 ## Run the application
 
@@ -125,6 +127,18 @@ If Windows cannot obtain a position or denies access, HABITAT uses the saved cit
 The **Open in new window** icon appears only to the left of the selected destination's bar. It runs that destination's action using the editor's current text, even before the main button has been pressed, and shows the external window: Gmail opens a draft without sending it; Google and YouTube open the search; Maps preserves routes; Translate opens Google Translate with the selected language and keeps the original. Notepad, Codex, Terminal, and Run use their usual launchers. Terminal keeps its confirmation step; VS Code runs directly in the selected project. With an empty editor, it opens a home page, new document or draft, empty shell, or Run dialog. VS Code opens the selected project; without a project, it opens the application. Help labels describe the specific action in English. Both buttons prevent duplicate actions during delivery, and a failure preserves the draft; a later revision is never cleared by an earlier delivery.
 
 **Send and open ChatGPT** requires browser extension **0.7.1** or later: it selects the linked conversation and restores its window before sending once. The main button keeps sending in the background. Without text, the icon only opens that conversation; without a browser connection, it opens ChatGPT's home page. **Run command and open VS Code** requires **HABITAT Terminal 0.1.1** or later to show the exact window after delivering the command. If opening fails after accepted delivery, it reports the problem and does not repeat the command. Reload extensions after updating them.
+
+## Personal destinations
+
+The window status updates at startup and when switching destinations. Idle destinations show **Ready**. ChatGPT bridge connection and progress messages appear in OpenAI; background replies remain in its history without replacing another destination's status.
+
+Use **Preferences… → Destinations** to add, remove and reorder destinations. **On startup** selects a fixed destination or **Last used destination**. The mouse wheel cycles only through your selected destinations. **Remove** preserves settings and session content; restore a destination with **Available destinations → Add destination**. Removing every destination leaves an **Add destination** action that opens these preferences and keeps your draft. New catalog entries stay optional.
+
+**Add Windows application…** lists installed Windows applications, including Microsoft Store apps. **Browse…** also accepts executable files (`.exe`) and shortcuts (`.lnk`). Adding an application never launches it. Changes apply when Preferences closes and persist across restarts.
+
+By default, **Open [application]** opens the application, including from an empty editor, and keeps your draft. Adding Paint provides a launcher; it does not insert text or draw automatically. For executables that support text arguments, enable **Pass editor text as one argument**. HABITAT passes the complete text as a single literal argument and clears only the submitted draft after Windows accepts the launch. Acceptance does not confirm that the application processed the text. Store applications and shortcuts open without text arguments. Launch failures keep the draft.
+
+Stable destination IDs migrate previous numeric preferences. Destination checks use synthetic application files and intercepted launchers. The explicit `--windows-apps-smoke` option in `tests/Habitat.Destination.Checks` verifies installed app discovery without launching applications. **--preferences-ui-only** checks management, persistence, Windows app creation and the common initial editor layout with isolated storage under `artifacts`.
 
 ## Tasks
 
