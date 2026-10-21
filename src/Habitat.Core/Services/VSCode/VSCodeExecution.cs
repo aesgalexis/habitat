@@ -8,12 +8,12 @@ internal sealed record VSCodeExecution(string Id, string Command, string Path, s
     public bool IsRunning => State is "starting" or "running";
     public string Label => State switch
     {
-        "starting" => "Starting",
-        "running" => "Running",
-        "completed" => "Completed",
-        "failed" => "Failed",
-        "closed" => "Closed",
-        _ => "Status unavailable"
+        "starting" => UiText.Get("Starting"),
+        "running" => UiText.Get("Running"),
+        "completed" => UiText.Get("CommandCompleted"),
+        "failed" => UiText.Get("Failed"),
+        "closed" => UiText.Get("Closed"),
+        _ => UiText.Get("StatusUnavailable")
     };
     public string Summary => Label + " · " + TimeSpan.FromMilliseconds(Math.Max(0, ElapsedMs)).ToString(@"hh\:mm\:ss") +
         (State == "failed" && ExitCode.HasValue ? $" · Exit code {ExitCode}" : "");

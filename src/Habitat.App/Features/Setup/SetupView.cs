@@ -10,31 +10,31 @@ internal sealed class SetupView : Grid
     internal TextBlock ConnectionStatus { get; } = Text("");
     internal TextBlock ChatStatus { get; } = Text("");
     internal TextBlock ActionStatus { get; } = Text("");
-    internal Button GetChrome { get; } = Action("Get Google Chrome");
-    internal Button InstallExtension { get; } = Action("Open Chrome Web Store");
-    internal Button OpenExtensionFolder { get; } = Action("Open extension folder");
-    internal Button OpenExtensions { get; } = Action("Open Chrome extensions");
-    internal Button OpenChat { get; } = Action("Open ChatGPT");
-    internal Button OpenVSCodeFolder { get; } = Action("Open VS Code extension folder");
-    internal Button SetupGmail { get; } = Action("Set up Gmail…");
-    internal Button ReadGuide { get; } = Action("Read setup guide");
+    internal Button GetChrome { get; } = Action(UiText.Get("GetGoogleChrome"));
+    internal Button InstallExtension { get; } = Action(UiText.Get("OpenChromeWebStore"));
+    internal Button OpenExtensionFolder { get; } = Action(UiText.Get("OpenExtensionFolder"));
+    internal Button OpenExtensions { get; } = Action(UiText.Get("OpenChromeExtensions"));
+    internal Button OpenChat { get; } = Action(UiText.Get("OpenChatGPT"));
+    internal Button OpenVSCodeFolder { get; } = Action(UiText.Get("OpenVSCodeExtensionFolder"));
+    internal Button SetupGmail { get; } = Action(UiText.Get("SetUpGmail"));
+    internal Button ReadGuide { get; } = Action(UiText.Get("ReadSetupGuide"));
 
     internal SetupView(InstallationFiles files)
     {
         var scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         var panel = new StackPanel { Spacing = 18, Padding = new Thickness(0, 0, 12, 8) };
-        panel.Children.Add(Text("Connect the tools you want to use. Tasks and local tools work immediately. Browser integrations use your Chrome session; Gmail, VS Code and Codex are optional."));
+        panel.Children.Add(Text(UiText.Get("ConnectTheToolsYouWantToUseTasks")));
         panel.Children.Add(Card("1. Google Chrome", ChromeStatus, GetChrome));
-        panel.Children.Add(Card("2. Chrome extension", Text("Install HABITAT · browser bridge, then choose Enable connection on its welcome page. Keep HABITAT and Chrome open. Chrome asks you to approve the installation."),
+        panel.Children.Add(Card(UiText.Get("ChromeExtensionStep"), Text(UiText.Get("InstallHABITATBrowserBridgeThenChooseEnableConnection")),
             InstallExtension, ConnectionStatus,
-            Text("If the store listing is not available yet, open Chrome extensions, enable Developer mode and choose Load unpacked. Select the folder below, then open the extension and choose Connect automatically."),
+            Text(UiText.Get("IfTheStoreListingIsNotAvailableYet")),
             PathText(files.ChromeExtensionDirectory), OpenExtensionFolder, OpenExtensions));
-        panel.Children.Add(Card("3. ChatGPT", Text("Sign in to ChatGPT in Chrome and open the conversation you want HABITAT to use. Google, YouTube and Translate do not require a ChatGPT account."), ChatStatus, OpenChat));
-        panel.Children.Add(Card("Optional integrations", Text("VS Code: open the folder below, then use Extensions > … > Install from VSIX in VS Code. Select habitat-terminal and reload open VS Code windows. Install VS Code itself first if needed."),
+        panel.Children.Add(Card("3. ChatGPT", Text(UiText.Get("SignInToChatGPTInChromeAndOpen")), ChatStatus, OpenChat));
+        panel.Children.Add(Card(UiText.Get("OptionalIntegrations"), Text(UiText.Get("VSCodeOpenTheFolderBelowThenUse")),
             PathText(files.VSCodeExtensionDirectory), OpenVSCodeFolder,
-            Text("Gmail: connect your own Google Desktop OAuth client and authorize your account. This step is optional."), SetupGmail,
-            Text("Codex: install the Codex desktop app and sign in separately. Notepad, Terminal, Run and Tasks need no browser extension.")));
+            Text(UiText.Get("GmailConnectYourOwnGoogleDesktopOAuthClient")), SetupGmail,
+            Text(UiText.Get("CodexInstallTheCodexDesktopAppAndSign"))));
         panel.Children.Add(ReadGuide);
         panel.Children.Add(ActionStatus);
         OpenExtensionFolder.IsEnabled = files.ChromeExtensionDirectory is not null;
@@ -45,18 +45,18 @@ internal sealed class SetupView : Grid
 
     internal void Refresh(bool chromeInstalled, bool search, bool youtube, bool translation, bool chat)
     {
-        ChromeStatus.Text = chromeInstalled ? "Google Chrome is installed." : "Google Chrome was not found. Install it, then return here.";
+        ChromeStatus.Text = UiLanguage.Value(ChromeStatus, "Text", () => chromeInstalled ? UiText.Get("GoogleChromeIsInstalled") : UiText.Get("GoogleChromeWasNotFoundInstallItThen"));
         GetChrome.Visibility = chromeInstalled ? Visibility.Collapsed : Visibility.Visible;
         InstallExtension.IsEnabled = OpenExtensions.IsEnabled = OpenChat.IsEnabled = chromeInstalled;
-        ConnectionStatus.Text = $"Google: {State(search)} · YouTube: {State(youtube)} · Translate: {State(translation)}";
-        ChatStatus.Text = chat ? "ChatGPT connected." : "Waiting for a linked ChatGPT conversation.";
+        ConnectionStatus.Text = UiLanguage.Value(ConnectionStatus, "Text", () => UiText.Format("GoogleYouTubeTranslate", State(search), State(youtube), State(translation)));
+        ChatStatus.Text = UiLanguage.Value(ChatStatus, "Text", () => chat ? UiText.Get("ChatGPTConnected") : UiText.Get("WaitingForALinkedChatGPTConversation"));
     }
 
-    private static string State(bool connected) => connected ? "Connected" : "Waiting";
+    private static string State(bool connected) => connected ? UiText.Get("Connected") : UiText.Get("Waiting");
     private static TextBlock Text(string value) => new() { Text = value, TextWrapping = TextWrapping.Wrap, FontSize = 13 };
     private static Button Action(string label) => new() { Content = label, HorizontalAlignment = HorizontalAlignment.Left };
-    private static TextBox PathText(string? path) => new() { Text = path ?? "Bundled extension not found. Reinstall HABITAT from GitHub Releases.", IsReadOnly = true,
-        TextWrapping = TextWrapping.Wrap, Header = "Included extension folder" };
+    private static TextBox PathText(string? path) => UiLanguage.Watch(new TextBox() { Text = path ?? UiText.Get("BundledExtensionNotFoundReinstallHABITATFromGitHub"), IsReadOnly = true,
+        TextWrapping = TextWrapping.Wrap, Header = UiText.Get("IncludedExtensionFolder") }, ("Text", () => (object?)(path ?? UiText.Get("BundledExtensionNotFoundReinstallHABITATFromGitHub"))), ("Header", () => (object?)(UiText.Get("IncludedExtensionFolder"))));
     private static StackPanel Card(string title, params UIElement[] controls)
     {
         var panel = new StackPanel { Spacing = 10 };

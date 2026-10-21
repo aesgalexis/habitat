@@ -10,9 +10,9 @@ internal sealed class GmailDraftSection : IDestinationSection
 {
     private readonly StackPanel _view = new() { Spacing = 12 };
     private readonly TextBlock _status = new() { FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap };
-    private readonly Button _browser = new() { Content = "Open in browser" };
-    private readonly Button _clear = new() { Content = "Clear" };
-    private readonly Button _authorize = new() { Content = "Authorize Gmail drafts", Visibility = Visibility.Collapsed };
+    private readonly Button _browser = UiLanguage.Watch(new Button() { Content = UiText.Get("OpenInBrowser") }, ("Content", () => (object?)(UiText.Get("OpenInBrowser"))));
+    private readonly Button _clear = UiLanguage.Watch(new Button() { Content = UiText.Get("Clear") }, ("Content", () => (object?)(UiText.Get("Clear"))));
+    private readonly Button _authorize = UiLanguage.Watch(new Button() { Content = UiText.Get("AuthorizeGmailDrafts"), Visibility = Visibility.Collapsed }, ("Content", () => (object?)(UiText.Get("AuthorizeGmailDrafts"))));
     private readonly Func<string, CancellationToken, Task<GmailDraft>> _save;
     private readonly Func<Task> _authorizeDrafts;
     private readonly Func<string?> _email;
@@ -38,11 +38,11 @@ internal sealed class GmailDraftSection : IDestinationSection
         _view.Children.Add(actions);
         _view.Children.Add(_status);
         _view.Children.Add(_authorize);
-        AutomationProperties.SetName(_browser, "Open in browser");
-        ToolTipService.SetToolTip(_browser, "Open the saved draft or Gmail drafts in your browser");
-        AutomationProperties.SetName(_clear, "Clear");
-        ToolTipService.SetToolTip(_clear, "Clear the editor. Saved Gmail drafts are kept.");
-        AutomationProperties.SetName(_authorize, "Authorize Gmail drafts");
+        UiLanguage.SetName(_browser, () => UiText.Get("OpenInBrowser"));
+        UiLanguage.SetToolTip(_browser, () => UiText.Get("OpenTheSavedDraftOrGmailDraftsIn"));
+        UiLanguage.SetName(_clear, () => UiText.Get("Clear"));
+        UiLanguage.SetToolTip(_clear, () => UiText.Get("ClearTheEditorSavedGmailDraftsAreKept"));
+        UiLanguage.SetName(_authorize, () => UiText.Get("AuthorizeGmailDrafts"));
         AutomationProperties.SetLiveSetting(_status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         _browser.Click += async (_, _) => await OpenBrowserAsync();
         _clear.Click += (_, _) => RequestClear();
@@ -55,24 +55,24 @@ internal sealed class GmailDraftSection : IDestinationSection
         HasContent = true;
         SetBusy(true);
         _saved = null;
-        _status.Text = "Saving draft…";
+        _status.Text = UiLanguage.Value(_status, "Text", () => UiText.Get("SavingDraft"));
         try
         {
             var saved = await _save(text, _operations.Token);
             if (_disposed) return;
             _saved = saved;
-            _status.Text = "Draft saved. Subject: " + saved.Subject;
+            _status.Text = UiLanguage.Value(_status, "Text", () => UiText.Get("DraftSavedSubject") + saved.Subject);
             _authorize.Visibility = Visibility.Collapsed;
         }
         catch (GmailDraftAuthorizationException exception)
         { if (!_disposed) { _status.Text = exception.Message; _authorize.Visibility = Visibility.Visible; } }
         catch (GmailSignInRequiredException)
-        { if (!_disposed) { _status.Text = "Authorize Gmail drafts, then press Draft email again."; _authorize.Visibility = Visibility.Visible; } }
+        { if (!_disposed) { _status.Text = UiLanguage.Value(_status, "Text", () => UiText.Get("AuthorizeGmailDraftsThenPressDraftEmailAgain")); _authorize.Visibility = Visibility.Visible; } }
         catch (OperationCanceledException) when (_operations.Token.IsCancellationRequested) { }
         catch (Exception exception)
         {
             _reportError(exception);
-            if (!_disposed) _status.Text = "Could not confirm the saved draft. Check Gmail with Open in browser before trying again.";
+            if (!_disposed) _status.Text = UiLanguage.Value(_status, "Text", () => UiText.Get("CouldNotConfirmTheSavedDraftCheckGmail"));
         }
         finally { if (!_disposed) SetBusy(false); }
     });
@@ -95,13 +95,13 @@ internal sealed class GmailDraftSection : IDestinationSection
     {
         if (_disposed || IsBusy) return;
         SetBusy(true);
-        try { await _authorizeDrafts(); if (!_disposed) _status.Text = "After authorizing Gmail drafts, press Draft email again."; }
+        try { await _authorizeDrafts(); if (!_disposed) _status.Text = UiLanguage.Value(_status, "Text", () => UiText.Get("AfterAuthorizingGmailDraftsPressDraftEmailAgain")); }
         catch (Exception exception)
-        { _reportError(exception); if (!_disposed) _status.Text = "Could not authorize Gmail drafts. Open Gmail setup and try again."; }
+        { _reportError(exception); if (!_disposed) _status.Text = UiLanguage.Value(_status, "Text", () => UiText.Get("CouldNotAuthorizeGmailDraftsOpenGmailSetup")); }
         finally { if (!_disposed) SetBusy(false); }
     }
 
-    private void ShowBrowserError() { HasContent = true; _status.Text = "Could not open Gmail in your browser. Try again."; }
+    private void ShowBrowserError() { HasContent = true; _status.Text = UiLanguage.Value(_status, "Text", () => UiText.Get("CouldNotOpenGmailInYourBrowserTry")); }
     private void Reset()
     {
         _saved = null;

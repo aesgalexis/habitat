@@ -30,6 +30,12 @@ public partial class App : Application
 #if HABITAT_UI_CHECKS
         _services = new AppServices(AppDataPaths.Isolated(Path.Combine(AppContext.BaseDirectory, "tasks-ui-data", Guid.NewGuid().ToString("N"))));
         await _services.TaskSession.LoadAsync();
+        if (Environment.GetCommandLineArgs().Contains("--window-menu-ui-only"))
+        {
+            MainWindow = new MainWindow(_services);
+            MainWindow.StartWindowMenuChecks();
+            return;
+        }
         var page = new MainPage(_services);
         var window = new Window { Content = page };
         page.Loaded += async (_, _) => await page.CheckTasksUiAsync(window);

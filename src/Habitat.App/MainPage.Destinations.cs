@@ -109,10 +109,10 @@ public sealed partial class MainPage
             button.Click += (_, _) => { SelectDestination(destination); FocusComposer(); };
             AutomationProperties.SetName(button, _destinationCatalog.Label(destination));
             ToolTipService.SetToolTip(button, _destinationCatalog.Label(destination));
-            AutomationProperties.SetHelpText(button, "Select destination. Mouse wheel over the selector cycles destinations. Ctrl + mouse wheel works anywhere in the window.");
+            UiLanguage.SetHelpText(button, () => UiText.Get("SelectDestinationMouseWheelOverTheSelectorCycles"));
             if (destination == ComposerDestination.Codex)
             {
-                const string help = "Continue a Codex chat started from HABITAT or start a new chat and show its reply here.";
+                var help = UiText.Get("ContinueACodexChatStartedFromHABITATOr");
                 ToolTipService.SetToolTip(button, help);
                 AutomationProperties.SetHelpText(button, help);
             }
@@ -188,7 +188,7 @@ public sealed partial class MainPage
             button.FontWeight = active ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal;
             foreach (var key in new[] { "ButtonBackgroundPointerOver", "ButtonBackgroundPressed" })
                 button.Resources[key] = transparent;
-            AutomationProperties.SetItemStatus(button, active ? "Selected" : "Not selected");
+            UiLanguage.SetItemStatus(button, () => active ? UiText.Get("Selected") : UiText.Get("NotSelected"));
             var external = _externalDestinationButtons[destination];
             external.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
             external.Foreground = accent;
@@ -207,19 +207,19 @@ public sealed partial class MainPage
         ComposerHint.Text = _destinationCatalog.Placeholder(_destination);
         AutomationProperties.SetName(Composer, ComposerHint.Text);
         UpdateWritingLayout();
-        SendButton.Content = _destination switch
+        SendButton.Content = UiLanguage.Value(SendButton, "Content", () => _destination switch
         {
-            ComposerDestination.Notepad => "Open in Notepad",
-            ComposerDestination.Translate => "Translate",
-            ComposerDestination.Gmail => "Draft email",
-            ComposerDestination.Terminal => "Run command…",
-            ComposerDestination.Run => "Run",
-            ComposerDestination.VSCode => "Run in VS Code",
-            ComposerDestination.Codex => "Send to Codex",
-            ComposerDestination.OpenAI => "Send",
+            ComposerDestination.Notepad => UiText.Get("OpenInNotepad"),
+            ComposerDestination.Translate => UiText.Get("Translate"),
+            ComposerDestination.Gmail => UiText.Get("DraftEmail"),
+            ComposerDestination.Terminal => UiText.Get("RunCommandMessage"),
+            ComposerDestination.Run => UiText.Get("Run"),
+            ComposerDestination.VSCode => UiText.Get("RunInVSCode"),
+            ComposerDestination.Codex => UiText.Get("SendToCodex"),
+            ComposerDestination.OpenAI => UiText.Get("Send"),
             _ => _destinationCatalog.WindowsApp(_destination) is not null || _destination.Length == 0
-                ? _destinationCatalog.ActionLabel(_destination) : "Search"
-        };
+                ? _destinationCatalog.ActionLabel(_destination) : UiText.Get("Search")
+        });
         UpdateDestinationStatus();
         UpdateSendState();
     }
@@ -231,20 +231,20 @@ public sealed partial class MainPage
     {
         if (HasAppearanceOverlay) return false;
         var content = new StackPanel { Spacing = 12 };
-        content.Children.Add(new TextBlock { Text = "Run this command in a new PowerShell window?", TextWrapping = TextWrapping.Wrap });
+        content.Children.Add(UiLanguage.Watch(new TextBlock { Text = UiText.Get("RunThisCommandInANewPowerShellWindow"), TextWrapping = TextWrapping.Wrap }, ("Text", () => (object?)(UiText.Get("RunThisCommandInANewPowerShellWindow")))));
         var preview = new TextBox
         {
             Text = command, IsReadOnly = true, AcceptsReturn = true, TextWrapping = TextWrapping.NoWrap,
             MaxHeight = 240, FontFamily = new FontFamily("Cascadia Mono")
         };
-        AutomationProperties.SetName(preview, "PowerShell command to run");
+        UiLanguage.SetName(preview, () => UiText.Get("PowerShellCommandToRun"));
         content.Children.Add(preview);
-        content.Children.Add(new TextBlock { Text = $"Working directory: {_powerShell.WorkingDirectory}", TextWrapping = TextWrapping.Wrap });
-        var dialog = new ContentDialog
+        content.Children.Add(UiLanguage.Watch(new TextBlock { Text = UiText.Format("WorkingDirectoryMessage", _powerShell.WorkingDirectory), TextWrapping = TextWrapping.Wrap }, ("Text", () => (object?)(UiText.Format("WorkingDirectoryMessage", _powerShell.WorkingDirectory)))));
+        var dialog = UiLanguage.Watch(new ContentDialog
         {
-            XamlRoot = XamlRoot, Title = "Run PowerShell command", Content = content,
-            PrimaryButtonText = "Run command", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close
-        };
+            XamlRoot = XamlRoot, Title = UiText.Get("RunPowerShellCommand"), Content = content,
+            PrimaryButtonText = UiText.Get("RunCommand"), CloseButtonText = UiText.Get("Cancel"), DefaultButton = ContentDialogButton.Close
+        }, ("Title", () => (object?)(UiText.Get("RunPowerShellCommand"))), ("PrimaryButtonText", () => (object?)(UiText.Get("RunCommand"))), ("CloseButtonText", () => (object?)(UiText.Get("Cancel"))));
         StyleDialog(dialog);
         _terminalConfirmationOpen = true;
         try { return await ShowDialogAsync(dialog) == ContentDialogResult.Primary; }

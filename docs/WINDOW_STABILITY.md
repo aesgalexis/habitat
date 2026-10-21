@@ -1,0 +1,19 @@
+# Diagnóstico de estabilidad de ventana — 2026-10-21
+
+Windows registró en la instalación 0.13.1 cierres nativos en `Microsoft.UI.Windowing.dll` el 20 y 21 de octubre y un bloqueo `AppHangB1` el día 21. El proceso posterior respondía durante la inspección. No se obtuvo una pila del bloqueo, por lo que no se atribuye automáticamente a la misma causa.
+
+Los volcados de los cierres contienen `0xe0464645`, con HRESULT `0x80070057`, al propagar un error desde `AppWindow.Changed`. Una prueba WinUI con almacenamiento aislado reprodujo el mismo cierre en el primer ciclo de minimizar/restaurar. El registro temporal capturó `RasterizationScale=1`, `RightInset=-14`, `TitleBar.Height=32` y `ArgumentException` en `GridLength` dentro de `MainWindow.UpdateCaptionLayout`.
+
+La corrección limita el margen a valores no negativos, valida la escala, evita cambios de tamaño redundantes y agrupa los ajustes en el dispatcher después de la notificación nativa. La actualización de estado tampoco vuelve a escribir el mismo título en cada tick.
+
+Para verificar la regresión desde una sesión con el SDK .NET disponible:
+
+```powershell
+scripts/check-tasks-ui.ps1 -WindowMenuOnly -OutputDirectory artifacts/window-stability-checks
+```
+
+La prueba usa datos aislados, ejecuta 30 ciclos de minimizar/restaurar, activación y cambio de tamaño, comprueba la zona del menú, deja funcionar las actualizaciones periódicas en reposo y abre/cierra Preferencias en inglés y español. No utiliza la lista de tareas real, capturas de pantalla ni inyección de ratón.
+
+La versión corregida pasó esa prueba y la suite completa de controles WinUI. Después de aplicarla a la instalación, se enviaron 60 consultas `WM_NULL` durante 30,5 segundos: todas respondieron y la latencia máxima fue de 8 ms. Esta observación breve no descarta otros bloqueos espontáneos.
+
+Las suites de lógica y las comprobaciones de distribución se ejecutaron con datos sintéticos. La verificación general se detuvo en `tests/package.checks.ps1` porque la instalación ZIP de prueba rechaza los enlaces de carpetas de la ruta de OneDrive; esa comprobación de instalación no quedó validada.

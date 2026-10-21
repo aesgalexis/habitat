@@ -35,6 +35,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Habitat.Hotkey", "src\Habit
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Habitat.Hotkey.Checks", "tests\Habitat.Hotkey.Checks\Habitat.Hotkey.Checks.csproj", "{CB57B378-164E-439A-8779-47D1837222C9}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Habitat.Window.Checks", "tests\Habitat.Window.Checks\Habitat.Window.Checks.csproj", "{5A7919EC-2011-4CE4-AA9B-7D5A9ED52834}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -201,6 +203,18 @@ Global
 		{CB57B378-164E-439A-8779-47D1837222C9}.Release|x64.Build.0 = Release|Any CPU
 		{CB57B378-164E-439A-8779-47D1837222C9}.Release|x86.ActiveCfg = Release|Any CPU
 		{CB57B378-164E-439A-8779-47D1837222C9}.Release|x86.Build.0 = Release|Any CPU
+		{5A7919EC-2011-4CE4-AA9B-7D5A9ED52834}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5A7919EC-2011-4CE4-AA9B-7D5A9ED52834}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5A7919EC-2011-4CE4-AA9B-7D5A9ED52834}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{5A7919EC-2011-4CE4-AA9B-7D5A9ED52834}.Debug|x64.Build.0 = Debug|Any CPU
+		{5A7919EC-2011-4CE4-AA9B-7D5A9ED52834}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{5A7919EC-2011-4CE4-AA9B-7D5A9ED52834}.Debug|x86.Build.0 = Debug|Any CPU
+		{5A7919EC-2011-4CE4-AA9B-7D5A9ED52834}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5A7919EC-2011-4CE4-AA9B-7D5A9ED52834}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5A7919EC-2011-4CE4-AA9B-7D5A9ED52834}.Release|x64.ActiveCfg = Release|Any CPU
+		{5A7919EC-2011-4CE4-AA9B-7D5A9ED52834}.Release|x64.Build.0 = Release|Any CPU
+		{5A7919EC-2011-4CE4-AA9B-7D5A9ED52834}.Release|x86.ActiveCfg = Release|Any CPU
+		{5A7919EC-2011-4CE4-AA9B-7D5A9ED52834}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -219,5 +233,6 @@ Global
 		{A6235C08-6584-41D3-9ACF-7C9617AD5641} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{078C08E3-8684-49CB-903E-9F7F5C6EB0F0} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{CB57B378-164E-439A-8779-47D1837222C9} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{5A7919EC-2011-4CE4-AA9B-7D5A9ED52834} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal

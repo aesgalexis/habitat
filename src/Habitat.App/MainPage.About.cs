@@ -13,11 +13,11 @@ public sealed partial class MainPage
             Width = Math.Max(240, Math.Min(480, XamlRoot.Size.Width - 96)),
             MaxHeight = Math.Max(160, Math.Min(520, XamlRoot.Size.Height - 180))
         };
-        var dialog = new ContentDialog
+        var dialog = UiLanguage.Watch(new ContentDialog
         {
-            XamlRoot = XamlRoot, Title = "About HABITAT", Content = view,
-            CloseButtonText = "Close", DefaultButton = ContentDialogButton.Close
-        };
+            XamlRoot = XamlRoot, Title = UiText.Get("AboutTitle"), Content = view,
+            CloseButtonText = UiText.Get("Close"), DefaultButton = ContentDialogButton.Close
+        }, ("Title", () => (object?)(UiText.Get("AboutTitle"))), ("CloseButtonText", () => (object?)(UiText.Get("Close"))));
         StyleDialog(dialog);
         foreach (var link in view.Links)
         {
@@ -27,13 +27,13 @@ public sealed partial class MainPage
                 try
                 {
                     view.ActionStatus.Text = await _launchBrowser((Uri)link.Tag)
-                        ? "Opened in Chrome." : "Could not open Chrome. Check that Google Chrome is installed, then try again.";
+                        ? UiText.Get("OpenedInChrome") : UiText.Get("ChromeOpenFailed");
                 }
                 finally { link.IsEnabled = true; }
             });
         }
         view.CopyDetails.Click += (_, _) => view.ActionStatus.Text = _services.CopyText(view.AppDetails)
-            ? "App details copied." : "Could not copy app details. Try again.";
+            ? UiText.Get("AppDetailsCopied") : UiText.Get("CopyAppDetailsFailed");
         _appearanceDialogOpen = true;
         try { await ShowDialogAsync(dialog); }
         finally { _appearanceDialogOpen = false; FocusComposer(); }

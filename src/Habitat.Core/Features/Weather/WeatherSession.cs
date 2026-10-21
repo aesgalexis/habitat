@@ -23,9 +23,9 @@ internal sealed class WeatherSession(WeatherService weather,
                 var result = await locate(foreground, token);
                 if (token.IsCancellationRequested || !stillCurrent()) return null;
                 if (result.Position is DeviceLocation position)
-                    return await weather.GetAsync(position.Latitude, position.Longitude, "Current location · " + position.Source, token);
+                    return (await weather.GetAsync(position.Latitude, position.Longitude, UiText.Get("CurrentLocationMessage") + position.Source, token)) with { DeviceSource = position.Source };
                 var saved = await weather.GetAsync(city, token);
-                return saved with { Location = saved.Location + " · saved city" };
+                return saved with { Location = saved.Location + " · saved city", SavedCityName = saved.Location };
             }
             return await weather.GetAsync(city, token);
         }

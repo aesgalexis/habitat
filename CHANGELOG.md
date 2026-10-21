@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.14.0 — 2026-10-21
+
+- Esta publicación reúne también la interfaz en inglés/español, los fondos personalizables y las cinco ilustraciones incorporados desde la última versión publicada, 0.11.0.
+- Corregido el cierre al minimizar/restaurar: Windows puede devolver un margen negativo para los botones de ventana; se normaliza antes de ajustar el título y se agrupan los cambios fuera de la notificación nativa. Se evitan también las actualizaciones repetidas del mismo título durante el reposo.
+- Widget Mercados debajo de Tareas: favoritos, cotización y variación diaria, selección fija o rotación y panel con gráfica mensual y titulares enlazados a su fuente.
+- Preferencias de Mercados en inglés y español; actualización periódica, conservación del último dato ante errores y pregunta preparada en el editor sin sustituir el borrador ni enviarlo.
+- Pruebas con datos sintéticos y almacenamiento aislado para cálculos, persistencia, fallos de red, cancelación y controles WinUI.
+
+## 0.13.1 — 2026-10-20
+
+- Corregido el menú junto a minimizar: zona interactiva nativa ajustada al tamaño y escala de la ventana, y foco conservado mientras está abierto. Pruebas de apertura de Preferencias y retorno al editor en inglés y español.
+- Cinco fondos ilustrados incluidos: Grafito (paisaje a lápiz), Dunas, Marea, Olivo y Órbita.
+- Selección localizada, encuadre y atenuación para las ilustraciones, disponibles sin conexión. Se mantiene el fondo predeterminado transparente Híbrido al 15 %.
+
+## 0.13.0 — 2026-10-20
+
+- Fondos globales desde Preferencias → Apariencia: tres fondos de color, biblioteca de JPG/PNG propios, vista previa, encuadre y atenuación.
+- Importación local con copia independiente, orientación EXIF y tamaño limitado. Híbrido adapta el contraste a la imagen elegida.
+- El valor inicial sigue siendo el fondo transparente Híbrido al 15 %. Un botón restaura ese aspecto y conserva las imágenes guardadas.
+- Comprobaciones de persistencia, errores de importación, recuperación y controles en inglés/español con almacenamiento aislado.
+
+## 0.12.0 — 2026-10-20
+
+- Al perder el foco, HABITAT deja pasar clics y arrastres al escritorio y a las ventanas inferiores. La barra de tareas, Alt+Tab y Ctrl+H permiten recuperar la interacción; los menús y diálogos propios siguen funcionando.
+- Interfaz de escritorio en inglés y español, con selector en Preferences → Appearance. El idioma se guarda y se aplica al cerrar el diálogo; los perfiles anteriores conservan inglés.
+- Catálogos compartidos para textos visibles, accesibilidad, carga, errores y recuperación. Las etiquetas traducidas se separan de los IDs de categorías, destinos y protocolos.
+- El cambio conserva borradores, tareas, resultados y traducciones pendientes. Fechas y cantidades visibles siguen la cultura de interfaz sin modificar formatos de intercambio ni el contenido del usuario.
+- Comprobaciones automáticas de catálogos, persistencia y cambio de idioma con controles WinUI y almacenamiento aislado.
+
 ## 0.11.0 — 2026-10-20
 
 - Aviso automático de nuevas versiones: consulta GitHub al abrir HABITAT y cada seis horas mientras está abierto. El icono **Update HABITAT**, al final del sidebar, muestra la versión disponible y abre su página oficial para descargar el EXE o ZIP correspondiente. La descarga y la instalación siguen siendo manuales.

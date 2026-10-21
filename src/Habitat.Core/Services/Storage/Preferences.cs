@@ -11,6 +11,9 @@ internal sealed record Preferences(string Theme, double Opacity)
     public string[]? EnabledDestinations { get; init; }
     public WindowsAppDestination[] WindowsApps { get; init; } = [];
     public string? DefaultDestination { get; init; }
+    public string InterfaceLanguage { get; init; } = "en";
+    public WallpaperSettings Wallpaper { get; init; } = new();
+    public MarketsSettings Markets { get; init; } = new();
     public bool TextOnly { get; init; } = true;
     public bool GlobalHotkeyEnabled { get; init; } = true;
     public bool SetupGuideSeen { get; init; }
@@ -35,6 +38,9 @@ internal sealed record Preferences(string Theme, double Opacity)
                 var catalog = new DestinationCatalog(saved.EnabledDestinations, saved.WindowsApps);
                 return saved with
                 {
+                    InterfaceLanguage = UiText.NormalizeLanguage(saved.InterfaceLanguage),
+                    Wallpaper = (saved.Wallpaper ?? new()).Normalize(),
+                    Markets = (saved.Markets ?? new()).Normalize(),
                     Opacity = Math.Clamp(saved.Opacity, 0, 100), Destination = ComposerDestinations.Normalize(saved.Destination),
                     EnabledDestinations = catalog.Enabled.ToArray(), WindowsApps = catalog.WindowsApps.ToArray()
                 };

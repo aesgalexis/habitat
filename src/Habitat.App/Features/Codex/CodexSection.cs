@@ -14,7 +14,7 @@ internal sealed class CodexSection : IDestinationSection
     private readonly TextBlock _status = new() { FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap };
     private readonly StackPanel _messages = new() { Spacing = 22 };
     private readonly ScrollViewer _scroll;
-    private readonly Button _stop = new() { Content = "Stop waiting", Visibility = Visibility.Collapsed };
+    private readonly Button _stop = UiLanguage.Watch(new Button() { Content = UiText.Get("StopWaiting"), Visibility = Visibility.Collapsed }, ("Content", () => (object?)(UiText.Get("StopWaiting"))));
     private readonly Func<ICodexChatService> _service;
     private readonly Action<Exception> _report;
     private readonly AsyncOperationScope _operations = new();
@@ -46,8 +46,8 @@ internal sealed class CodexSection : IDestinationSection
         header.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         header.Children.Add(_title);
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        var open = new Button { Content = "Open in Codex" };
-        var reload = new Button { Content = "Reload chat" };
+        var open = UiLanguage.Watch(new Button { Content = UiText.Get("OpenInCodex") }, ("Content", () => (object?)(UiText.Get("OpenInCodex"))));
+        var reload = UiLanguage.Watch(new Button { Content = UiText.Get("ReloadChat") }, ("Content", () => (object?)(UiText.Get("ReloadChat"))));
         open.Click += async (_, _) => await OpenAsync();
         reload.Click += async (_, _) => await RefreshAsync();
         _stop.Click += (_, _) => { _session.StopWaiting(); UpdateTimer(); Render(); };
@@ -57,9 +57,9 @@ internal sealed class CodexSection : IDestinationSection
         _scroll = new ScrollViewer { Content = _messages, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Padding = new Thickness(0, 8, 12, 8) };
         Grid.SetRow(_scroll, 2); _view.Children.Add(_scroll);
-        AutomationProperties.SetName(_title, "Linked Codex chat");
-        AutomationProperties.SetName(_messages, "Codex conversation");
-        AutomationProperties.SetHelpText(_stop, "Stop waiting in HABITAT. This does not interrupt Codex.");
+        UiLanguage.SetName(_title, () => UiText.Get("LinkedCodexChat"));
+        UiLanguage.SetName(_messages, () => UiText.Get("CodexConversation"));
+        UiLanguage.SetHelpText(_stop, () => UiText.Get("StopWaitingInHABITATThisDoesNotInterrupt"));
         AutomationProperties.SetLiveSetting(_status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         _timer = DispatcherQueue.GetForCurrentThread().CreateTimer();
         _timer.Interval = TimeSpan.FromSeconds(1.5);
@@ -117,11 +117,11 @@ internal sealed class CodexSection : IDestinationSection
         {
             if (_disposed) return;
             _report(exception);
-            if (pending is not null) _session.SetIssue(pending, "Could not read the Codex response. Retrying…");
+            if (pending is not null) _session.SetIssue(pending, UiText.Get("CouldNotReadTheCodexResponseRetrying"));
             else
             {
                 _session.Select(null); _canStartNew = false;
-                _session.SetIssue(null, exception is InvalidDataException ? exception.Message : "Could not connect to Codex. Open its chat and reload.");
+                _session.SetIssue(null, exception is InvalidDataException ? exception.Message : UiText.Get("CouldNotConnectToCodexOpenItsChat"));
             }
         }
         finally
@@ -145,7 +145,7 @@ internal sealed class CodexSection : IDestinationSection
         {
             if (_disposed) return;
             _report(exception);
-            _session.SetIssue(target, "Could not read the Codex response. Retrying…");
+            _session.SetIssue(target, UiText.Get("CouldNotReadTheCodexResponseRetrying"));
         }
     }
 
@@ -178,8 +178,8 @@ internal sealed class CodexSection : IDestinationSection
             }
             else if (submission.Result != CodexDeliveryResult.Cancelled)
                 _session.SetIssue(target, submission.Result == CodexDeliveryResult.Unconfirmed
-                    ? "Codex submission could not be confirmed. Check Codex before sending again. Your instruction was kept."
-                    : "Codex is not ready, its chat changed, or its editor has another draft. Your instruction was kept. Reload chat and try again.");
+                    ? UiText.Get("CodexSubmissionCouldNotBeConfirmedCheckCodex")
+                    : UiText.Get("CodexIsNotReadyItsChatChangedOr"));
             return submission;
         }
         finally
@@ -209,14 +209,14 @@ internal sealed class CodexSection : IDestinationSection
         try
         {
             if (!await _service().OpenChatAsync(Target, _operations.Token) && !_disposed)
-                _session.SetIssue(Target, "Could not open Codex. Try again.");
+                _session.SetIssue(Target, UiText.Get("CouldNotOpenCodexTryAgain"));
         }
         catch (OperationCanceledException) when (_disposed) { }
         catch (Exception exception)
         {
             if (_disposed) return;
             _report(exception);
-            _session.SetIssue(Target, "Could not open Codex. Try again.");
+            _session.SetIssue(Target, UiText.Get("CouldNotOpenCodexTryAgain"));
         }
         if (!_disposed) Render();
     }
@@ -225,10 +225,10 @@ internal sealed class CodexSection : IDestinationSection
     {
         var messages = Messages;
         _title.Text = Target is { } target ? "Codex · " + target.Title : "Codex";
-        _status.Text = IsSubmitting ? "Sending to Codex…" : _session.Issue.Length > 0 ? _session.Issue :
-            _session.IsWaiting ? _session.PendingTarget?.Id == Target?.Id ? "Codex is responding…" : "Waiting for Codex in another chat…" :
-            _session.Current?.IsRunning is true ? "Codex is working. Open in Codex if it needs your input." :
-            Target is null ? "" : "Following a Codex chat started from HABITAT.";
+        _status.Text = UiLanguage.Value(_status, "Text", () => IsSubmitting ? UiText.Get("SendingToCodex") : _session.Issue.Length > 0 ? _session.Issue :
+            _session.IsWaiting ? _session.PendingTarget?.Id == Target?.Id ? UiText.Get("CodexIsResponding") : UiText.Get("WaitingForCodexInAnotherChat") :
+            _session.Current?.IsRunning is true ? UiText.Get("CodexIsWorkingOpenInCodexIfIt") :
+            Target is null ? "" : UiText.Get("FollowingACodexChatStartedFromHABITAT"));
         _stop.Visibility = _session.IsWaiting ? Visibility.Visible : Visibility.Collapsed;
         var rendered = System.Text.Json.JsonSerializer.Serialize(new { Id = Target?.Id, Messages = messages });
         if (rendered != _rendered)
@@ -239,7 +239,7 @@ internal sealed class CodexSection : IDestinationSection
             foreach (var message in messages)
             {
                 var group = new StackPanel { Spacing = 5 };
-                group.Children.Add(new TextBlock { Text = message.Author, FontSize = 11, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Opacity = 0.75 });
+                group.Children.Add(UiLanguage.Watch(new TextBlock { Text = message.Author == "YOU" ? UiText.Get("YOU") : message.Author, FontSize = 11, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Opacity = 0.75 }, ("Text", () => (object?)(message.Author == "YOU" ? UiText.Get("YOU") : message.Author))));
                 group.Children.Add(new TextBlock { Text = message.Text, FontSize = 15, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true });
                 _messages.Children.Add(group);
             }
@@ -248,6 +248,8 @@ internal sealed class CodexSection : IDestinationSection
         }
         StateChanged?.Invoke();
     }
+
+    internal void RefreshLanguage() { _rendered = ""; Render(); }
 
     public void Dispose()
     {

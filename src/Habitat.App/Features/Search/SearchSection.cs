@@ -13,11 +13,11 @@ internal sealed class SearchSection : IDestinationSection
     private readonly TextBlock _query = new() { FontSize = 20, TextWrapping = TextWrapping.Wrap, MaxLines = 2, TextTrimming = TextTrimming.CharacterEllipsis };
     private readonly TextBlock _status = new() { FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap };
     private readonly StackPanel _results = new() { Spacing = 22 };
-    private readonly Button _retry = new() { Content = "Retry", Visibility = Visibility.Collapsed };
-    private readonly Button _cancel = new() { Content = "Cancel", Visibility = Visibility.Collapsed };
-    private readonly Button _previous = new() { Content = "Previous page", IsEnabled = false };
-    private readonly Button _next = new() { Content = "Next page", IsEnabled = false };
-    private readonly Button _clear = new() { Content = "Clear search", VerticalAlignment = VerticalAlignment.Top };
+    private readonly Button _retry = UiLanguage.Watch(new Button() { Content = UiText.Get("Retry"), Visibility = Visibility.Collapsed }, ("Content", () => (object?)(UiText.Get("Retry"))));
+    private readonly Button _cancel = UiLanguage.Watch(new Button() { Content = UiText.Get("Cancel"), Visibility = Visibility.Collapsed }, ("Content", () => (object?)(UiText.Get("Cancel"))));
+    private readonly Button _previous = UiLanguage.Watch(new Button() { Content = UiText.Get("PreviousPage"), IsEnabled = false }, ("Content", () => (object?)(UiText.Get("PreviousPage"))));
+    private readonly Button _next = UiLanguage.Watch(new Button() { Content = UiText.Get("NextPage"), IsEnabled = false }, ("Content", () => (object?)(UiText.Get("NextPage"))));
+    private readonly Button _clear = UiLanguage.Watch(new Button() { Content = UiText.Get("ClearSearch"), VerticalAlignment = VerticalAlignment.Top }, ("Content", () => (object?)(UiText.Get("ClearSearch"))));
     private readonly Func<string, int, CancellationToken, Task<SearchPage>> _search;
     private readonly Func<Uri, Task<bool>> _open;
     private readonly Action<Exception> _reportError;
@@ -64,7 +64,7 @@ internal sealed class SearchSection : IDestinationSection
         header.Children.Add(_query);
         var searchActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8,
             HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top };
-        var browser = new Button { Content = "Open in browser" };
+        var browser = UiLanguage.Watch(new Button { Content = UiText.Get("OpenInBrowser") }, ("Content", () => (object?)(UiText.Get("OpenInBrowser"))));
         browser.Click += async (_, _) => await OpenSearchAsync();
         searchActions.Children.Add(browser);
         searchActions.Children.Add(_clear);
@@ -81,8 +81,8 @@ internal sealed class SearchSection : IDestinationSection
         };
         _view.Children.Add(header);
         _clear.Click += (_, _) => RequestClear();
-        AutomationProperties.SetName(_clear, "Clear search");
-        ToolTipService.SetToolTip(_clear, "Clear search and close its browser tab");
+        UiLanguage.SetName(_clear, () => UiText.Get("ClearSearch"));
+        UiLanguage.SetToolTip(_clear, () => UiText.Get("ClearSearchAndCloseItsBrowserTab"));
         var status = new Grid { ColumnSpacing = 12 };
         status.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         status.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -139,7 +139,7 @@ internal sealed class SearchSection : IDestinationSection
         _retry.Visibility = Visibility.Collapsed;
         _cancel.Visibility = Visibility.Visible;
         UpdateNavigation();
-        _status.Text = $"Searching {Provider}…";
+        _status.Text = UiLanguage.Value(_status, "Text", () => UiText.Format("Searching", Provider));
         StateChanged?.Invoke();
         try
         {
@@ -153,15 +153,15 @@ internal sealed class SearchSection : IDestinationSection
             if (pageIndex >= 0) _pages.RemoveRange(pageIndex, _pages.Count - pageIndex);
             _pages.Add(start);
             foreach (var item in page.Results) AddResult(item);
-            _status.Text = page.Results.Count == 0 ? "No results found. Try another search."
-                : page.Results.Count == 1 ? "1 result on this page" : $"{page.Results.Count} results on this page";
+            _status.Text = UiLanguage.Value(_status, "Text", () => page.Results.Count == 0 ? UiText.Get("NoResultsFoundTryAnotherSearch")
+                : page.Results.Count == 1 ? UiText.Get("OneSearchResult") : UiText.Format("ResultsOnThisPage", page.Results.Count));
             _scroll.ChangeView(null, 0, null, true);
         }
         catch (OperationCanceledException) when (request.IsCancellationRequested)
         {
             if (!_disposed && revision == _revision)
             {
-                _status.Text = _userCanceled ? "Search canceled." : "Search timed out. Try again.";
+                _status.Text = UiLanguage.Value(_status, "Text", () => _userCanceled ? UiText.Get("SearchCanceled") : UiText.Get("SearchTimedOutTryAgain"));
                 _retry.Visibility = Visibility.Visible;
             }
         }
@@ -193,14 +193,14 @@ internal sealed class SearchSection : IDestinationSection
     {
         var row = new StackPanel { Spacing = 4 };
         var isChannel = Destination == ComposerDestination.YouTube && BrowserSearchService.IsChannelLink(result.Url);
-        if (isChannel) row.Children.Add(new TextBlock { Text = "Channel", FontSize = 12, Opacity = 0.8 });
+        if (isChannel) row.Children.Add(UiLanguage.Watch(new TextBlock { Text = UiText.Get("Channel"), FontSize = 12, Opacity = 0.8 }, ("Text", () => (object?)(UiText.Get("Channel")))));
         var address = new TextBlock { Text = result.Url, FontSize = 12, Opacity = 0.7,
             TextTrimming = TextTrimming.CharacterEllipsis, IsTextSelectionEnabled = true };
         row.Children.Add(address);
         var title = new HyperlinkButton { Content = new TextBlock { Text = result.Title, TextWrapping = TextWrapping.Wrap, FontSize = 18 },
             Padding = new Thickness(0), HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left };
         AutomationProperties.SetName(title, result.Title);
-        AutomationProperties.SetHelpText(title, (isChannel ? "Open channel in your browser. " : "Open result in your browser. ") + result.Url);
+        UiLanguage.SetHelpText(title, () => (isChannel ? UiText.Get("OpenChannelInYourBrowser") : UiText.Get("OpenResultInYourBrowser")) + result.Url);
         title.Click += async (_, _) => await OpenResultAsync(result);
         row.Children.Add(title);
         if (result.Snippet.Length > 0) row.Children.Add(new TextBlock { Text = result.Snippet, FontSize = 14,
@@ -237,8 +237,8 @@ internal sealed class SearchSection : IDestinationSection
             VerticalAlignment = VerticalAlignment.Top, HorizontalAlignment = HorizontalAlignment.Left,
             HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch
         };
-        AutomationProperties.SetName(button, "Open video: " + result.Title);
-        AutomationProperties.SetHelpText(button, "Open video in your browser.");
+        UiLanguage.SetName(button, () => UiText.Get("OpenVideo") + result.Title);
+        UiLanguage.SetHelpText(button, () => UiText.Get("OpenVideoInYourBrowser"));
         AutomationProperties.SetAccessibilityView(image, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
         AutomationProperties.SetAccessibilityView(placeholder, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
         button.Click += async (_, _) => await OpenResultAsync(result);
@@ -299,13 +299,13 @@ internal sealed class SearchSection : IDestinationSection
         if (_disposed) return;
         try
         {
-            if (!await _open(uri) && !_disposed) _status.Text = "Could not open the browser. Try again.";
+            if (!await _open(uri) && !_disposed) _status.Text = UiLanguage.Value(_status, "Text", () => UiText.Get("CouldNotOpenTheBrowserTryAgain"));
         }
         catch (Exception exception)
         {
             if (_disposed) return;
             _reportError(exception);
-            _status.Text = "Could not open the browser. Try again.";
+            _status.Text = UiLanguage.Value(_status, "Text", () => UiText.Get("CouldNotOpenTheBrowserTryAgain"));
         }
     }
 

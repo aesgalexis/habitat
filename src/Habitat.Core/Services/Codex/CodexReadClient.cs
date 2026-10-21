@@ -27,7 +27,7 @@ internal sealed class CodexReadClient(string executable) : ICodexHistoryReader, 
         {
             var result = await RequestAsync("thread/list", new { limit = 100, searchTerm = title, archived = false, useStateDbOnly = true }, token);
             if (result.TryGetProperty("nextCursor", out var cursor) && cursor.ValueKind == JsonValueKind.String)
-                throw new InvalidDataException("Too many Codex chats match this title. Rename the visible chat to link it.");
+                throw new InvalidDataException(UiText.Get("TooManyCodexChatsMatchThisTitleRename"));
             foreach (var thread in result.GetProperty("data").EnumerateArray())
             {
                 if (String(thread, "name") != title) continue;
@@ -37,7 +37,7 @@ internal sealed class CodexReadClient(string executable) : ICodexHistoryReader, 
                     created.TryGetInt64(out var timestamp) ? timestamp : null);
             }
         }
-        if (matches.Count > 1) throw new InvalidDataException("More than one Codex chat has this title. Rename the chat in Codex to link it.");
+        if (matches.Count > 1) throw new InvalidDataException(UiText.Get("MoreThanOneCodexChatHasThisTitle"));
         return matches.Values.SingleOrDefault();
     }
 
@@ -95,7 +95,7 @@ internal sealed class CodexReadClient(string executable) : ICodexHistoryReader, 
                 WorkingDirectory = Path.GetDirectoryName(executable)!
             };
             info.ArgumentList.Add("app-server"); info.ArgumentList.Add("--stdio");
-            _process = Process.Start(info) ?? throw new IOException("Could not start the Codex reader.");
+            _process = Process.Start(info) ?? throw new IOException(UiText.Get("CouldNotStartTheCodexReader"));
             _readerFailed = false;
             _read = ReadLoopAsync(_process, _lifetime.Token);
             _diagnostics = DrainDiagnosticsAsync(_process, _lifetime.Token);
@@ -137,7 +137,7 @@ internal sealed class CodexReadClient(string executable) : ICodexHistoryReader, 
         await _write.WaitAsync(token);
         try
         {
-            if (_process is null || _process.HasExited) throw new IOException("The Codex reader disconnected.");
+            if (_process is null || _process.HasExited) throw new IOException(UiText.Get("TheCodexReaderDisconnected"));
             await _process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(message).AsMemory(), token);
             await _process.StandardInput.FlushAsync(token);
         }
@@ -157,19 +157,19 @@ internal sealed class CodexReadClient(string executable) : ICodexHistoryReader, 
                     throw new InvalidDataException("Invalid Codex reader frame.");
                 if (!root.TryGetProperty("id", out var id) || id.ValueKind != JsonValueKind.Number ||
                     !id.TryGetInt64(out var number) || !_pending.TryGetValue(number, out var request)) continue;
-                if (root.TryGetProperty("error", out _)) request.TrySetException(new IOException("Codex could not read this chat. Open it in Codex and reload."));
+                if (root.TryGetProperty("error", out _)) request.TrySetException(new IOException(UiText.Get("CodexCouldNotReadThisChatOpenIt")));
                 else if (root.TryGetProperty("result", out var result)) request.TrySetResult(result.Clone());
             }
         }
         catch (Exception exception) when (exception is IOException or OperationCanceledException or JsonException or InvalidDataException)
         {
             _readerFailed = true;
-            foreach (var pending in _pending.Values) pending.TrySetException(new IOException("The Codex reader disconnected.", exception));
+            foreach (var pending in _pending.Values) pending.TrySetException(new IOException(UiText.Get("TheCodexReaderDisconnected"), exception));
         }
         finally
         {
             _readerFailed = true;
-            foreach (var pending in _pending.Values) pending.TrySetException(new IOException("The Codex reader disconnected."));
+            foreach (var pending in _pending.Values) pending.TrySetException(new IOException(UiText.Get("TheCodexReaderDisconnected")));
             try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
             catch (InvalidOperationException) { }
         }

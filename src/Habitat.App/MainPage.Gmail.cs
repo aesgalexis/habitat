@@ -36,18 +36,18 @@ public sealed partial class MainPage
     private readonly Flyout GmailFlyout = new() { Placement = FlyoutPlacementMode.RightEdgeAlignedTop };
     private readonly StackPanel GmailContent = new() { Spacing = 14 };
     private readonly TextBlock GmailStatus = new() { FontSize = 12, TextWrapping = TextWrapping.Wrap, Opacity = 0.8 };
-    private readonly Button GmailRefresh = new() { Content = "Refresh" };
-    private readonly Button GmailMore = new() { Content = "Load more", Visibility = Visibility.Collapsed };
-    private readonly Button GmailSignIn = new() { Content = "Sign in with Google" };
-    private readonly Button GmailDisconnect = new() { Content = "Disconnect" };
-    private readonly Button GmailCancel = new() { Content = "Cancel sign-in", Visibility = Visibility.Collapsed };
-    private readonly ComboBox GmailFilter = new() { ItemsSource = new[] { "Inbox unread", "All unread" } };
+    private readonly Button GmailRefresh = UiLanguage.Watch(new Button() { Content = UiText.Get("Refresh") }, ("Content", () => (object?)(UiText.Get("Refresh"))));
+    private readonly Button GmailMore = UiLanguage.Watch(new Button() { Content = UiText.Get("LoadMore"), Visibility = Visibility.Collapsed }, ("Content", () => (object?)(UiText.Get("LoadMore"))));
+    private readonly Button GmailSignIn = UiLanguage.Watch(new Button() { Content = UiText.Get("SignInWithGoogle") }, ("Content", () => (object?)(UiText.Get("SignInWithGoogle"))));
+    private readonly Button GmailDisconnect = UiLanguage.Watch(new Button() { Content = UiText.Get("Disconnect") }, ("Content", () => (object?)(UiText.Get("Disconnect"))));
+    private readonly Button GmailCancel = UiLanguage.Watch(new Button() { Content = UiText.Get("CancelSignin"), Visibility = Visibility.Collapsed }, ("Content", () => (object?)(UiText.Get("CancelSignin"))));
+    private readonly ComboBox GmailFilter = new() { ItemsSource = new[] { UiText.Get("InboxUnread"), UiText.Get("AllUnread") } };
     private bool _gmailBusy => _gmailSession.IsBusy;
     private bool _gmailPanelOpen;
     private bool _gmailSettingsOpen;
     private DateTimeOffset _nextGmailRefresh => _gmailSession.NextRefresh;
     private DateTimeOffset _nextGmailRestore = DateTimeOffset.MinValue;
-    private string? _gmailError { get => _gmailSession.Error; set => _gmailSession.Error = value; }
+    private string? _gmailError { get => _gmailSession.Error is { } error ? UiText.LocalizeMessage(error) : null; set => _gmailSession.Error = value; }
     private string? _gmailFailureKind;
     private string? _lastGmailRecordedState;
 
@@ -93,7 +93,7 @@ public sealed partial class MainPage
             try
             {
                 if (!await _launchBrowser(GmailWebLink.ForMessage(email, message)))
-                    throw new InvalidOperationException("Windows could not open Gmail in your browser.");
+                    throw new InvalidOperationException(UiText.Get("WindowsCouldNotOpenGmailInYourBrowser"));
             }
             catch (Exception exception) { _gmailError = GmailError(exception); RenderGmail(); }
         };
@@ -113,7 +113,7 @@ public sealed partial class MainPage
         GmailButton.HorizontalContentAlignment = HorizontalAlignment.Center;
         GmailButton.VerticalContentAlignment = VerticalAlignment.Center;
         GmailButton.BorderThickness = new Thickness(0);
-        AutomationProperties.SetName(GmailButton, "Gmail unread emails");
+        UiLanguage.SetName(GmailButton, () => UiText.Get("GmailUnreadEmails"));
         GmailButton.Flyout = GmailFlyout;
         surface.Children.Add(indicator);
         indicator.PointerEntered += (_, _) => _gmailWidgetHovered = true;
@@ -127,7 +127,7 @@ public sealed partial class MainPage
 
         var title = new TextBlock { Text = "Gmail", FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        var setup = new Button { Content = "Setup…" };
+        var setup = UiLanguage.Watch(new Button { Content = UiText.Get("Setup") }, ("Content", () => (object?)(UiText.Get("Setup"))));
         setup.Click += async (_, _) => await ShowGmailSetupAsync();
         GmailRefresh.Click += async (_, _) => await RefreshGmailAsync();
         GmailSignIn.Click += async (_, _) =>
@@ -155,11 +155,11 @@ public sealed partial class MainPage
         var scroll = new ScrollViewer { Content = GmailContent, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MaxHeight = 420 };
         panel.Children.Add(scroll);
         panel.Children.Add(GmailMore);
-        panel.Children.Add(new TextBlock
+        panel.Children.Add(UiLanguage.Watch(new TextBlock
         {
-            Text = "Read-only · opening a message does not mark it as read.",
+            Text = UiText.Get("ReadonlyOpeningAMessageDoesNotMarkIt"),
             FontSize = 11, TextWrapping = TextWrapping.Wrap, Opacity = 0.7
-        });
+        }, ("Text", () => (object?)(UiText.Get("ReadonlyOpeningAMessageDoesNotMarkIt")))));
         GmailFlyout.Content = panel;
         GmailFilter.SelectedIndex = _preferences.GmailInboxOnly ? 0 : 1;
         GmailFilter.SelectionChanged += async (_, _) =>
@@ -272,18 +272,18 @@ public sealed partial class MainPage
             (_gmailInbox.CountIsEstimate ? "≈" : "") + _gmailInbox.UnreadCount;
         GmailBadge.Visibility = signedIn && _sidebarExpanded ? Visibility.Visible : Visibility.Collapsed;
         RenderGmailWidget();
-        GmailStatus.Text = _gmailError ?? (_gmailSignInCancellation is not null ? "Finish sign-in in your browser. HABITAT never asks for your Google password." :
-            _gmailBusy ? "Loading…" : signedIn ? $"{_gmailAuth!.Email}\n" +
-                (_gmailInbox is null ? "Ready to refresh" : $"{(_gmailInbox.CountIsEstimate ? "Approximately " : "")}{_gmailInbox.UnreadCount} unread · updated {_gmailInbox.UpdatedAt.ToLocalTime():HH:mm}") :
-            _gmailAuth?.IsConfigured == true ? "Not connected. Sign in with your Google account." :
-            "Google setup pending. The Gmail reader is ready; add a Desktop app OAuth client when you are ready to connect.");
+        GmailStatus.Text = UiLanguage.Value(GmailStatus, "Text", () => _gmailError ?? (_gmailSignInCancellation is not null ? UiText.Get("FinishSigninInYourBrowserHABITATNeverAsks") :
+            _gmailBusy ? UiText.Get("Loading") : signedIn ? $"{_gmailAuth!.Email}\n" +
+                (_gmailInbox is null ? UiText.Get("ReadyToRefresh") : UiText.Format(_gmailInbox.CountIsEstimate ? "ApproximateUnreadUpdated" : "UnreadUpdated", _gmailInbox.UnreadCount, _gmailInbox.UpdatedAt.ToLocalTime())) :
+            _gmailAuth?.IsConfigured == true ? UiText.Get("NotConnectedSignInWithYourGoogleAccount") :
+            UiText.Get("GoogleSetupPendingTheGmailReaderIsReady")));
         GmailRefresh.IsEnabled = signedIn && !_gmailBusy;
         GmailDisconnect.Visibility = signedIn ? Visibility.Visible : Visibility.Collapsed;
         GmailDisconnect.IsEnabled = !_gmailBusy;
         GmailFilter.Visibility = signedIn ? Visibility.Visible : Visibility.Collapsed;
         GmailFilter.IsEnabled = !_gmailBusy;
         GmailSignIn.Visibility = !signedIn && _gmailSignInCancellation is null ? Visibility.Visible : Visibility.Collapsed;
-        GmailSignIn.Content = _gmailAuth is null ? "Retry saved account" : "Sign in with Google";
+        GmailSignIn.Content = UiLanguage.Value(GmailSignIn, "Content", () => _gmailAuth is null ? UiText.Get("RetrySavedAccount") : UiText.Get("SignInWithGoogle"));
         GmailSignIn.IsEnabled = !_gmailBusy;
         GmailCancel.Visibility = _gmailSignInCancellation is null ? Visibility.Collapsed : Visibility.Visible;
         GmailMore.Visibility = signedIn && _gmailSelected is null && _gmailInbox?.NextPageToken is not null ? Visibility.Visible : Visibility.Collapsed;
@@ -292,17 +292,17 @@ public sealed partial class MainPage
         if (!signedIn) { PaintGmail(); return; }
         if (_gmailSelected is GmailMessage selected)
         {
-            var back = new Button { Content = "← Unread emails", IsEnabled = !_gmailBusy };
+            var back = UiLanguage.Watch(new Button { Content = UiText.Get("UnreadEmails"), IsEnabled = !_gmailBusy }, ("Content", () => (object?)(UiText.Get("UnreadEmails"))));
             back.Click += (_, _) => { _gmailSelected = null; RenderGmail(); };
             GmailContent.Children.Add(back);
             GmailContent.Children.Add(MailText(selected.Subject, 17, bold: true));
-            GmailContent.Children.Add(MailText(selected.Sender + "\n" + selected.Date.ToLocalTime().ToString("g"), 12));
-            GmailContent.Children.Add(MailText(selected.Body ?? (_gmailBusy ? "Loading message…" : "Message unavailable. Use Refresh and try again."), 14));
+            GmailContent.Children.Add(MailText(selected.Sender + "\n" + selected.Date.ToLocalTime().ToString("g", UiText.Culture), 12));
+            GmailContent.Children.Add(MailText(selected.Body ?? (_gmailBusy ? UiText.Get("LoadingMessage") : UiText.Get("MessageUnavailableUseRefreshAndTryAgain")), 14));
         }
         else
         {
             if (_gmailMessages.Count == 0 && !_gmailBusy && _gmailInbox is not null)
-                GmailContent.Children.Add(MailText("No unread emails.", 14));
+                GmailContent.Children.Add(MailText(UiText.Get("NoUnreadEmailsMessage"), 14));
             foreach (var message in _gmailMessages)
             {
                 var content = new StackPanel { Spacing = 4 };
@@ -310,7 +310,7 @@ public sealed partial class MainPage
                 content.Children.Add(MailText(message.Subject, 14, bold: true, selectable: false));
                 content.Children.Add(new TextBlock { Text = message.Preview, FontSize = 12, TextWrapping = TextWrapping.Wrap,
                     MaxLines = 2, TextTrimming = TextTrimming.CharacterEllipsis, Opacity = 0.7 });
-                content.Children.Add(new TextBlock { Text = message.Date.ToLocalTime().ToString("g"), FontSize = 11, Opacity = 0.7 });
+                content.Children.Add(new TextBlock { Text = message.Date.ToLocalTime().ToString("g", UiText.Culture), FontSize = 11, Opacity = 0.7 });
                 var row = new Button { Content = content, HorizontalAlignment = HorizontalAlignment.Stretch,
                     HorizontalContentAlignment = HorizontalAlignment.Stretch, Padding = new Thickness(6, 8, 6, 8), IsEnabled = !_gmailBusy };
                 row.Click += async (_, _) => await ReadGmailMessageAsync(message);
@@ -340,35 +340,35 @@ public sealed partial class MainPage
         {
             try
             {
-                var connectedDialog = new ContentDialog
+                var connectedDialog = UiLanguage.Watch(new ContentDialog
                 {
-                    XamlRoot = XamlRoot, Title = "Gmail connected", CloseButtonText = "Close",
-                    Content = MailText($"{_gmailAuth.Email}\n\nYour saved session is restored automatically when HABITAT opens. No JSON import or sign-in is needed.\n\nTo change the account or OAuth client, use Disconnect in the Gmail reader first.", 14)
-                };
+                    XamlRoot = XamlRoot, Title = UiText.Get("GmailConnected"), CloseButtonText = UiText.Get("Close"),
+                    Content = MailText(UiText.Format("GoogleSessionRestored", _gmailAuth.Email), 14)
+                }, ("Title", () => (object?)(UiText.Get("GmailConnected"))), ("CloseButtonText", () => (object?)(UiText.Get("Close"))));
                 StyleDialog(connectedDialog);
                 await ShowDialogAsync(connectedDialog);
             }
             finally { _gmailSettingsOpen = false; FocusComposer(); }
             return;
         }
-        var state = MailText(_gmailAuth?.IsConfigured == true ? "Desktop OAuth client configured. You can sign in." : "Import your Google Desktop app OAuth client to connect Gmail.", 14);
+        var state = MailText(_gmailAuth?.IsConfigured == true ? UiText.Get("DesktopOAuthClientConfiguredYouCanSignInMessage") : UiText.Get("ImportYourGoogleDesktopAppOAuthClientTo"), 14);
         var panel = new StackPanel { Spacing = 14, MaxWidth = 400 };
         panel.Children.Add(state);
-        panel.Children.Add(MailText("When ready: enable Gmail API in Google Cloud, configure the OAuth consent screen and add your account as a test user. Create an OAuth client of type Desktop app, download its JSON, then import it here.", 14));
-        panel.Children.Add(MailText("The reader requests read-only Gmail access. Saving drafts requires separate authorization from Draft email. Sign-in happens in Chrome. Credentials are encrypted for your Windows account, outside the project.", 12));
-        panel.Children.Add(MailText("Standard Gmail API use is free within Google's quotas. No paid service is needed. Keep your Google Cloud project without billing enabled.", 12));
-        var import = new Button { Content = "Import client JSON…", HorizontalAlignment = HorizontalAlignment.Left, IsEnabled = _gmailAuth is not null };
+        panel.Children.Add(MailText(UiText.Get("WhenReadyEnableGmailAPIInGoogleCloud"), 14));
+        panel.Children.Add(MailText(UiText.Get("TheReaderRequestsReadonlyGmailAccessSavingDrafts"), 12));
+        panel.Children.Add(MailText(UiText.Get("StandardGmailAPIUseIsFreeWithinGoogles"), 12));
+        var import = UiLanguage.Watch(new Button { Content = UiText.Get("ImportClientJSON"), HorizontalAlignment = HorizontalAlignment.Left, IsEnabled = _gmailAuth is not null }, ("Content", () => (object?)(UiText.Get("ImportClientJSON"))));
         panel.Children.Add(import);
-        var link = new HyperlinkButton { Content = "Google Cloud console",
-            HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(0) };
+        var link = UiLanguage.Watch(new HyperlinkButton { Content = UiText.Get("GoogleCloudConsole"),
+            HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(0) }, ("Content", () => (object?)(UiText.Get("GoogleCloudConsole"))));
         link.Click += async (_, _) => await RunOperationAsync(async () =>
         {
             if (!await _launchBrowser(new Uri("https://console.cloud.google.com/apis/credentials")))
-                SetStatus("Could not open Chrome. Check that Google Chrome is installed, then retry.", StatusTone.Warning);
+                SetStatus(UiText.Get("CouldNotOpenChromeCheckThatGoogleChromeMessage"), StatusTone.Warning);
         });
         panel.Children.Add(link);
-        var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Gmail setup", Content = panel,
-            CloseButtonText = "Not now", PrimaryButtonText = "Sign in with Google", IsPrimaryButtonEnabled = _gmailAuth?.IsConfigured == true };
+        var dialog = UiLanguage.Watch(new ContentDialog { XamlRoot = XamlRoot, Title = UiText.Get("GmailSetup"), Content = panel,
+            CloseButtonText = UiText.Get("NotNow"), PrimaryButtonText = UiText.Get("SignInWithGoogle"), IsPrimaryButtonEnabled = _gmailAuth?.IsConfigured == true }, ("Title", () => (object?)(UiText.Get("GmailSetup"))), ("CloseButtonText", () => (object?)(UiText.Get("NotNow"))), ("PrimaryButtonText", () => (object?)(UiText.Get("SignInWithGoogle"))));
         StyleDialog(dialog);
         import.Click += async (_, _) =>
         {
@@ -380,14 +380,14 @@ public sealed partial class MainPage
                 picker.FileTypeFilter.Add(".json");
                 var file = await picker.PickSingleFileAsync();
                 if (file is null) return;
-                if ((await file.GetBasicPropertiesAsync()).Size > 65536) throw new InvalidDataException("The Google client file is too large.");
+                if ((await file.GetBasicPropertiesAsync()).Size > 65536) throw new InvalidDataException(UiText.Get("TheGoogleClientFileIsTooLarge"));
                 var json = await Windows.Storage.FileIO.ReadTextAsync(file);
                 _gmailAuth!.Configure(GmailClientConfiguration.FromJson(json));
                 _gmailInbox = null;
                 _gmailMessages.Clear();
                 _gmailSelected = null;
                 _gmailError = null;
-                state.Text = "Desktop OAuth client configured. You can sign in with Google.";
+                state.Text = UiLanguage.Value(state, "Text", () => UiText.Get("DesktopOAuthClientConfiguredYouCanSignIn"));
                 dialog.IsPrimaryButtonEnabled = true;
                 RenderGmail();
             }
@@ -416,14 +416,14 @@ public sealed partial class MainPage
         _gmailWidgetMessage = message;
         GmailWidgetSender.Text = message is null ? "Gmail" : WidgetLine(message.Sender);
         GmailWidgetSubject.Text = message is not null ? WidgetLine(message.Subject) :
-            storageUnavailable ? "Saved account unavailable" : !signedIn ? "Connect your account" : _gmailError is not null ? "Refresh unavailable" :
-            _gmailInbox is null ? "Loading unread emails…" : "No unread emails";
+            storageUnavailable ? UiText.Get("SavedAccountUnavailable") : !signedIn ? UiText.Get("ConnectYourAccount") : _gmailError is not null ? UiText.Get("RefreshUnavailable") :
+            _gmailInbox is null ? UiText.Get("LoadingUnreadEmails") : UiText.Get("NoUnreadEmails");
         GmailWidgetPreview.Text = message is not null ? WidgetLine(message.Preview) :
-            storageUnavailable ? "Click to retry" : !signedIn ? "Click to sign in" : _gmailError is not null ? "Click for details" :
-            _gmailInbox is null ? "Restoring your saved session" : "Your inbox is up to date";
-        AutomationProperties.SetName(GmailButton, $"Open Gmail reader in HABITAT, {GmailBadge.Text} unread emails");
-        AutomationProperties.SetName(GmailMessageButton, message is null ? "Open Gmail reader in HABITAT" :
-            $"Open in Gmail. {GmailWidgetSender.Text}. {GmailWidgetSubject.Text}");
+            storageUnavailable ? UiText.Get("ClickToRetry") : !signedIn ? UiText.Get("ClickToSignIn") : _gmailError is not null ? UiText.Get("ClickForDetails") :
+            _gmailInbox is null ? UiText.Get("RestoringYourSavedSession") : UiText.Get("YourInboxIsUpToDate");
+        UiLanguage.SetName(GmailButton, () => UiText.Format("OpenGmailReaderInHABITATUnreadEmails", GmailBadge.Text));
+        UiLanguage.SetName(GmailMessageButton, () => message is null ? UiText.Get("OpenGmailReaderInHABITAT") :
+            UiText.Format("OpenInGmail", GmailWidgetSender.Text, GmailWidgetSubject.Text));
     }
 
     private static string WidgetLine(string value) => string.Join(" ", value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
@@ -492,11 +492,11 @@ public sealed partial class MainPage
         GmailSignInRequiredException => exception.Message,
         InvalidDataException => exception.Message,
         InvalidOperationException => exception.Message,
-        JsonException => "Could not read the Google client or Gmail response. Check the configuration and try again.",
-        HttpRequestException => "Gmail is unavailable. Check your connection; unread emails will refresh automatically.",
-        OperationCanceledException => "Gmail did not respond in time. Please try again.",
-        IOException or UnauthorizedAccessException or Win32Exception => "Windows could not securely save or read the Gmail account. No passwords are stored by HABITAT.",
-        _ => "Could not connect Gmail. Check the setup and try again."
+        JsonException => UiText.Get("CouldNotReadTheGoogleClientOrGmail"),
+        HttpRequestException => UiText.Get("GmailIsUnavailableCheckYourConnectionUnreadEmails"),
+        OperationCanceledException => UiText.Get("GmailDidNotRespondInTimePleaseTry"),
+        IOException or UnauthorizedAccessException or Win32Exception => UiText.Get("WindowsCouldNotSecurelySaveOrReadThe"),
+        _ => UiText.Get("CouldNotConnectGmailCheckTheSetupAnd")
         };
     }
 

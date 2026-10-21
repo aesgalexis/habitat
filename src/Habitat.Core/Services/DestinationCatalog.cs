@@ -19,9 +19,9 @@ internal sealed class DestinationCatalog
     public WindowsAppDestination? WindowsApp(string id) => WindowsApps.FirstOrDefault(app => app.Id == id);
     public string Label(string id) => WindowsApp(id)?.Name ?? ComposerDestinations.Label(id);
     public string Placeholder(string id) => WindowsApp(id) is { } app
-        ? app.PassText ? $"Enter text for {app.Name}…" : $"Open {app.Name}…"
-        : id.Length == 0 ? "Choose your destinations…" : ComposerDestinations.Placeholder(id);
-    public string ActionLabel(string id) => WindowsApp(id) is { } app ? $"Open {app.Name}" : "Add destination";
+        ? app.PassText ? UiText.Format("EnterTextFor", app.Name) : UiText.Format("OpenMessageAlt", app.Name)
+        : id.Length == 0 ? UiText.Get("ChooseYourDestinations") : ComposerDestinations.Placeholder(id);
+    public string ActionLabel(string id) => WindowsApp(id) is { } app ? UiText.Format("OpenMessage", app.Name) : UiText.Get("AddDestination");
     public string Select(string? preferred) => preferred is not null && Enabled.Contains(preferred)
         ? preferred : Enabled.FirstOrDefault() ?? "";
     public string Cycle(string current, int steps)

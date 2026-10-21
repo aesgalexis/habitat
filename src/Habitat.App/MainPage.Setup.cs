@@ -17,22 +17,22 @@ public sealed partial class MainPage
             Width = Math.Max(280, Math.Min(600, XamlRoot.Size.Width - 96)),
             MaxHeight = Math.Max(180, Math.Min(520, XamlRoot.Size.Height - 180))
         };
-        var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Set up HABITAT", Content = view,
-            CloseButtonText = "Done", DefaultButton = ContentDialogButton.Close };
+        var dialog = UiLanguage.Watch(new ContentDialog { XamlRoot = XamlRoot, Title = UiText.Get("SetUpHABITAT"), Content = view,
+            CloseButtonText = UiText.Get("Done"), DefaultButton = ContentDialogButton.Close }, ("Title", () => (object?)(UiText.Get("SetUpHABITAT"))), ("CloseButtonText", () => (object?)(UiText.Get("Done"))));
         dialog.Resources["ContentDialogMaxWidth"] = 700d;
         StyleDialog(dialog);
         async Task OpenLink(Uri uri)
         {
-            view.ActionStatus.Text = await _launchBrowser(uri) ? "Opened in Chrome." : "Could not open Chrome. Install Google Chrome, then try again.";
+            view.ActionStatus.Text = await _launchBrowser(uri) ? UiText.Get("OpenedInChrome") : UiText.Get("CouldNotOpenChromeInstallGoogleChromeThen");
         }
         void OpenFolder(string? path) => view.ActionStatus.Text = _services.OpenSetupFolder(path)
-            ? "Folder opened." : "Could not open the folder. Reinstall HABITAT or read the setup guide.";
+            ? UiText.Get("FolderOpened") : UiText.Get("CouldNotOpenTheFolderReinstallHABITATOr");
         view.InstallExtension.Click += async (_, _) => await RunOperationAsync(() => OpenLink(InstallationFiles.ChromeStore));
         view.OpenChat.Click += async (_, _) => await RunOperationAsync(() => OpenLink(new Uri("https://chatgpt.com/")));
         view.OpenExtensions.Click += async (_, _) => await RunOperationAsync(() => OpenLink(new Uri("chrome://extensions/")));
         view.ReadGuide.Click += async (_, _) => await RunOperationAsync(() => OpenLink(InstallationFiles.SetupGuide));
         view.GetChrome.Click += (_, _) => view.ActionStatus.Text = _services.OpenChromeDownload()
-            ? "Chrome download page opened. Install Chrome, then return here." : "Open www.google.com/chrome in your browser to install Chrome.";
+            ? UiText.Get("ChromeDownloadPageOpenedInstallChromeThenReturn") : UiText.Get("OpenWwwgooglecomchromeInYourBrowserToInstallChrome");
         view.OpenExtensionFolder.Click += (_, _) => OpenFolder(files.ChromeExtensionDirectory);
         view.OpenVSCodeFolder.Click += (_, _) => OpenFolder(files.VSCodeExtensionDirectory);
         var gmail = false;

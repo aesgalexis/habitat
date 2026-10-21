@@ -42,17 +42,17 @@ internal static class ComposerDestinations
 
     public static string Placeholder(string destination) => Normalize(destination) switch
     {
-        ComposerDestination.Google => "Search Google…",
-        ComposerDestination.YouTube => "Search YouTube…",
-        ComposerDestination.Notepad => "Write a new note…",
-        ComposerDestination.Translate => "Enter text to translate…",
-        ComposerDestination.Gmail => "Draft a new email…",
-        ComposerDestination.Terminal => "Enter a PowerShell command…",
-        ComposerDestination.GoogleMaps => "Search places or get directions…",
-        ComposerDestination.Codex => "Write an instruction for Codex…",
-        ComposerDestination.VSCode => "Enter a command…",
-        ComposerDestination.Run => "Run a program or a command…",
-        _ => "Message OpenAI…"
+        ComposerDestination.Google => UiText.Get("SearchGoogleMessage"),
+        ComposerDestination.YouTube => UiText.Get("SearchYouTubeMessage"),
+        ComposerDestination.Notepad => UiText.Get("WriteANewNote"),
+        ComposerDestination.Translate => UiText.Get("EnterTextToTranslate"),
+        ComposerDestination.Gmail => UiText.Get("DraftANewEmail"),
+        ComposerDestination.Terminal => UiText.Get("EnterAPowerShellCommand"),
+        ComposerDestination.GoogleMaps => UiText.Get("SearchPlacesOrGetDirections"),
+        ComposerDestination.Codex => UiText.Get("WriteAnInstructionForCodex"),
+        ComposerDestination.VSCode => UiText.Get("EnterACommand"),
+        ComposerDestination.Run => UiText.Get("RunAProgramOrACommand"),
+        _ => UiText.Get("MessageOpenAI")
     };
 
     public static string Label(string destination) => destination switch
@@ -60,28 +60,28 @@ internal static class ComposerDestinations
         ComposerDestination.GoogleMaps => "Google Maps",
         ComposerDestination.VSCode => "VS Code",
         ComposerDestination.OpenAI => "OpenAI", ComposerDestination.Google => "Google",
-        ComposerDestination.YouTube => "YouTube", ComposerDestination.Notepad => "Notepad",
-        ComposerDestination.Translate => "Translate", ComposerDestination.Gmail => "Gmail",
+        ComposerDestination.YouTube => "YouTube", ComposerDestination.Notepad => UiText.Get("Notepad"),
+        ComposerDestination.Translate => UiText.Get("Translate"), ComposerDestination.Gmail => "Gmail",
         ComposerDestination.Terminal => "Terminal", ComposerDestination.Codex => "Codex",
-        ComposerDestination.Run => "Run", _ => destination
+        ComposerDestination.Run => UiText.Get("Run"), _ => destination
     };
 
     public static string ExternalActionLabel(string destination, bool hasText) => (destination, hasText) switch
     {
-        (ComposerDestination.Gmail, _) => "Open in browser",
-        (ComposerDestination.OpenAI, true) => "Send and open ChatGPT",
-        (ComposerDestination.OpenAI, false) => "Open ChatGPT",
+        (ComposerDestination.Gmail, _) => UiText.Get("OpenInBrowser"),
+        (ComposerDestination.OpenAI, true) => UiText.Get("SendAndOpenChatGPT"),
+        (ComposerDestination.OpenAI, false) => UiText.Get("OpenChatGPT"),
         (ComposerDestination.Google or ComposerDestination.YouTube or ComposerDestination.GoogleMaps, true) =>
-            $"Search and open {Label(destination)}",
-        (ComposerDestination.Translate, true) => "Translate and open Google Translate",
-        (ComposerDestination.Translate, false) => "Open Google Translate",
-        (ComposerDestination.Codex, true) => "Send and open Codex",
-        (ComposerDestination.VSCode, true) => "Run command and open VS Code",
-        (ComposerDestination.Terminal, true) => "Run command and open PowerShell…",
-        (ComposerDestination.Terminal, false) => "Open PowerShell",
-        (ComposerDestination.Run, true) => "Run and open",
-        (ComposerDestination.Run, false) => "Open Run",
-        _ => $"Open {Label(destination)}"
+            UiText.Format("SearchAndOpen", Label(destination)),
+        (ComposerDestination.Translate, true) => UiText.Get("TranslateAndOpenGoogleTranslate"),
+        (ComposerDestination.Translate, false) => UiText.Get("OpenGoogleTranslate"),
+        (ComposerDestination.Codex, true) => UiText.Get("SendAndOpenCodex"),
+        (ComposerDestination.VSCode, true) => UiText.Get("RunCommandAndOpenVSCode"),
+        (ComposerDestination.Terminal, true) => UiText.Get("RunCommandAndOpenPowerShell"),
+        (ComposerDestination.Terminal, false) => UiText.Get("OpenPowerShell"),
+        (ComposerDestination.Run, true) => UiText.Get("RunAndOpen"),
+        (ComposerDestination.Run, false) => UiText.Get("OpenRun"),
+        _ => UiText.Format("OpenMessage", Label(destination))
     };
 
     public static Uri? ExternalUri(string destination, string text, string? gmailAccount = null,

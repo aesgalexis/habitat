@@ -28,7 +28,7 @@ internal sealed class CodexLauncher(Action<string>? trace = null, AppDataPaths? 
     private async Task<CodexChatService> GetChatAsync(CancellationToken token)
     {
         if (_chat is not null) return _chat;
-        var package = await GetPackageAsync(token) ?? throw new IOException("Install Codex to use this destination.");
+        var package = await GetPackageAsync(token) ?? throw new IOException(UiText.Get("InstallCodexToUseThisDestination"));
         _desktop ??= new CodexDesktopAutomation(package.Family, async uri =>
             await Launcher.LaunchUriAsync(uri, new LauncherOptions { TargetApplicationPackageFamilyName = package.Family }),
             package.Executable, trace);

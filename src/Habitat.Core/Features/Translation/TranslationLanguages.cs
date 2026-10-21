@@ -1,6 +1,9 @@
 namespace Habitat.Features.Translation;
 
-internal sealed record TranslationLanguage(string Code, string Name);
+internal sealed record TranslationLanguage(string Code, string NameKey)
+{
+    public string Name => UiText.Get(NameKey);
+}
 
 internal static class TranslationLanguages
 {

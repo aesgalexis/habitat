@@ -20,7 +20,7 @@ internal sealed class WeatherService : IDisposable
     public async Task<WeatherSnapshot> GetAsync(string city, CancellationToken cancellationToken)
     {
         city = city.Trim();
-        if (city.Length == 0) throw new InvalidDataException("Set a weather location in Preferences.");
+        if (city.Length == 0) throw new InvalidDataException(UiText.Get("SetAWeatherLocationInPreferences"));
         if (_location is null || !string.Equals(_locationQuery, city, StringComparison.OrdinalIgnoreCase))
         {
             _location = await ResolveLocationAsync(city, cancellationToken).ConfigureAwait(false);
@@ -62,7 +62,7 @@ internal sealed class WeatherService : IDisposable
         using var document = await GetJsonAsync(url, cancellationToken).ConfigureAwait(false);
         var root = document.RootElement;
         if (!root.TryGetProperty("results", out var results) || results.GetArrayLength() == 0)
-            throw new InvalidDataException("City not found. Check the weather location in Preferences.");
+            throw new InvalidDataException(UiText.Get("CityNotFoundCheckTheWeatherLocationIn"));
         var result = results[0];
         var label = result.GetProperty("name").GetString() ?? name;
         if (result.TryGetProperty("country_code", out var country)) label += ", " + country.GetString();
@@ -124,9 +124,9 @@ internal sealed class WeatherService : IDisposable
             if (hours < 6) throw new InvalidDataException("Incomplete six-hour weather forecast.");
             var raining = Number(current.GetProperty("rain")) + Number(current.GetProperty("showers")) > 0;
             var snowing = Number(current.GetProperty("snowfall")) > 0;
-            var outlook = raining ? "Rain now" : snowing ? "Snow now" : snow > 0 && liquid == 0 ?
-                (chance >= 50 ? "Snow likely" : "Snow possible") :
-                chance >= 50 ? "Rain likely" : liquid > 0 || chance >= 20 ? "Rain possible" : "No rain expected";
+            var outlook = raining ? UiText.Get("RainNow") : snowing ? UiText.Get("SnowNow") : snow > 0 && liquid == 0 ?
+                (chance >= 50 ? UiText.Get("SnowLikely") : UiText.Get("SnowPossible")) :
+                chance >= 50 ? UiText.Get("RainLikely") : liquid > 0 || chance >= 20 ? UiText.Get("RainPossible") : UiText.Get("NoRainExpected");
             return new WeatherSnapshot(location, temperature, condition,
                 current.GetProperty("is_day").GetInt32() == 1, outlook, chance, updatedAt);
         }

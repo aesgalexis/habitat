@@ -11,7 +11,7 @@ internal sealed class CodexChatService(ICodexChatDesktop desktop, ICodexHistoryR
         if (visible is null) return new(null, true);
         if (visible.Composer.IsNewChat) return new(null, true);
         var target = await reader.ResolveAsync(visible.SelectedTitles, token);
-        return target is null ? new(null, false, "Select a local Codex chat in the sidebar, then reload.") :
+        return target is null ? new(null, false, UiText.Get("SelectALocalCodexChatInTheSidebar")) :
             origins.Contains(target) ? new(target, false) : new(null, true);
     }
 

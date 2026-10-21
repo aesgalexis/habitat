@@ -17,11 +17,13 @@ internal sealed class AppServices : IAsyncDisposable
     private Task _bridgeStart = Task.CompletedTask;
     private Task? _dispose;
     public AppDataPaths Paths { get; }
+    public WallpaperService Wallpapers { get; }
     public GlobalHotkeyService GlobalHotkey { get; }
     public BridgeService Bridge { get; }
     public TaskStore Tasks { get; }
     public TaskSession TaskSession { get; }
     public WeatherService Weather { get; }
+    internal MarketsService Markets { get; set; }
     internal AppUpdateService Updates { get; set; }
     public Func<Uri, Task<bool>> LaunchBrowser { get; }
     internal bool OpenSetupFolder(string? path) => !Paths.IsIsolated && path is not null && Directory.Exists(path) &&
@@ -46,11 +48,24 @@ internal sealed class AppServices : IAsyncDisposable
     internal async Task<string?> PickWindowsAppAsync(nint owner)
     {
         if (Paths.IsIsolated || owner == 0) return null;
-        var picker = new Windows.Storage.Pickers.FileOpenPicker { CommitButtonText = "Select application" };
+        var picker = new Windows.Storage.Pickers.FileOpenPicker { CommitButtonText = UiText.Get("SelectApplication") };
         picker.FileTypeFilter.Add(".exe");
         picker.FileTypeFilter.Add(".lnk");
         WinRT.Interop.InitializeWithWindow.Initialize(picker, owner);
         return (await picker.PickSingleFileAsync())?.Path;
+    }
+    internal async Task<IReadOnlyList<string>> PickWallpapersAsync(nint owner)
+    {
+        if (Paths.IsIsolated || owner == 0) return [];
+        var picker = new Windows.Storage.Pickers.FileOpenPicker
+        {
+            SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.PicturesLibrary,
+            ViewMode = Windows.Storage.Pickers.PickerViewMode.Thumbnail,
+            CommitButtonText = UiText.Get("WallpaperAdd")
+        };
+        foreach (var extension in new[] { ".jpg", ".jpeg", ".png" }) picker.FileTypeFilter.Add(extension);
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, owner);
+        return (await picker.PickMultipleFilesAsync()).Select(file => file.Path).ToArray();
     }
     public VSCodeService VSCode { get; }
     private readonly VSCodeFolderLauncher _vsCodeFolders;
@@ -95,12 +110,14 @@ internal sealed class AppServices : IAsyncDisposable
         if (!paths.IsIsolated) throw new InvalidOperationException("UI checks require isolated infrastructure.");
 #endif
         Paths = paths;
+        Wallpapers = new WallpaperService(paths);
         GlobalHotkey = new GlobalHotkeyService(paths);
         Bridge = new BridgeService(paths.IsIsolated ? 0 : 8765);
         Tasks = paths.IsIsolated ? new TaskStore(paths.TasksPath) : new TaskStore();
         TaskSession = new TaskSession(Tasks);
         if (paths.IsIsolated) _isolatedHttp = new HttpClient(new DisabledNetwork());
         Weather = new WeatherService(_isolatedHttp);
+        Markets = new MarketsService(_isolatedHttp);
         Updates = new AppUpdateService(_isolatedHttp, reportError: exception => ReportError("Check for updates", exception));
         Translation = Bridge.Translation;
         Search = Bridge.Search;
@@ -126,7 +143,7 @@ internal sealed class AppServices : IAsyncDisposable
     public async Task<string?> PickVSCodeFolderAsync(nint owner)
     {
         if (Paths.IsIsolated || owner == 0) return null;
-        var picker = new Windows.Storage.Pickers.FolderPicker { CommitButtonText = "Select project" };
+        var picker = new Windows.Storage.Pickers.FolderPicker { CommitButtonText = UiText.Get("SelectProject") };
         picker.FileTypeFilter.Add("*");
         WinRT.Interop.InitializeWithWindow.Initialize(picker, owner);
         return (await picker.PickSingleFolderAsync())?.Path;
@@ -141,7 +158,7 @@ internal sealed class AppServices : IAsyncDisposable
         ? new GmailAuthService(new MemoryCredentials(), _isolatedHttp, _ => throw new InvalidOperationException("Browser sign-in is disabled in checks."))
         : new GmailAuthService(new GmailCredentialStore(), openBrowser: async url =>
         {
-            if (!await LaunchBrowser(new Uri(url))) throw new InvalidOperationException("Could not open Chrome. Check that Google Chrome is installed, then retry.");
+            if (!await LaunchBrowser(new Uri(url))) throw new InvalidOperationException(UiText.Get("CouldNotOpenChromeCheckThatGoogleChromeMessage"));
         });
     public GmailService CreateGmail(GmailAuthService auth) => new(auth, _isolatedHttp);
     public bool NeedsLocationPermission => !Paths.IsIsolated && (_location?.NeedsPermission ?? true);
@@ -159,7 +176,7 @@ internal sealed class AppServices : IAsyncDisposable
             try { await _bridgeStart; }
             finally { await Bridge.DisposeAsync(); }
         }
-        finally { Updates.Dispose(); Weather.Dispose(); VSCode.Dispose(); _isolatedHttp?.Dispose(); await Codex.DisposeAsync(); }
+        finally { Updates.Dispose(); Weather.Dispose(); Markets.Dispose(); VSCode.Dispose(); _isolatedHttp?.Dispose(); await Codex.DisposeAsync(); }
     }
 
     private sealed class MemoryCredentials : IGmailCredentialStore

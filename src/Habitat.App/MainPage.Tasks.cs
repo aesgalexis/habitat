@@ -42,7 +42,7 @@ public sealed partial class MainPage
     private DateTimeOffset _nextTaskRotation = DateTimeOffset.MinValue;
     private static readonly TimeSpan TaskRotationInterval = TimeSpan.FromSeconds(8);
     private readonly Button TasksButton = new();
-    private readonly TextBlock TasksTitle = new() { Text = "Tasks", FontSize = 11, Opacity = 0.72 };
+    private readonly TextBlock TasksTitle = UiLanguage.Watch(new TextBlock() { Text = UiText.Get("Tasks"), FontSize = 11, Opacity = 0.72 }, ("Text", () => (object?)(UiText.Get("Tasks"))));
     private readonly StackPanel TasksSymbol = new() { Spacing = 3, Width = 24, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock TasksBadge = new() { FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center };
     private readonly StackPanel TasksPreview = new() { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
@@ -61,16 +61,16 @@ public sealed partial class MainPage
     // Basic controls provide the same collapsible section without that template.
     private readonly StackPanel TasksCompletedSection = new() { Spacing = 6 };
     private bool _completedExpanded;
-    private readonly TextBlock TasksCompletedLabel = new() { Text = "▸ Completed", FontSize = 14 };
-    private readonly Button TasksCompletedToggle = new()
+    private readonly TextBlock TasksCompletedLabel = UiLanguage.Watch(new TextBlock() { Text = UiText.Get("CompletedMessageAlt"), FontSize = 14 }, ("Text", () => (object?)(UiText.Get("CompletedMessageAlt"))));
+    private readonly Button TasksCompletedToggle = UiLanguage.Watch(new Button()
     {
-        Content = "Completed", HorizontalAlignment = HorizontalAlignment.Left,
+        Content = UiText.Get("Completed"), HorizontalAlignment = HorizontalAlignment.Left,
         HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(0),
         BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(0)
-    };
-    private readonly TextBox TaskInput = new() { PlaceholderText = "New task…", MaxLength = 1000, MinWidth = 0, FontSize = 13, Padding = new Thickness(6, 4, 6, 4) };
+    }, ("Content", () => (object?)(UiText.Get("Completed"))));
+    private readonly TextBox TaskInput = UiLanguage.Watch(new TextBox() { PlaceholderText = UiText.Get("NewTaskMessage"), MaxLength = 1000, MinWidth = 0, FontSize = 13, Padding = new Thickness(6, 4, 6, 4) }, ("PlaceholderText", () => (object?)(UiText.Get("NewTaskMessage"))));
     private readonly TextBlock TasksStatus = new() { FontSize = 12, TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
-    private readonly Button TasksRetry = new() { Content = "Reload tasks", Visibility = Visibility.Collapsed };
+    private readonly Button TasksRetry = UiLanguage.Watch(new Button() { Content = UiText.Get("ReloadTasks"), Visibility = Visibility.Collapsed }, ("Content", () => (object?)(UiText.Get("ReloadTasks"))));
     private readonly Button TaskAdd = new()
     {
         Content = new FontIcon { Glyph = "\uE710", FontSize = 12 },
@@ -132,15 +132,15 @@ public sealed partial class MainPage
         _widgets.Children.Add(TasksButton);
         Grid.SetRow(GmailWidget, 1);
 
-        TasksPanel.Children.Add(new TextBlock { Text = "Tasks", FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+        TasksPanel.Children.Add(UiLanguage.Watch(new TextBlock { Text = UiText.Get("Tasks"), FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }, ("Text", () => (object?)(UiText.Get("Tasks")))));
         var inputRow = new Grid { ColumnSpacing = 8 };
         inputRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         inputRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         inputRow.Children.Add(TaskInput);
         Grid.SetColumn(TaskAdd, 1);
         inputRow.Children.Add(TaskAdd);
-        AutomationProperties.SetName(TaskInput, "New task");
-        AutomationProperties.SetName(TaskAdd, "Add task");
+        UiLanguage.SetName(TaskInput, () => UiText.Get("NewTask"));
+        UiLanguage.SetName(TaskAdd, () => UiText.Get("AddTask"));
         TaskAdd.Click += async (_, _) => await RunOperationAsync(AddTaskAsync);
         TaskInput.KeyDown += async (_, e) =>
         {
@@ -181,11 +181,14 @@ public sealed partial class MainPage
         var layout = TopWidgetLayout.Calculate(contentWidth, _tasksPanelOpen, _sidebarManualExpanded);
         _sidebarExpanded = layout.Expanded;
         SizeWeatherWidget(layout);
+        MarketsButton.Width = layout.WidgetWidth;
+        MarketsDetails.Visibility = layout.Expanded ? Visibility.Visible : Visibility.Collapsed;
+        MarketsCompactChange.Visibility = layout.Expanded ? Visibility.Collapsed : Visibility.Visible;
         _widgets.Margin = new Thickness(0, 20, 0, 0);
         var expanded = layout.Expanded;
         _widgets.Width = layout.WidgetWidth;
         SidebarToggle.Width = layout.WidgetWidth + 16;
-        AutomationProperties.SetName(SidebarToggle, expanded ? "Collapse sidebar" : "Expand sidebar");
+        UiLanguage.SetName(SidebarToggle, () => expanded ? UiText.Get("CollapseSidebar") : UiText.Get("ExpandSidebar"));
         TasksPreview.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
         TasksTitle.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
         GmailMessageButton.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
@@ -220,8 +223,8 @@ public sealed partial class MainPage
         _tasksPanelOpen = open;
         _nextTaskRotation = DateTimeOffset.UtcNow + TaskRotationInterval;
         _taskArea.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        TasksHint.Text = open ? "Click to collapse the list" : "Click to view your list";
-        AutomationProperties.SetName(TasksButton, $"{(open ? "Hide" : "Show")} tasks, {TasksBadge.Text} pending");
+        TasksHint.Text = UiLanguage.Value(TasksHint, "Text", () => open ? UiText.Get("ClickToCollapseTheList") : UiText.Get("ClickToViewYourList"));
+        UiLanguage.SetName(TasksButton, () => UiText.Format("TasksPending", (open ? UiText.Get("Hide") : UiText.Get("Show")), TasksBadge.Text));
         UpdateWritingLayout();
         if (open)
             DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
@@ -249,13 +252,13 @@ public sealed partial class MainPage
         {
             TasksStatus.Visibility = Visibility.Collapsed;
             if (_taskSession.RecoveredFromBackup)
-                ShowTaskError("Tasks restored from a backup. Check your pending and completed lists.");
+                ShowTaskError(UiText.Get("TasksRestoredFromABackupCheckYourPending"));
         }
         else
         {
             ShowTaskError(_taskStore.TemporaryProfileBlocked
-                ? "Open HABITAT from your Windows shortcut to use your saved tasks. This session uses a different data folder and cannot change them."
-                : "Could not load tasks. Your saved file is unchanged; please try again.");
+                ? UiText.Get("OpenHABITATFromYourWindowsShortcutToUse")
+                : UiText.Get("CouldNotLoadTasksYourSavedFileIs"));
         }
         if (!_operations.IsStopping) RenderTasks();
     }
@@ -273,8 +276,8 @@ public sealed partial class MainPage
         if (saved) TasksStatus.Visibility = Visibility.Collapsed;
         else if (_taskSession.Error is not null)
             ShowTaskError(_taskSession.Error is TaskStoreConflictException
-                ? "Tasks changed on disk. Reload tasks before saving. Your draft is kept."
-                : "Could not save the change. Your previous tasks and draft are kept. Reload tasks to try again.");
+                ? UiText.Get("TasksChangedOnDiskReloadTasksBeforeSaving")
+                : UiText.Get("CouldNotSaveTheChangeYourPreviousTasks"));
         RenderTasks();
         return saved;
     }
@@ -301,18 +304,18 @@ public sealed partial class MainPage
         TasksBadge.Text = _tasksLoaded ? pending.ToString() : "!";
         RenderTaskPreview();
         _nextTaskRotation = DateTimeOffset.UtcNow + TaskRotationInterval;
-        TasksHint.Text = _tasksPanelOpen ? "Click to collapse the list" : "Click to view your list";
-        AutomationProperties.SetName(TasksButton, $"{(_tasksPanelOpen ? "Hide" : "Show")} tasks, {TasksBadge.Text} pending");
+        TasksHint.Text = UiLanguage.Value(TasksHint, "Text", () => _tasksPanelOpen ? UiText.Get("ClickToCollapseTheList") : UiText.Get("ClickToViewYourList"));
+        UiLanguage.SetName(TasksButton, () => UiText.Format("TasksPending", (_tasksPanelOpen ? UiText.Get("Hide") : UiText.Get("Show")), TasksBadge.Text));
         TaskInput.IsEnabled = TaskAdd.IsEnabled = _tasksLoaded;
         TasksRetry.Visibility = _tasksLoaded ? Visibility.Collapsed : Visibility.Visible;
         TasksPending.Children.Clear();
         TasksCompleted.Children.Clear();
         if (_tasksLoaded && pending == 0)
-            TasksPending.Children.Add(new TextBlock { Text = "No pending tasks.", Opacity = 0.7 });
+            TasksPending.Children.Add(UiLanguage.Watch(new TextBlock { Text = UiText.Get("NoPendingTasksMessage"), Opacity = 0.7 }, ("Text", () => (object?)(UiText.Get("NoPendingTasksMessage")))));
         foreach (var task in _tasks)
             (task.IsCompleted ? TasksCompleted : TasksPending).Children.Add(BuildTaskRow(task));
         UpdateCompletedSection();
-        AutomationProperties.SetName(TasksCompletedToggle, $"Show or hide completed tasks, {_tasks.Count - pending}");
+        UiLanguage.SetName(TasksCompletedToggle, () => UiText.Format("ShowOrHideCompletedTasks", _tasks.Count - pending));
         TasksCompletedSection.Visibility = _tasks.Any(task => task.IsCompleted) ? Visibility.Visible : Visibility.Collapsed;
         PaintTasks();
     }
@@ -321,7 +324,7 @@ public sealed partial class MainPage
     {
         var pending = _tasks.Where(task => !task.IsCompleted).ToArray();
         _taskPreviewIndex = pending.Length == 0 ? 0 : Math.Clamp(_taskPreviewIndex, 0, pending.Length - 1);
-        TasksSummary.Text = !_tasksLoaded ? "Tasks unavailable" : pending.ElementAtOrDefault(_taskPreviewIndex)?.Text ?? "No pending tasks";
+        TasksSummary.Text = !_tasksLoaded ? UiText.Get("TasksUnavailable") : pending.ElementAtOrDefault(_taskPreviewIndex)?.Text ?? UiText.Get("NoPendingTasks");
     }
 
     private void TickTasks(DateTimeOffset now)
@@ -339,7 +342,7 @@ public sealed partial class MainPage
         TasksCompleted.Visibility = _completedExpanded ? Visibility.Visible : Visibility.Collapsed;
         // Update the existing label rather than replacing the button's content
         // while it is pressed; keep its visual tree and focus stable.
-        TasksCompletedLabel.Text = $"{(_completedExpanded ? "▾" : "▸")} Completed ({_tasks.Count(task => task.IsCompleted)})";
+        TasksCompletedLabel.Text = UiLanguage.Value(TasksCompletedLabel, "Text", () => UiText.Format("CompletedMessage", (_completedExpanded ? "▾" : "▸"), _tasks.Count(task => task.IsCompleted)));
     }
 
     private void SetCompletedExpanded(bool expanded)

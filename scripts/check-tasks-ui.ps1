@@ -1,4 +1,4 @@
-param([switch]$VSCodeOnly, [switch]$HotkeyOnly, [string]$OutputDirectory)
+param([switch]$VSCodeOnly, [switch]$HotkeyOnly, [switch]$WindowMenuOnly, [string]$OutputDirectory)
 $ErrorActionPreference = "Stop"
 $taskProjectRoot = Split-Path -Parent $PSScriptRoot
 $env:DOTNET_CLI_HOME = Join-Path $taskProjectRoot ".dotnet-local"
@@ -14,11 +14,12 @@ dotnet publish (Join-Path $taskProjectRoot "src\Habitat.App\Habitat.App.csproj")
     -p:Platform=x64 -p:HabitatUiChecks=true -p:PublishReadyToRun=false --output $taskOutput
 if ($LASTEXITCODE -ne 0) { throw "Could not build the tasks UI checks." }
 $taskProcess = Start-Process -FilePath (Join-Path $taskOutput "HABITAT.exe") `
-    -ArgumentList $(if ($HotkeyOnly) { '--hotkey-ui-only' } elseif ($VSCodeOnly) { '--vscode-ui-only' } else { '--all-ui-checks' }) `
+    -ArgumentList $(if ($WindowMenuOnly) { '--window-menu-ui-only' } elseif ($HotkeyOnly) { '--hotkey-ui-only' } elseif ($VSCodeOnly) { '--vscode-ui-only' } else { '--all-ui-checks' }) `
     -WorkingDirectory $taskOutput -WindowStyle Hidden -PassThru
-if (-not $taskProcess.WaitForExit(30000)) {
+$taskTimeout = if ($WindowMenuOnly) { 60000 } else { 30000 }
+if (-not $taskProcess.WaitForExit($taskTimeout)) {
     Stop-Process -Id $taskProcess.Id
     throw "Tasks UI checks timed out."
 }
-Get-Content -LiteralPath (Join-Path $taskOutput "tasks-ui-checks.log")
+Get-Content -LiteralPath (Join-Path $taskOutput $(if ($WindowMenuOnly) { 'window-menu-checks.log' } else { 'tasks-ui-checks.log' }))
 if ($taskProcess.ExitCode -ne 0) { throw "Tasks UI checks failed with exit code $($taskProcess.ExitCode)." }

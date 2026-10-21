@@ -39,13 +39,13 @@ public sealed partial class MainPage
         try
         {
             if (!_services.LaunchWindowsApp(app, request.Text))
-                SetStatus($"Could not open {app.Name}. Check that the application is installed or add it again in Preferences.", StatusTone.Warning);
+                SetStatus(UiText.Format("CouldNotOpenCheckThatTheApplicationIs", app.Name), StatusTone.Warning);
             else if (app.PassText && request.Text.Length > 0) { request.Accept(); request.Clear(); }
         }
         catch (Exception exception)
         {
             _services.ReportError("Open Windows application", exception);
-            SetStatus($"Could not open {app.Name}. Check the application in Preferences and try again.", StatusTone.Warning);
+            SetStatus(UiText.Format("CouldNotOpenCheckTheApplicationInPreferences", app.Name), StatusTone.Warning);
         }
         finally { if (!request.External) FocusComposer(); }
         return Task.CompletedTask;
@@ -62,10 +62,10 @@ public sealed partial class MainPage
             FocusComposer();
             return Task.CompletedTask;
         }
-        AddMessage("YOU", text, MessageTone.User);
+        AddMessage(UiText.Get("YOU"), text, MessageTone.User);
         request.Accept();
         request.Clear();
-        SetOpenAIStatus("Sending to browser…", StatusTone.Active);
+        SetOpenAIStatus(UiText.Get("SendingToBrowser"), StatusTone.Active);
         UpdateSendState();
         if (!request.External) FocusComposer();
         return Task.CompletedTask;
@@ -127,8 +127,8 @@ public sealed partial class MainPage
     }
 
     private static string DestinationLaunchError(string destination) => destination == ComposerDestination.Run
-        ? "Could not run this command. Check the name or path and try again."
-        : $"Could not open {ComposerDestinations.Label(destination)}. Try again.";
+        ? UiText.Get("CouldNotRunThisCommandCheckTheName")
+        : UiText.Format("CouldNotOpenTryAgain", ComposerDestinations.Label(destination));
 
     private void RestoreComposerDraft()
     {

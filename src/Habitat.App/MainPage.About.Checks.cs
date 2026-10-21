@@ -16,9 +16,9 @@ public sealed partial class MainPage
         var draft = Composer.Text;
         try
         {
-            if (OptionsMenu.Items.Last() is not MenuFlyoutItem { Text: "About HABITAT…" } ||
+            if (OptionsMenu.Items.Last() is not MenuFlyoutItem last || last.Text != UiText.Get("AboutMenu") ||
                 OptionsMenu.Items[^2] is not MenuFlyoutSeparator)
-                throw new InvalidOperationException("About must be the final separated menu entry.");
+                throw new InvalidOperationException($"About must be the final separated menu entry. Language={UiText.Language}, preference={_preferences.InterfaceLanguage}, final={(OptionsMenu.Items.Last() as MenuFlyoutItem)?.Text}, previous={OptionsMenu.Items[^2].GetType().Name}");
             foreach (var theme in new[] { ElementTheme.Light, ElementTheme.Dark })
             {
                 RequestedTheme = theme;

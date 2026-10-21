@@ -16,6 +16,36 @@ public sealed partial class MainPage
                 throw new InvalidOperationException("UI checks did not receive isolated services.");
             File.AppendAllText(path, "PASS: isolated services, empty in-memory Gmail credentials and explicit data paths\n");
             await _initialTaskLoad;
+            if (Environment.GetCommandLineArgs().Contains("--markets-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
+                await CheckMarketsUiAsync(path);
+            if (Environment.GetCommandLineArgs().Contains("--markets-ui-only"))
+            {
+                await StopAsync();
+                await _services.DisposeAsync();
+                window.Close();
+                Application.Current.Exit();
+                return;
+            }
+            if (Environment.GetCommandLineArgs().Contains("--wallpaper-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
+                await CheckWallpaperUiAsync(path);
+            if (Environment.GetCommandLineArgs().Contains("--wallpaper-ui-only"))
+            {
+                await StopAsync();
+                await _services.DisposeAsync();
+                window.Close();
+                Application.Current.Exit();
+                return;
+            }
+            if (Environment.GetCommandLineArgs().Contains("--language-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
+                await CheckLanguageUiAsync(path);
+            if (Environment.GetCommandLineArgs().Contains("--language-ui-only"))
+            {
+                await StopAsync();
+                await _services.DisposeAsync();
+                window.Close();
+                Application.Current.Exit();
+                return;
+            }
             if (Environment.GetCommandLineArgs().Contains("--about-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
                 await CheckAboutUiAsync(path);
             if (Environment.GetCommandLineArgs().Contains("--about-ui-only"))
@@ -374,7 +404,7 @@ public sealed partial class MainPage
                 Math.Abs(taskCenter - 20) > 0.5 || Math.Abs(mailCenter - 20) > 0.5 ||
                 _widgets.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point()).X != sidebarLeft)
                 throw new InvalidOperationException("Collapsed rail icons/toggle are not centered or the left edge moved.");
-            if (ReferenceEquals(SidebarToggle.Parent, _widgets) || _widgets.RowDefinitions.Count != 3 ||
+            if (ReferenceEquals(SidebarToggle.Parent, _widgets) || _widgets.RowDefinitions.Count != 4 ||
                 _widgets.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point()).Y != 20 || sidebarLeft != 12 ||
                 SidebarToggle.Content is not null || SidebarToggle.ActualHeight <= _widgets.ActualHeight ||
                 ((Microsoft.UI.Xaml.Media.SolidColorBrush)SidebarToggle.Background).Color.A != 0)
@@ -421,7 +451,7 @@ public sealed partial class MainPage
             if (taskViewportBottom > ((Microsoft.UI.Xaml.Controls.Grid)Content).ActualHeight - 24 || _taskArea.ScrollableHeight <= 0)
                 throw new InvalidOperationException("Long task lists must scroll below the sidebar widgets in short windows.");
             File.AppendAllText(path, "PASS: top weather adapts to both sidebar states; long tasks scroll below the widgets in short windows\n");
-            File.AppendAllText(path, "PASS: Tasks icon click opens below all three widgets in collapsed, expanded and narrow states, including toggling with Tasks open\n");
+            File.AppendAllText(path, "PASS: Tasks icon click opens below all four widgets in collapsed, expanded and narrow states, including toggling with Tasks open\n");
             await StopAsync();
             await _services.DisposeAsync();
             window.Close();
@@ -441,8 +471,9 @@ public sealed partial class MainPage
             var tasksBottom = TasksButton.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, TasksButton.ActualHeight)).Y;
             var gmailBottom = GmailWidget.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, GmailWidget.ActualHeight)).Y;
             var weatherBottom = WeatherBlock.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, WeatherBlock.ActualHeight)).Y;
-            if (panelTop < tasksBottom + 16 || panelTop < gmailBottom || panelTop < weatherBottom || GmailWidget.Visibility != Visibility.Visible)
-                throw new InvalidOperationException("Tasks panel invades the Weather/Gmail/Tasks widget region.");
+            var marketsBottom = MarketsButton.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, MarketsButton.ActualHeight)).Y;
+            if (panelTop < marketsBottom + 16 || panelTop < tasksBottom + 16 || panelTop < gmailBottom || panelTop < weatherBottom || GmailWidget.Visibility != Visibility.Visible)
+                throw new InvalidOperationException("Tasks panel invades the Weather/Gmail/Tasks/Markets widget region.");
             CheckWeatherSidebar();
         }
 

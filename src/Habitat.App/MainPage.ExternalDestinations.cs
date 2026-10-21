@@ -12,12 +12,12 @@ public sealed partial class MainPage
     {
         foreach (var (destination, button) in _externalDestinationButtons)
         {
-            var label = _destinationCatalog.WindowsApp(destination) is { } app ? $"Open {app.Name}" :
+            var label = _destinationCatalog.WindowsApp(destination) is { } app ? UiText.Format("OpenMessage", app.Name) :
                 ComposerDestinations.ExternalActionLabel(destination, !string.IsNullOrWhiteSpace(Composer.Text));
             ToolTipService.SetToolTip(button, label);
             AutomationProperties.SetName(button, label);
-            AutomationProperties.SetHelpText(button, destination == ComposerDestination.Gmail
-                ? "Open saved Gmail drafts in your browser." : "Use the current editor text and switch to the destination window.");
+            UiLanguage.SetHelpText(button, () => destination == ComposerDestination.Gmail
+                ? UiText.Get("OpenSavedGmailDraftsInYourBrowser") : UiText.Get("UseTheCurrentEditorTextAndSwitchTo"));
             button.IsEnabled = !_operations.IsStopping && _composer.CanSend(destination, Composer.Text, external: true);
         }
     }
@@ -34,12 +34,12 @@ public sealed partial class MainPage
     {
         try
         {
-            if (!await _openChat()) SetStatus("Could not open the linked ChatGPT conversation. Reconnect the browser extension.", StatusTone.Warning);
+            if (!await _openChat()) SetStatus(UiText.Get("CouldNotOpenTheLinkedChatGPTConversationReconnect"), StatusTone.Warning);
         }
         catch (Exception exception)
         {
             _services.ReportError("Open ChatGPT", exception);
-            SetStatus("Could not open ChatGPT. Try again.", StatusTone.Warning);
+            SetStatus(UiText.Get("CouldNotOpenChatGPTTryAgain"), StatusTone.Warning);
         }
     }
 

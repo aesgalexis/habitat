@@ -14,7 +14,7 @@ internal sealed class VSCodeRunView
         TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true };
     private readonly TextBlock _output = new() { FontFamily = new FontFamily("Cascadia Mono"), FontSize = 12,
         TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true };
-    private readonly TextBlock _truncated = new() { Text = "Output truncated", FontSize = 11, Opacity = 0.7, Visibility = Visibility.Collapsed };
+    private readonly TextBlock _truncated = UiLanguage.Watch(new TextBlock() { Text = UiText.Get("OutputTruncated"), FontSize = 11, Opacity = 0.7, Visibility = Visibility.Collapsed }, ("Text", () => (object?)(UiText.Get("OutputTruncated"))));
     private readonly StackPanel _links = new() { Spacing = 2 };
     private readonly Button _details;
     private readonly Func<Uri, Task<bool>> _openLink;
@@ -31,7 +31,7 @@ internal sealed class VSCodeRunView
     internal void ToggleOutput()
     {
         var expand = !IsExpanded;
-        _details.Content = expand ? "Hide output" : "Show output";
+        _details.Content = UiLanguage.Value(_details, "Content", () => expand ? UiText.Get("HideOutput") : UiText.Get("ShowOutput"));
         _expanded.Visibility = expand ? Visibility.Visible : Visibility.Collapsed;
         _preview.Visibility = expand || _preview.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
@@ -56,13 +56,13 @@ internal sealed class VSCodeRunView
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
         // Use the same native toggle pattern as Tasks: Expander's template
         // crashes in this application's bundled WinUI runtime.
-        _details = new Button { Content = "Show output", HorizontalAlignment = HorizontalAlignment.Left,
-            Visibility = Visibility.Collapsed };
+        _details = UiLanguage.Watch(new Button { Content = UiText.Get("ShowOutput"), HorizontalAlignment = HorizontalAlignment.Left,
+            Visibility = Visibility.Collapsed }, ("Content", () => (object?)(UiText.Get("ShowOutput"))));
         _details.Click += (_, _) => ToggleOutput();
         View.Children.Add(_details);
         View.Children.Add(_expanded);
-        AutomationProperties.SetName(_output, "Command output");
-        AutomationProperties.SetName(_preview, "Recent command output");
+        UiLanguage.SetName(_output, () => UiText.Get("CommandOutput"));
+        UiLanguage.SetName(_preview, () => UiText.Get("RecentCommandOutput"));
         Update(Snapshot);
     }
 
@@ -86,11 +86,11 @@ internal sealed class VSCodeRunView
             {
                 try
                 {
-                    if (!await _openLink(uri)) _summary.Text = "Could not open link. Check that Google Chrome is installed, then retry.";
+                    if (!await _openLink(uri)) _summary.Text = UiLanguage.Value(_summary, "Text", () => UiText.Get("CouldNotOpenLinkCheckThatGoogleChrome"));
                 }
-                catch (Exception) { _summary.Text = "Could not open link. Check that Google Chrome is installed, then retry."; }
+                catch (Exception) { _summary.Text = UiLanguage.Value(_summary, "Text", () => UiText.Get("CouldNotOpenLinkCheckThatGoogleChrome")); }
             };
-            AutomationProperties.SetName(link, "Open " + uri.AbsoluteUri);
+            UiLanguage.SetName(link, () => UiText.Get("Open") + uri.AbsoluteUri);
             _links.Children.Add(link);
         }
     }

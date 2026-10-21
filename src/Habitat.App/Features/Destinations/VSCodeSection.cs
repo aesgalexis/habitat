@@ -11,11 +11,11 @@ internal sealed class VSCodeSection : IDestinationSection
 {
     private readonly StackPanel _content = new() { Spacing = 12 };
     private readonly ScrollViewer _view;
-    private readonly ComboBox _projects = new()
+    private readonly ComboBox _projects = UiLanguage.Watch(new ComboBox()
     {
-        Header = "Project", DisplayMemberPath = "Label", HorizontalAlignment = HorizontalAlignment.Left,
+        Header = UiText.Get("Project"), DisplayMemberPath = "Label", HorizontalAlignment = HorizontalAlignment.Left,
         MinWidth = 0, MaxWidth = 220
-    };
+    }, ("Header", () => (object?)(UiText.Get("Project"))));
     private readonly TextBlock _path = new() { TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true, FontSize = 12, Opacity = 0.8 };
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, FontSize = 12, Opacity = 0.8, Visibility = Visibility.Collapsed };
     private readonly StackPanel _results = new() { Spacing = 12 };
@@ -74,8 +74,8 @@ internal sealed class VSCodeSection : IDestinationSection
         _content.Children.Add(_path);
         _content.Children.Add(_status);
         _content.Children.Add(_results);
-        AutomationProperties.SetName(_projects, "VS Code project");
-        AutomationProperties.SetName(_path, "Working directory");
+        UiLanguage.SetName(_projects, () => UiText.Get("VSCodeProject"));
+        UiLanguage.SetName(_path, () => UiText.Get("WorkingDirectory"));
         AutomationProperties.SetLiveSetting(_status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         _projects.SelectionChanged += async (_, _) =>
         {
@@ -91,7 +91,7 @@ internal sealed class VSCodeSection : IDestinationSection
             }
             _selection.Select(choice);
             ShowProject();
-            ShowStatus(SelectedProject is { Context.Trusted: false } ? "Trust this project in VS Code." : "");
+            ShowStatus(SelectedProject is { Context.Trusted: false } ? UiText.Get("TrustThisProjectInVSCode") : "");
         };
         _timer = DispatcherQueue.GetForCurrentThread().CreateTimer();
         _timer.Interval = TimeSpan.FromSeconds(2);
@@ -122,9 +122,9 @@ internal sealed class VSCodeSection : IDestinationSection
             _selection.Refresh(projects);
             BindProjects();
             if (SelectedFolder is null)
-                ShowStatus("Choose a project.");
+                ShowStatus(UiText.Get("ChooseAProject"));
             else if (SelectedProject is { Context.Trusted: false })
-                ShowStatus("Trust this project in VS Code.");
+                ShowStatus(UiText.Get("TrustThisProjectInVSCode"));
             else if (previous?.Project?.Id != SelectedProject?.Id ||
                 previous?.Project?.Context.ContextId != SelectedProject?.Context.ContextId || previous?.Folder?.Path != SelectedFolder.Path)
                 ShowStatus("");
@@ -137,7 +137,7 @@ internal sealed class VSCodeSection : IDestinationSection
                 _report(exception);
                 _selection.Refresh([]);
                 BindProjects();
-                ShowStatus("Could not load VS Code projects.");
+                ShowStatus(UiText.Get("CouldNotLoadVSCodeProjects"));
             }
         }
         finally { _refreshing = false; }
@@ -164,15 +164,15 @@ internal sealed class VSCodeSection : IDestinationSection
             var path = await _chooseFolder();
             if (_disposed || path is null) return;
             var folder = VSCodeFolders.Normalize(path);
-            if (folder is null) { ShowStatus("Choose a local folder."); return; }
+            if (folder is null) { ShowStatus(UiText.Get("ChooseALocalFolder")); return; }
             _selection.SelectFolder(folder);
             BindProjects();
-            ShowStatus(SelectedProject is { Context.Trusted: false } ? "Trust this project in VS Code." : "");
+            ShowStatus(SelectedProject is { Context.Trusted: false } ? UiText.Get("TrustThisProjectInVSCode") : "");
         }
         catch (Exception exception)
         {
             _report(exception);
-            if (!_disposed) ShowStatus("Could not select a folder. Try again.");
+            if (!_disposed) ShowStatus(UiText.Get("CouldNotSelectAFolderTryAgain"));
         }
         finally
         {
@@ -201,7 +201,7 @@ internal sealed class VSCodeSection : IDestinationSection
 
     private void ShowStatus(string text)
     {
-        _status.Text = text;
+        UiLanguage.Message(_status, text);
         _status.Visibility = text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 
@@ -226,11 +226,11 @@ internal sealed class VSCodeSection : IDestinationSection
         StateChanged?.Invoke();
         try
         {
-            if (folder is null) { ShowStatus("Choose a project."); return false; }
-            if (SelectedProject is { Context.Trusted: false }) { ShowStatus("Trust this project in VS Code."); return false; }
+            if (folder is null) { ShowStatus(UiText.Get("ChooseAProject")); return false; }
+            if (SelectedProject is { Context.Trusted: false }) { ShowStatus(UiText.Get("TrustThisProjectInVSCode")); return false; }
             var selected = await ResolveProjectAsync(folder);
             if (selected is null || _disposed) return false;
-            if (!selected.Context.Trusted) { ShowStatus("Trust this project in VS Code."); return false; }
+            if (!selected.Context.Trusted) { ShowStatus(UiText.Get("TrustThisProjectInVSCode")); return false; }
             dispatching?.Invoke();
             ShowStatus("");
             var result = await _run(selected, text, _operations.Token);
@@ -255,12 +255,12 @@ internal sealed class VSCodeSection : IDestinationSection
                 // label an accepted command as failed or execute it again.
                 try
                 {
-                    if (!await _open(selected)) ShowStatus("Command sent. Could not open VS Code. Update HABITAT Terminal and check VS Code before running again.");
+                    if (!await _open(selected)) ShowStatus(UiText.Get("CommandSentCouldNotOpenVSCodeUpdate"));
                 }
                 catch (Exception exception)
                 {
                     _report(exception);
-                    ShowStatus("Command sent. Could not open VS Code. Check VS Code before running again.");
+                    ShowStatus(UiText.Get("CommandSentCouldNotOpenVSCodeCheck"));
                 }
             }
             return result.Accepted;
@@ -269,7 +269,7 @@ internal sealed class VSCodeSection : IDestinationSection
         catch (Exception exception)
         {
             _report(exception);
-            if (!_disposed) ShowStatus("Check VS Code before sending again.");
+            if (!_disposed) ShowStatus(UiText.Get("CheckVSCodeBeforeSendingAgain"));
             return false;
         }
         finally
@@ -293,21 +293,21 @@ internal sealed class VSCodeSection : IDestinationSection
             var selected = folder is null ? null : await ResolveProjectAsync(folder);
             if (_disposed || (folder is not null && selected is null)) return;
             var opened = selected is null ? await _openDefault() : await _open(selected);
-            if (!_disposed) ShowStatus(opened ? "" : "Could not open VS Code. Update HABITAT Terminal and try again.");
+            if (!_disposed) ShowStatus(opened ? "" : UiText.Get("CouldNotOpenVSCodeUpdateHABITATTerminal"));
         }
         catch (OperationCanceledException) when (_operations.Token.IsCancellationRequested) { }
-        catch (Exception exception) { _report(exception); if (!_disposed) ShowStatus("Could not open VS Code. Try again."); }
+        catch (Exception exception) { _report(exception); if (!_disposed) ShowStatus(UiText.Get("CouldNotOpenVSCodeTryAgain")); }
         finally { IsBusy = false; if (!_disposed) { _projects.IsEnabled = true; StateChanged?.Invoke(); } }
     }
 
     private async Task<VSCodeProject?> ResolveProjectAsync(VSCodeFolder folder)
     {
-        ShowStatus(SelectedProject is null ? "Opening project…" : "Connecting…");
+        ShowStatus(SelectedProject is null ? UiText.Get("OpeningProject") : UiText.Get("Connecting"));
         var project = await _resolveProject(folder, _operations.Token);
         if (_disposed) return null;
         if (project is null || project.Context.Remote || !VSCodeFolders.Same(project.Folder.Path, folder.Path))
         {
-            ShowStatus("Could not connect to this project. Check VS Code and try again.");
+            ShowStatus(UiText.Get("CouldNotConnectToThisProjectCheckVS"));
             return null;
         }
         _selection.Resolved(project);
@@ -342,6 +342,12 @@ internal sealed class VSCodeSection : IDestinationSection
             if (!_runs.Any(run => run.NeedsPolling)) _executionTimer.Stop();
         }
         finally { _polling = false; }
+    }
+
+    internal void RefreshLanguage()
+    {
+        foreach (var run in _runs) run.Update(run.Snapshot);
+        UiLanguage.Message(_status, _status.Text);
     }
 
     public void Dispose()

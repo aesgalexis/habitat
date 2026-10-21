@@ -61,7 +61,7 @@ internal sealed class VSCodeService : IDisposable
                     Path.IsPathFullyQualified(folder.Path)).Select(folder => new VSCodeProject(endpoint, context, folder)).ToArray();
                 // Keep empty/remote windows in focus ordering so an old local
                 // project is never mistaken for the active project.
-                return projects.Length > 0 ? projects : [new VSCodeProject(endpoint, context, new("No local folder", ""))];
+                return projects.Length > 0 ? projects : [new VSCodeProject(endpoint, context, new(UiText.Get("NoLocalFolder"), ""))];
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or
                 HttpRequestException or OperationCanceledException or ArgumentException) { return []; }
@@ -75,7 +75,7 @@ internal sealed class VSCodeService : IDisposable
     {
         if (!Valid(project.Endpoint) || string.IsNullOrWhiteSpace(command) || !project.Context.Trusted || project.Context.Remote ||
             !Path.IsPathFullyQualified(project.Folder.Path))
-            return new(false, "Open a trusted local project in VS Code.");
+            return new(false, UiText.Get("OpenATrustedLocalProjectInVSCode"));
         using var request = Request(project.Endpoint, HttpMethod.Post, "/run");
         request.Content = JsonContent.Create(new { requestId = Guid.NewGuid().ToString(),
             sessionId = project.Endpoint.SessionId, contextId = project.Context.ContextId, path = project.Folder.Path, command });
@@ -90,12 +90,12 @@ internal sealed class VSCodeService : IDisposable
                 return new(true, "", body.RootElement.TryGetProperty("executionId", out var id) &&
                     Guid.TryParse(id.GetString(), out _) ? id.GetString() : null);
             if (response.StatusCode == HttpStatusCode.Conflict)
-                return new(false, "Project changed. Review the project and send again.");
+                return new(false, UiText.Get("ProjectChangedReviewTheProjectAndSendAgain"));
             if (response.StatusCode == HttpStatusCode.Forbidden)
-                return new(false, "Reconnect VS Code.");
+                return new(false, UiText.Get("ReconnectVSCode"));
         }
         catch (Exception exception) when (exception is HttpRequestException or OperationCanceledException or JsonException) { }
-        return new(false, "Check VS Code before sending again.");
+        return new(false, UiText.Get("CheckVSCodeBeforeSendingAgain"));
     }
 
     public async Task<VSCodeProject?> EnsureProjectAsync(VSCodeFolder folder, Func<string, bool> openFolder,

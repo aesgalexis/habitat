@@ -35,11 +35,11 @@ internal static class GmailMessageParser
             var html = new List<string>();
             CollectBody(payload, plain, html, 0);
             body = plain.Count > 0 ? string.Join("\n\n", plain) : HtmlToText(string.Join("\n\n", html));
-            if (string.IsNullOrWhiteSpace(body)) body = "No text body available. Attachments are not downloaded.";
-            if (body.Length > MaxBodyCharacters) body = body[..MaxBodyCharacters] + "\n\n[Message truncated]";
+            if (string.IsNullOrWhiteSpace(body)) body = UiText.Get("NoTextBodyAvailableAttachmentsAreNotDownloaded");
+            if (body.Length > MaxBodyCharacters) body = body[..MaxBodyCharacters] + "\n\n" + UiText.Get("GoogleMessageTruncated");
         }
         return new GmailMessage(String(root, "id"), String(root, "threadId"),
-            headers.GetValueOrDefault("From", "Unknown sender"), headers.GetValueOrDefault("Subject", "(No subject)"),
+            headers.GetValueOrDefault("From", UiText.Get("UnknownSender")), headers.GetValueOrDefault("Subject", UiText.Get("GmailNoSubject")),
             WebUtility.HtmlDecode(String(root, "snippet")), date, body, headers.GetValueOrDefault("Message-ID"));
     }
 
@@ -90,7 +90,7 @@ internal static class GmailMessageParser
             text = WebUtility.HtmlDecode(text).Replace('\u00a0', ' ');
             return Regex.Replace(text, @"\n[ \t]*\n(?:[ \t]*\n)+", "\n\n", RegexOptions.None, RegexTimeout).Trim();
         }
-        catch (RegexMatchTimeoutException) { return "This HTML-only message could not be converted safely to plain text."; }
+        catch (RegexMatchTimeoutException) { return UiText.Get("ThisHTMLonlyMessageCouldNotBeConvertedSafely"); }
     }
 
     internal static string DecodeHeader(string value) => Regex.Replace(value, @"=\?([^?]+)\?([bBqQ])\?([^?]*)\?=", match =>

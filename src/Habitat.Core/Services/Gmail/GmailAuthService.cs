@@ -74,7 +74,7 @@ internal sealed class GmailAuthService : IDisposable
             }
             catch (GmailSignInRequiredException) { /* Revoked consent requires a new browser sign-in. */ }
         }
-        var client = _account.Client ?? throw new GmailSignInRequiredException("Google sign-in needs a desktop OAuth client. Open Gmail setup.");
+        var client = _account.Client ?? throw new GmailSignInRequiredException(UiText.Get("GoogleSigninNeedsADesktopOAuthClientOpen"));
         await _tokenLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -89,11 +89,11 @@ internal sealed class GmailAuthService : IDisposable
             server.MapGet("/oauth/callback", (HttpRequest request) =>
             {
                 var suppliedState = request.Query["state"].ToString();
-                if (!FixedEquals(state, suppliedState)) return Results.Text("Invalid sign-in request.", statusCode: 400);
+                if (!FixedEquals(state, suppliedState)) return Results.Text(UiText.Get("GoogleInvalidSignIn"), statusCode: 400);
                 if (request.Query.ContainsKey("error"))
                 {
-                    completion.TrySetException(new GmailSignInRequiredException("Google sign-in was cancelled or denied."));
-                    return Results.Text("Sign-in cancelled. You can return to HABITAT.");
+                    completion.TrySetException(new GmailSignInRequiredException(UiText.Get("GoogleSigninWasCancelledOrDenied")));
+                    return Results.Text(UiText.Get("SigninCancelledYouCanReturnToHABITAT"));
                 }
                 var code = request.Query["code"].ToString();
                 if (code.Length == 0 || code.Length > 8192) return Results.Text("Missing authorization code.", statusCode: 400);
@@ -148,9 +148,9 @@ internal sealed class GmailAuthService : IDisposable
         await _tokenLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var tokens = _account.Tokens ?? throw new GmailSignInRequiredException("Sign in with Google to see unread emails.");
+            var tokens = _account.Tokens ?? throw new GmailSignInRequiredException(UiText.Get("SignInWithGoogleToSeeUnreadEmails"));
             if (!forceRefresh && tokens.ExpiresAt > DateTimeOffset.UtcNow.AddMinutes(1)) return tokens.AccessToken;
-            var client = _account.Client ?? throw new GmailSignInRequiredException("Open Gmail setup.");
+            var client = _account.Client ?? throw new GmailSignInRequiredException(UiText.Get("OpenGmailSetup"));
             try
             {
                 tokens = await ExchangeAsync(new Dictionary<string, string>
@@ -198,9 +198,9 @@ internal sealed class GmailAuthService : IDisposable
                 using var error = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
                 var code = error.RootElement.TryGetProperty("error", out var errorValue) ? errorValue.GetString() : null;
                 if (code == "invalid_grant")
-                    throw new GmailSignInRequiredException("Google authorization expired or was revoked. Sign in again.");
+                    throw new GmailSignInRequiredException(UiText.Get("GoogleAuthorizationExpiredOrWasRevokedSignIn"));
                 if (code == "invalid_client")
-                    throw new InvalidOperationException("Google rejected the desktop OAuth client. Check Gmail setup; the saved session has been retained.");
+                    throw new InvalidOperationException(UiText.Get("GoogleRejectedTheDesktopOAuthClientCheckGmail"));
             }
             response.EnsureSuccessStatusCode();
         }
@@ -208,10 +208,10 @@ internal sealed class GmailAuthService : IDisposable
         var root = document.RootElement;
         var access = root.GetProperty("access_token").GetString();
         if (root.TryGetProperty("scope", out var scopes) && !(scopes.GetString() ?? "").Split(' ').Contains(ReadOnlyScope))
-            throw new GmailSignInRequiredException("Google did not grant read-only Gmail access. Sign in again.");
+            throw new GmailSignInRequiredException(UiText.Get("GoogleDidNotGrantReadonlyGmailAccessSign"));
         var refresh = root.TryGetProperty("refresh_token", out var value) ? value.GetString() : refreshToken;
         if (string.IsNullOrWhiteSpace(access) || string.IsNullOrWhiteSpace(refresh))
-            throw new GmailSignInRequiredException("Google did not grant offline read access. Sign in again.");
+            throw new GmailSignInRequiredException(UiText.Get("GoogleDidNotGrantOfflineReadAccessSign"));
         return new GmailTokens(access, refresh, DateTimeOffset.UtcNow.AddSeconds(root.GetProperty("expires_in").GetInt32()));
     }
 
@@ -222,7 +222,7 @@ internal sealed class GmailAuthService : IDisposable
         using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
-        return document.RootElement.GetProperty("emailAddress").GetString() ?? throw new InvalidDataException("Google returned no Gmail account.");
+        return document.RootElement.GetProperty("emailAddress").GetString() ?? throw new InvalidDataException(UiText.Get("GoogleReturnedNoGmailAccount"));
     }
 
     private static bool FixedEquals(string expected, string supplied) => CryptographicOperations.FixedTimeEquals(

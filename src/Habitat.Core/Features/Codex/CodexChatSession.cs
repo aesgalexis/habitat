@@ -16,7 +16,7 @@ internal sealed class CodexChatSession(int maxCachedChats = 32)
     public CodexChatTarget? PendingTarget => _pending?.Target;
     public bool IsWaiting => _pending is not null;
     public CodexChatHistory? Current => Selected is { } target ? _history.GetValueOrDefault(target.Id) : null;
-    public string Issue => _issues.GetValueOrDefault(Selected?.Id ?? "", "");
+    public string Issue => UiText.LocalizeMessage(_issues.GetValueOrDefault(Selected?.Id ?? "", ""));
 
     internal int CachedChatCount => _access.Count;
     internal int OriginalTextCount => _originalText.Count;
@@ -45,7 +45,7 @@ internal sealed class CodexChatSession(int maxCachedChats = 32)
         foreach (var key in _originalText.Keys.Where(key => key.Chat == history.Target.Id && !turns.Contains(key.Turn)).ToArray())
             _originalText.Remove(key);
         Touch(history.Target);
-        if (_issues.GetValueOrDefault(history.Target.Id) == "Could not read the Codex response. Retrying…")
+        if (UiText.KeyFor(_issues.GetValueOrDefault(history.Target.Id) ?? "") == "CouldNotReadTheCodexResponseRetrying")
             _issues.Remove(history.Target.Id);
         if (_pending is not { } pending || pending.Target.Id != history.Target.Id) return;
         _issues.Remove(history.Target.Id);
@@ -57,9 +57,9 @@ internal sealed class CodexChatSession(int maxCachedChats = 32)
         if (turn.IsRunning) return;
         if (turn.Status == "completed")
             SetIssue(history.Target, turn.Messages.Any(message => message.Author == "Codex" && message.Text.Length > 0)
-                ? "" : "Codex finished without a text reply. Open the chat in Codex for details.");
+                ? "" : UiText.Get("CodexFinishedWithoutATextReplyOpenThe"));
         else if (turn.Status is "failed" or "interrupted")
-            SetIssue(history.Target, "The Codex turn did not complete. Open the chat in Codex for details.");
+            SetIssue(history.Target, UiText.Get("TheCodexTurnDidNotCompleteOpenThe"));
         else return;
         _pending = null;
     }
@@ -95,7 +95,7 @@ internal sealed class CodexChatSession(int maxCachedChats = 32)
 
     public void StopWaiting()
     {
-        if (_pending is { } pending) SetIssue(pending.Target, "Stopped waiting. Codex may still be working.");
+        if (_pending is { } pending) SetIssue(pending.Target, UiText.Get("StoppedWaitingCodexMayStillBeWorking"));
         _pending = null;
     }
 

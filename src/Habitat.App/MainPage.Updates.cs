@@ -22,7 +22,7 @@ public sealed partial class MainPage
     private void BuildUpdateInterface(Grid surface)
     {
         UseStableWidgetButton(UpdateButton);
-        AutomationProperties.SetName(UpdateButton, "Update HABITAT");
+        UiLanguage.SetName(UpdateButton, () => UiText.Get("UpdateHABITAT"));
         AutomationProperties.SetLiveSetting(UpdateButton, AutomationLiveSetting.Polite);
         UpdateButton.Click += async (_, _) => await RunOperationAsync(OpenUpdateAsync);
         surface.Children.Add(UpdateButton);
@@ -48,12 +48,12 @@ public sealed partial class MainPage
     {
         var available = _services.Updates.Available;
         UpdateButton.Visibility = available is null ? Visibility.Collapsed : Visibility.Visible;
-        var text = available is null ? "Update HABITAT" : openFailed
-            ? $"Could not open Chrome. Check that Google Chrome is installed, then retry downloading HABITAT {available.Version}."
-            : $"HABITAT {available.Version} is available. Open GitHub to download the update using the same installer format (EXE or ZIP).";
-        AutomationProperties.SetName(UpdateButton, available is null ? "Update HABITAT" : $"Update HABITAT to {available.Version}");
+        var text = available is null ? UiText.Get("UpdateHABITAT") : openFailed
+            ? UiText.Format("CouldNotOpenChromeCheckThatGoogleChrome", available.Version)
+            : UiText.Format("HABITATIsAvailableOpenGitHubToDownloadThe", available.Version);
+        UiLanguage.SetName(UpdateButton, () => available is null ? UiText.Get("UpdateHABITAT") : UiText.Format("UpdateHABITATTo", available.Version));
         AutomationProperties.SetHelpText(UpdateButton, text);
-        AutomationProperties.SetItemStatus(UpdateButton, openFailed ? "Could not open download. Retry." : available is null ? "" : "Update available");
+        UiLanguage.SetItemStatus(UpdateButton, () => openFailed ? UiText.Get("CouldNotOpenDownloadRetry") : available is null ? "" : UiText.Get("UpdateAvailable"));
         ToolTipService.SetToolTip(UpdateButton, text);
         if (Content is Grid surface) SizeTopWidgets(surface);
     }
