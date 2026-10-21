@@ -5,9 +5,9 @@ namespace Habitat.Services;
 internal sealed class CodexChatService(ICodexChatDesktop desktop, ICodexHistoryReader reader,
     Func<string, CancellationToken, Task<CodexDeliveryResult>> startNew, CodexChatOrigins origins) : ICodexChatService
 {
-    public async Task<IReadOnlyList<CodexScheduleTarget>> ListScheduleTargetsAsync(bool includeAll, CancellationToken token)
+    public async Task<IReadOnlyList<CodexScheduleTarget>> ListScheduleTargetsAsync(CancellationToken token)
     {
-        var targets = (await reader.ListAsync(token)).Where(target => includeAll || origins.Contains(target)).ToArray();
+        var targets = (await reader.ListAsync(token)).Where(origins.Contains).ToArray();
         using var gate = new SemaphoreSlim(4);
         var candidates = await Task.WhenAll(targets.Select(async target =>
         {
@@ -22,9 +22,10 @@ internal sealed class CodexChatService(ICodexChatDesktop desktop, ICodexHistoryR
 
     public async Task<CodexScheduledAttempt> SendScheduledAsync(CodexChatTarget target, string text, CancellationToken token)
     {
-        if (!CodexReadClient.ValidId(target.Id) || string.IsNullOrWhiteSpace(text) || text.Contains('\0')) return new(CodexDeliveryResult.NotSent);
-        // This path is authorized for the exact chat chosen in the scheduling
-        // dialog. Ordinary visible-chat sends keep their origin restriction.
+        if (!CodexReadClient.ValidId(target.Id) || !origins.Contains(target) || string.IsNullOrWhiteSpace(text) || text.Contains('\0'))
+            return new(CodexDeliveryResult.NotSent);
+        // Apply the same origin boundary to the picker and actual delivery,
+        // including messages persisted by an earlier version of HABITAT.
         var before = await reader.ReadAsync(target, token);
         if (before.Target.Id != target.Id) return new(CodexDeliveryResult.NotSent);
         if (before.IsRunning) return new(CodexDeliveryResult.NotSent, DateTimeOffset.UtcNow.AddSeconds(30));

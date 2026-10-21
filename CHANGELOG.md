@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.2 — 2026-10-21
+
+- Los mensajes programados para Codex solo permiten elegir chats creados desde HABITAT. Se elimina la opción de incluir otros chats locales.
+- La entrega vuelve a comprobar el origen antes de leer o abrir el destino. Las programaciones externas guardadas por versiones anteriores quedan sin enviar y requieren revisión.
+- Pruebas del filtro de origen, rechazo de destinos externos persistidos y diálogo en inglés y español.
+
 ## 0.15.1 — 2026-10-21
 
 - Icono junto a «Enviar a Codex» para programar mensajes con chat de destino, fecha y hora locales; permite editar o cancelar los mensajes guardados.

@@ -83,7 +83,7 @@ internal static class CodexScheduleChecks
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         { check(rejected.Messages.Count == 0, "A failed save cannot create an in-memory scheduled send"); }
 
-        await CheckServiceAsync(check);
+        await CheckServiceAsync(root, check);
         CheckLimitMetadata(now, check);
     }
 
@@ -111,15 +111,29 @@ internal static class CodexScheduleChecks
         check(CodexReadClient.ParseLimitReset(missing.RootElement, now) is null, "Unavailable reset metadata remains unknown");
     }
 
-    private static async Task CheckServiceAsync(Action<bool, string> check)
+    private static async Task CheckServiceAsync(string root, Action<bool, string> check)
     {
         var reader = new Reader(); var desktop = new Desktop(); var origins = new CodexChatOrigins(null); origins.Register(A);
         await using var service = new CodexChatService(desktop, reader, (_, _) => throw new Exception("Must never create a chat"), origins);
-        var own = await service.ListScheduleTargetsAsync(false, default);
+        var own = await service.ListScheduleTargetsAsync(default);
         check(own.Count == 1 && own[0].Target == A && !reader.Reads.Contains(B.Id), "The default schedule picker respects HABITAT chat provenance");
-        var all = await service.ListScheduleTargetsAsync(true, default);
-        check(all[0] is { UsageLimited: true, ResumeAt: not null } && all[0].Target == B,
-            "Explicitly including local chats prioritizes the latest usage-limit failure and carries the known reset time");
+        var reads = reader.Reads.Count;
+        check((await service.SendScheduledAsync(B, "forbidden follow-up", default)).Result == CodexDeliveryResult.NotSent &&
+            desktop.Opens == 0 && desktop.Sends == 0 && reader.Reads.Count == reads,
+            "Scheduled delivery rejects foreign chat IDs before reading their history or opening Codex");
+        var legacy = new CodexScheduleQueue(Path.Combine(root, "legacy-outbox.json"));
+        var now = DateTimeOffset.UtcNow;
+        legacy.Add(B, "Persisted by an older version", now.AddMinutes(1), now);
+        await legacy.RunDueAsync(now.AddMinutes(1), (item, token) => service.SendScheduledAsync(item.Target, item.Text, token), default);
+        check(legacy.Messages.Single() is { State: CodexScheduleState.NeedsAttention, Issue: "CodexScheduleNotSent" } &&
+            desktop.Opens == 0 && desktop.Sends == 0 && reader.Reads.Count == reads,
+            "An older persisted foreign-chat schedule cannot bypass the origin boundary or send automatically");
+        check((await service.GetVisibleAsync(default)).Target is null && (await service.SendAsync(B, "ordinary send", default)).Result == CodexDeliveryResult.NotSent,
+            "Normal and scheduled Codex sends share the same HABITAT-only origin boundary");
+        origins.Register(B);
+        var allowed = await service.ListScheduleTargetsAsync(default);
+        check(allowed.Count == 2 && allowed[0] is { UsageLimited: true, ResumeAt: not null } && allowed[0].Target == B,
+            "Among HABITAT-created chats, the latest usage-limit failure is prioritized with its known reset time");
         var deferred = await service.SendScheduledAsync(B, "continue", default);
         check(deferred.RetryAt == reader.Reset!.Value.AddSeconds(5) && desktop.Opens == 0 && desktop.Sends == 0,
             "A known future account reset never opens or submits the scheduled chat early");
@@ -131,10 +145,8 @@ internal static class CodexScheduleChecks
             "A draft in the destination Codex editor is never replaced by a scheduled message");
         desktop.Empty = true;
         check((await service.SendScheduledAsync(B, "  Exact ☕\ntext ", default)).Result == CodexDeliveryResult.Sent &&
-            desktop.Sends == 1 && desktop.LastTarget == B && desktop.Text == "  Exact ☕\ntext " && !origins.Contains(B),
-            "Scheduled authorization submits once to the chosen foreign chat without changing its provenance or user text");
-        check((await service.GetVisibleAsync(default)).Target is null && (await service.SendAsync(B, "ordinary send", default)).Result == CodexDeliveryResult.NotSent,
-            "A scheduled foreign-chat send does not widen the normal composer origin boundary");
+            desktop.Sends == 1 && desktop.LastTarget == B && desktop.Text == "  Exact ☕\ntext " && origins.Contains(B),
+            "Scheduled delivery submits once to the chosen HABITAT chat without changing its provenance or user text");
         reader.ResolveWrong = true;
         using var cancel = new CancellationTokenSource(80);
         try { await service.SendScheduledAsync(B, "must not send", cancel.Token); }

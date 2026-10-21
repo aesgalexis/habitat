@@ -52,7 +52,7 @@ public sealed partial class MainPage
                 var select = controls.OfType<ComboBox>().First(control => control.Header as string == UiText.Get("CodexScheduleChat"));
                 var date = controls.OfType<CalendarDatePicker>().Single();
                 var time = controls.OfType<TimePicker>().Single();
-                if ((select.SelectedItem as ComboBoxItem)?.Tag is not CodexScheduleTarget { UsageLimited: true } picked || picked.Target != fake.Limited ||
+                if (controls.OfType<CheckBox>().Any() || (select.SelectedItem as ComboBoxItem)?.Tag is not CodexScheduleTarget { UsageLimited: true } picked || picked.Target != fake.Limited ||
                     dialog.PrimaryButtonText != UiText.Get("CodexScheduleSave") || !dialog.IsPrimaryButtonEnabled)
                     throw new InvalidOperationException("The limited destination must be prioritized while date, time and action follow the interface language.");
                 await InvokeAsync(FindButton(dialog, UiText.Get("CodexScheduleAtReset")));
@@ -94,7 +94,7 @@ public sealed partial class MainPage
         public DateTimeOffset Reset = DateTimeOffset.Now.AddHours(1);
         public bool WaitForCancellation, CancelObserved;
         public int Sends;
-        public async Task<IReadOnlyList<CodexScheduleTarget>> ListScheduleTargetsAsync(bool includeAll, CancellationToken token)
+        public async Task<IReadOnlyList<CodexScheduleTarget>> ListScheduleTargetsAsync(CancellationToken token)
         {
             if (WaitForCancellation)
             {

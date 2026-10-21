@@ -86,7 +86,6 @@ public sealed partial class MainPage
         var message = new TextBox { Header = UiText.Get("CodexScheduleMessage"), AcceptsReturn = true,
             TextWrapping = TextWrapping.Wrap, MinHeight = 80, MaxHeight = 160, MaxLength = 200000, Text = original };
         var target = new ComboBox { Header = UiText.Get("CodexScheduleChat"), HorizontalAlignment = HorizontalAlignment.Stretch };
-        var all = new CheckBox { Content = UiText.Get("CodexScheduleIncludeAll"), IsChecked = false };
         var date = new CalendarDatePicker { Header = UiText.Get("CodexScheduleDate"), Date = DateTimeOffset.Now,
             MinDate = DateTimeOffset.Now.Date, MaxDate = DateTimeOffset.Now.AddYears(1) };
         var time = new TimePicker { Header = UiText.Get("CodexScheduleTime"), ClockIdentifier = "24HourClock",
@@ -97,7 +96,7 @@ public sealed partial class MainPage
         var queued = new StackPanel { Spacing = 12 };
         var body = new StackPanel { Spacing = 12, MinWidth = 320, MaxWidth = 520 };
         body.Children.Add(new TextBlock { Text = UiText.Get("CodexScheduleRequirements"), TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
-        body.Children.Add(message); body.Children.Add(target); body.Children.Add(all);
+        body.Children.Add(message); body.Children.Add(target);
         body.Children.Add(date); body.Children.Add(time); body.Children.Add(reset); body.Children.Add(status);
         body.Children.Add(new TextBlock { Text = UiText.Get("CodexScheduleQueued"), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         body.Children.Add(queued);
@@ -148,7 +147,6 @@ public sealed partial class MainPage
                     edit.Click += (_, _) =>
                     {
                         editing = item.Id; message.Text = item.Text; Choose(item.Target);
-                        if (target.SelectedIndex < 0) all.IsChecked = true;
                         var at = item.SendAt > DateTimeOffset.Now ? item.SendAt.ToLocalTime() : DateTimeOffset.Now.AddMinutes(5);
                         date.Date = at; time.Time = at.TimeOfDay; dialog.PrimaryButtonText = UiText.Get("CodexScheduleReschedule"); Validate();
                     };
@@ -177,14 +175,14 @@ public sealed partial class MainPage
         async Task ListAsync()
         {
             if (listing) return;
-            listing = true; all.IsEnabled = false; Validate();
+            listing = true; Validate();
             var previous = (target.SelectedItem as ComboBoxItem)?.Tag as CodexScheduleTarget;
             var preferred = previous?.Target ?? (editing is { } editId ? _services.CodexSchedules.Messages.SingleOrDefault(item => item.Id == editId)?.Target : null);
             try
             {
                 using var loading = CancellationTokenSource.CreateLinkedTokenSource(cancel.Token);
                 loading.CancelAfter(TimeSpan.FromSeconds(45));
-                var candidates = await _services.Codex.ListScheduleTargetsAsync(all.IsChecked == true, loading.Token);
+                var candidates = await _services.Codex.ListScheduleTargetsAsync(loading.Token);
                 cancel.Token.ThrowIfCancellationRequested();
                 target.Items.Clear();
                 foreach (var candidate in candidates.OrderByDescending(item => item.UsageLimited))
@@ -202,10 +200,8 @@ public sealed partial class MainPage
                 _services.ReportError("List scheduled Codex chats", exception); ready = false;
                 status.Text = UiText.Get("CodexScheduleLoadFailed");
             }
-            finally { listing = false; all.IsEnabled = true; Validate(); }
+            finally { listing = false; Validate(); }
         }
-        all.Checked += async (_, _) => await ListAsync();
-        all.Unchecked += async (_, _) => await ListAsync();
         message.TextChanged += (_, _) => Validate(); target.SelectionChanged += (_, _) => Validate();
         date.DateChanged += (_, _) => Validate(); time.TimeChanged += (_, _) => Validate();
         reset.Click += (_, _) =>

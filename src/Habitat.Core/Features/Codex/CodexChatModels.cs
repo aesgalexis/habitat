@@ -19,7 +19,7 @@ internal sealed record CodexChatSubmission(CodexDeliveryResult Result, CodexChat
 
 internal interface ICodexChatService : IAsyncDisposable
 {
-    Task<IReadOnlyList<CodexScheduleTarget>> ListScheduleTargetsAsync(bool includeAll, CancellationToken token) =>
+    Task<IReadOnlyList<CodexScheduleTarget>> ListScheduleTargetsAsync(CancellationToken token) =>
         Task.FromResult<IReadOnlyList<CodexScheduleTarget>>([]);
     Task<CodexScheduledAttempt> SendScheduledAsync(CodexChatTarget target, string text, CancellationToken token) =>
         Task.FromResult(new CodexScheduledAttempt(CodexDeliveryResult.NotSent));
