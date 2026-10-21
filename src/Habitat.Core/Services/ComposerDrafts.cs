@@ -4,6 +4,7 @@ internal sealed class ComposerDrafts
 {
     private readonly record struct Draft(string Text, long Revision);
     internal readonly record struct Submission(string Destination, long Revision);
+    internal sealed record Snapshot(string Shared, Dictionary<string, string> Local);
 
     private readonly Dictionary<string, Draft> _local = new();
     private Draft _shared = new("", 0);
@@ -11,6 +12,15 @@ internal sealed class ComposerDrafts
 
     private Draft Get(string destination) => _local.GetValueOrDefault(destination, _shared);
     public string Text(string destination) => Get(destination).Text;
+
+    internal Snapshot SaveForRestart() => new(_shared.Text, _local.ToDictionary(item => item.Key, item => item.Value.Text));
+
+    internal void RestoreAfterRestart(Snapshot snapshot)
+    {
+        _local.Clear();
+        _shared = new(snapshot.Shared, ++_revision);
+        foreach (var item in snapshot.Local) _local[item.Key] = new(item.Value, ++_revision);
+    }
 
     public void Edit(string destination, string text)
     {

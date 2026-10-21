@@ -5,13 +5,13 @@ HABITAT runs on Windows 10 2004 or later and Windows 11, on an x64 PC. The deskt
 ## Install the desktop app
 
 1. Open [GitHub Releases](https://github.com/aesgalexis/habitat/releases/latest) and download the Windows x64 setup EXE and its `.sha256` file. Use the release assets, rather than GitHub's Source code ZIP.
-2. Check the download with `Get-FileHash .\HABITAT-0.14.2-x64-setup.exe -Algorithm SHA256` and compare it with the hash file.
+2. Check the download with `Get-FileHash .\HABITAT-0.15.0-x64-setup.exe -Algorithm SHA256` and compare it with the hash file.
 3. Run the setup EXE from your normal Windows account. It installs in `%LOCALAPPDATA%\Programs\HABITAT`, adds a Start menu entry and registers an uninstaller. The optional desktop shortcut is off by default.
 4. Open HABITAT. The setup guide appears once and is always available from **HABITAT menu > Set up HABITAT…**.
 
 The desktop app currently has no code-signing certificate. Windows may display an unknown publisher warning. Only use the release downloaded from this repository and verify its hash.
 
-For the ZIP alternative, download `HABITAT-0.14.2-win-x64.zip`, extract **all** its files to a separate folder and run `Install-HABITAT.cmd`. It uses the same default installation directory. Use the same package format for updates: EXE and ZIP installations cannot overwrite each other. To switch formats, close HABITAT, uninstall or remove its program files, then install the other format; user data is separate.
+For the ZIP alternative, download `HABITAT-0.15.0-win-x64.zip`, extract **all** its files to a separate folder and run `Install-HABITAT.cmd`. It uses the same default installation directory. Use the same package format for updates: EXE and ZIP installations cannot overwrite each other. To switch formats, close HABITAT, uninstall or remove its program files, then install the other format; user data is separate.
 
 ## Connect Chrome
 
@@ -44,7 +44,7 @@ If a provider requests consent or verification, complete it in its Chrome tab an
 
 ## Update and uninstall
 
-HABITAT checks GitHub for a newer stable Windows release at startup and every six hours while open. When one is available, an **Update HABITAT** icon appears at the bottom of the sidebar. Hover to see the version; click to open its official release page and download the same installer format (EXE or ZIP) you already use. Downloads and installation require your action. Failed checks retry after one hour without interrupting your work.
+HABITAT checks GitHub for a newer stable Windows release at startup and every six hours while open. When one is available, click **Update HABITAT** at the bottom of the sidebar to download, verify, install and reopen the app. It keeps your existing EXE or ZIP format. You can cancel the download; active actions finish before closing, and unsent drafts are restored after restarting. Versions before 0.15.0 need one manual upgrade to gain this feature. Failed checks retry after one hour without interrupting your work. See [in-app updates](AUTO_UPDATES.md).
 
 Install a newer EXE over the EXE installation, or run the newer ZIP installer over the ZIP installation. Local tasks, preferences and Gmail credentials stay in your Windows account. Reload an unpacked Chrome extension after updating it; the store edition receives Chrome's normal extension updates. Update the VSIX if its version changes.
 

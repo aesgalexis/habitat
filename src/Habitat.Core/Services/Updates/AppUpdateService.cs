@@ -5,9 +5,15 @@ using System.Text.RegularExpressions;
 
 namespace Habitat.Services;
 
-internal sealed record AppUpdate(string Version, Uri ReleasePage);
+internal sealed record AppUpdate(string Version, Uri ReleasePage)
+{
+    internal UpdatePackage? Installer { get; init; }
+    internal UpdatePackage? Zip { get; init; }
+}
 
-// Read-only release discovery. Downloading and installing remain explicit user actions.
+internal sealed record UpdatePackage(string Version, string Tag, string Name, long Size, Uri Download, Uri Checksum);
+
+// Discovery is read-only; downloading and installing require the update button.
 internal sealed class AppUpdateService : IDisposable
 {
     internal static readonly Uri LatestRelease = new("https://api.github.com/repos/aesgalexis/habitat/releases/latest");
@@ -30,12 +36,13 @@ internal sealed class AppUpdateService : IDisposable
         _reportError = reportError;
     }
 
-    internal async Task CheckIfDueAsync(DateTimeOffset now, CancellationToken token = default)
+    internal async Task CheckIfDueAsync(DateTimeOffset now, CancellationToken token = default, bool force = false)
     {
-        if (!await _gate.WaitAsync(0, token)) return;
+        if (force) await _gate.WaitAsync(token);
+        else if (!await _gate.WaitAsync(0, token)) return;
         try
         {
-            if (now < NextCheck) return;
+            if (!force && now < NextCheck) return;
             NextCheck = now + CheckInterval;
             using var request = new HttpRequestMessage(HttpMethod.Get, LatestRelease);
             request.Headers.UserAgent.ParseAdd($"HABITAT/{_currentVersion}");
@@ -83,7 +90,27 @@ internal sealed class AppUpdateService : IDisposable
             (name.GetString() == $"HABITAT-{number}-x64-setup.exe" || name.GetString() == $"HABITAT-{number}-win-x64.zip") &&
             asset.TryGetProperty("state", out var state) && state.ValueKind == JsonValueKind.String && state.GetString() == "uploaded" &&
             asset.TryGetProperty("size", out var size) && size.ValueKind == JsonValueKind.Number && size.TryGetInt64(out var length) && length > 0);
-        return ready ? new(number, new Uri($"https://github.com/aesgalexis/habitat/releases/tag/{Uri.EscapeDataString(tag.GetString()!)}")) : null;
+        if (!ready) return null;
+        var releaseTag = tag.GetString()!;
+        UpdatePackage? Package(string suffix)
+        {
+            var name = $"HABITAT-{number}-{suffix}";
+            long? SizeOf(string file) => assets.EnumerateArray().Where(asset => asset.ValueKind == JsonValueKind.Object &&
+                asset.TryGetProperty("name", out var item) && item.ValueKind == JsonValueKind.String && item.GetString() == file &&
+                asset.TryGetProperty("state", out var state) && state.ValueKind == JsonValueKind.String && state.GetString() == "uploaded" &&
+                asset.TryGetProperty("size", out var size) && size.ValueKind == JsonValueKind.Number && size.TryGetInt64(out var length) && length > 0)
+                .Select(asset => (long?)asset.GetProperty("size").GetInt64()).FirstOrDefault();
+            var bytes = SizeOf(name);
+            if (bytes is null || bytes > AppUpdateDownload.MaximumBytes || SizeOf(name + ".sha256") is not (> 0 and <= 4096)) return null;
+            // Construct both links. Neither html_url nor browser_download_url can
+            // redirect the executable download to an unrelated release or host.
+            var prefix = $"https://github.com/aesgalexis/habitat/releases/download/{Uri.EscapeDataString(releaseTag)}/";
+            return new(number, releaseTag, name, bytes.Value, new Uri(prefix + name), new Uri(prefix + name + ".sha256"));
+        }
+        return new(number, new Uri($"https://github.com/aesgalexis/habitat/releases/tag/{Uri.EscapeDataString(releaseTag)}"))
+        {
+            Installer = Package("x64-setup.exe"), Zip = Package("win-x64.zip")
+        };
     }
 
     public void Dispose()

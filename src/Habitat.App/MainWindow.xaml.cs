@@ -34,6 +34,7 @@ public sealed partial class MainWindow : Window, IWindowHost
     private readonly SystemBackdropConfiguration? _backdropConfiguration;
     private string _statusIcon = string.Empty;
     public bool IsActive { get; private set; }
+    public void CloseForUpdate() => Close();
 
     internal MainWindow(AppServices services)
     {

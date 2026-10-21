@@ -14,6 +14,7 @@ WallpaperChecks.Run(root, Check);
 BrowserChecks.Run(root, Check);
 InstallationChecks.Run(root, Check);
 await UpdateChecks.RunAsync(Check);
+await UpdateDownloadChecks.RunAsync(root, Check);
 await MarketsChecks.RunAsync(root, Check);
 var paths = AppDataPaths.Isolated(root);
 Check(paths.IsIsolated && paths.LocalDirectory == root && paths.DesktopDirectory == root && paths.TasksPath.StartsWith(root), "Isolated paths never resolve desktop data.");

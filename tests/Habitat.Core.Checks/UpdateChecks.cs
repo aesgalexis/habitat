@@ -53,6 +53,9 @@ internal static class UpdateChecks
             "Check immediately at startup and schedule the next check six hours later.");
         await service.CheckIfDueAsync(now.AddHours(6).AddTicks(-1));
         check(calls == 1, "Frequent timer ticks do not cause extra requests.");
+        await service.CheckIfDueAsync(now.AddMinutes(1), force: true);
+        check(calls == 2 && service.NextCheck == now.AddMinutes(1).AddHours(6),
+            "Clicking the update icon refreshes release metadata even before the next scheduled check.");
         foreach (var failure in new[] { "offline", "timeout", "rate-limit", "invalid", "incomplete" })
         {
             mode = failure;

@@ -16,6 +16,9 @@ internal sealed class AppDataPaths
     public string DesktopDirectory => _isolatedRoot ?? Path.Combine(DesktopLocalDirectory(), "HABITAT");
     public string PreferencesPath => Path.Combine(LocalDirectory, "preferences.json");
     public string WallpapersDirectory => Path.Combine(LocalDirectory, "Wallpapers");
+    internal string UpdatesDirectory => Path.Combine(LocalDirectory, "Updates");
+    internal string UpdateDraftsPath => Path.Combine(LocalDirectory, "update-drafts.json");
+    internal string UpdateResultPath => Path.Combine(LocalDirectory, "update-result.json");
     public string TasksPath => Path.Combine(DesktopDirectory, "tasks.json");
     public string CodexChatsPath => Path.Combine(DesktopDirectory, "codex-chats.json");
     public string GmailLegacyPath => Path.Combine(DesktopDirectory, "gmail-account.bin");

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.0 — 2026-10-21
+
+- El icono de actualización descarga el paquete oficial, verifica su SHA-256, instala y vuelve a abrir HABITAT. Conserva el formato EXE o ZIP de la instalación y los datos de usuario.
+- Progreso y cancelación en inglés y español, espera a las acciones en curso, conservación de borradores al reiniciar y reintento ante errores de descarga o instalación.
+- Las versiones anteriores necesitan instalar esta versión una vez; la actualización directa queda disponible para las siguientes versiones.
+
 ## 0.14.3 — 2026-10-21
 
 - Cambio únicamente de versión para comprobar la detección automática de actualizaciones desde otro PC. Mismo comportamiento que 0.14.2.

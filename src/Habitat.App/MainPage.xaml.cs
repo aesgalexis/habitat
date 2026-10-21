@@ -334,6 +334,7 @@ public sealed partial class MainPage : Page
         UpdateDestinationStatus();
         _timer.Start();
         TickUpdates(DateTimeOffset.UtcNow);
+        RestoreUpdateRestartState();
         FocusComposer();
         if (!_preferences.SetupGuideSeen) _ = RunOperationAsync(ShowSetupAsync);
     }

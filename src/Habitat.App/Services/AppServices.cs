@@ -25,6 +25,9 @@ internal sealed class AppServices : IAsyncDisposable
     public WeatherService Weather { get; }
     internal MarketsService Markets { get; set; }
     internal AppUpdateService Updates { get; set; }
+    internal AppUpdateDownload UpdateDownload { get; set; }
+    internal Func<UpdateInstallation?> FindUpdateInstallation { get; set; }
+    internal Func<System.Diagnostics.ProcessStartInfo, bool> StartUpdateHelper { get; set; }
     public Func<Uri, Task<bool>> LaunchBrowser { get; }
     internal bool OpenSetupFolder(string? path) => !Paths.IsIsolated && path is not null && Directory.Exists(path) &&
         StartSetupProcess(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
@@ -119,6 +122,13 @@ internal sealed class AppServices : IAsyncDisposable
         Weather = new WeatherService(_isolatedHttp);
         Markets = new MarketsService(_isolatedHttp);
         Updates = new AppUpdateService(_isolatedHttp, reportError: exception => ReportError("Check for updates", exception));
+        UpdateDownload = new AppUpdateDownload(_isolatedHttp);
+        FindUpdateInstallation = paths.IsIsolated ? () => null : () => UpdateInstallation.Find(AppContext.BaseDirectory);
+        StartUpdateHelper = paths.IsIsolated ? _ => false : info =>
+        {
+            using var process = System.Diagnostics.Process.Start(info);
+            return process is not null;
+        };
         Translation = Bridge.Translation;
         Search = Bridge.Search;
         YouTubeSearch = Bridge.YouTubeSearch;
@@ -176,7 +186,7 @@ internal sealed class AppServices : IAsyncDisposable
             try { await _bridgeStart; }
             finally { await Bridge.DisposeAsync(); }
         }
-        finally { Updates.Dispose(); Weather.Dispose(); Markets.Dispose(); VSCode.Dispose(); _isolatedHttp?.Dispose(); await Codex.DisposeAsync(); }
+        finally { Updates.Dispose(); UpdateDownload.Dispose(); Weather.Dispose(); Markets.Dispose(); VSCode.Dispose(); _isolatedHttp?.Dispose(); await Codex.DisposeAsync(); }
     }
 
     private sealed class MemoryCredentials : IGmailCredentialStore

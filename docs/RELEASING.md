@@ -17,11 +17,13 @@ La versión 0.10.0 añade la guía de primera puesta en marcha y utiliza exclusi
 
 ## Instalar una publicación
 
-La versión **0.11.0** incorpora el aviso automático de versiones nuevas mediante **Update HABITAT**, los destinos personalizados y la gestión de aplicaciones de Windows. La descarga e instalación de actualizaciones siguen siendo manuales; la instalación automática opcional queda pendiente.
+La versión **0.11.0** incorpora el aviso automático de versiones nuevas mediante **Update HABITAT**, los destinos personalizados y la gestión de aplicaciones de Windows.
 
 La versión **0.14.0** añade Mercados, la interfaz en inglés/español, fondos personalizables y cinco ilustraciones. También corrige el cierre causado por márgenes negativos de la barra de ventana al minimizar/restaurar. Incluye los cambios de 0.12.0 a 0.13.1 que aún no tenían paquetes publicados en GitHub.
 
 La versión **0.14.2** restaura el comportamiento normal del ratón: hacer clic en HABITAT vuelve a activarlo después de usar el escritorio u otra aplicación. Se elimina el paso automático de clics que obligaba a recuperar la ventana mediante Alt+Tab.
+
+La versión **0.15.0** incorpora descarga, verificación SHA-256, instalación y reapertura desde el icono de actualización. Conserva el formato EXE/ZIP y los borradores. Las versiones anteriores necesitan una instalación manual de 0.15.0 para disponer de este flujo. Consulta [actualizaciones desde la app](AUTO_UPDATES.md).
 
 La publicación incluye dos alternativas: el instalador `HABITAT-<version>-x64-setup.exe`, con desinstalación registrada en Windows, y el ZIP con su instalador PowerShell. Ambos son autocontenidos, se instalan por usuario y tienen un SHA-256 adjunto. El EXE necesita Windows 10 2004 o posterior y admite instalación silenciosa. Consulta [la preparación para WinGet](WINGET.md).
 
@@ -49,7 +51,7 @@ Para retirar una instalación ZIP, desactiva primero **Preferences… → Global
 
 ## Preparar y publicar
 
-La aplicación consulta la última release pública de GitHub al arrancar y cada seis horas mientras permanece abierta. Solo avisa si su versión estable es superior a la instalada y tiene un EXE o ZIP de Windows ya subido. El icono **Update HABITAT**, al pie del sidebar, abre la página de esa versión para descargar manualmente el formato correspondiente. No instala ni descarga en segundo plano. Los fallos de red o de metadatos se registran sin interrumpir y se reintentan tras una hora; un aviso ya encontrado se conserva durante esos fallos.
+La aplicación consulta la última release pública de GitHub al arrancar y cada seis horas mientras permanece abierta. Solo avisa si su versión estable es superior a la instalada y tiene un EXE o ZIP de Windows ya subido. Al pulsar el icono **Actualizar HABITAT**, se refrescan los metadatos y se descarga el formato correspondiente con su SHA-256. Tras verificarlo, espera las acciones en curso y se cierra para instalar y reabrirse. Las copias de desarrollo ofrecen la página oficial como alternativa. No descarga paquetes sin pulsar el icono. Los fallos de red o de metadatos se registran sin interrumpir y se reintentan tras una hora; un aviso ya encontrado se conserva durante esos fallos.
 
 1. Trabaja en una rama y revisa todos los cambios, incluidos archivos nuevos. No incluyas credenciales, datos de usuario ni salidas de `artifacts` en Git.
 2. Actualiza `VERSION`, `CHANGELOG.md`, las instrucciones de instalación del README y, si corresponde, las versiones de las extensiones.
