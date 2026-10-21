@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.2 — 2026-10-21
+
+- Eliminado el paso automático de clics al escritorio. HABITAT mantiene el comportamiento de una ventana normal al perder el foco: hacer clic en la aplicación vuelve a activarla, sin necesitar Alt+Tab ni la barra de tareas.
+- Prueba con la ventana WinUI real que verifica que 30 ciclos de desactivación y activación nunca habilitan `WS_EX_TRANSPARENT`, además de minimizar/restaurar, menú en ambos idiomas y actualización en reposo.
+
 ## 0.14.1 — 2026-10-21
 
 - Refuerzo de la recuperación de entrada al activar HABITAT, recibir el foco o usar su canal de activación: se retira el modo de paso al escritorio sin depender exclusivamente de `WM_ACTIVATEAPP`.

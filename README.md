@@ -12,7 +12,7 @@ The current application is built with **C# and WinUI 3 on .NET 10**. It includes
 
 WinGet distribution is being prepared. The installer, manifests, and publishing process are documented in [docs/WINGET.md](docs/WINGET.md). HABITAT is not yet available in the public WinGet catalog. The package submission is open at [microsoft/winget-pkgs#455544](https://github.com/microsoft/winget-pkgs/pull/455544). While it is under review, you can download the installer directly from GitHub Releases.
 
-1. Download `HABITAT-0.14.1-x64-setup.exe` and its SHA-256 from [GitHub Releases](https://github.com/aesgalexis/habitat/releases/latest), verify the hash, and run the installer from your normal Windows session. Use the release assets; the **Source code** ZIP does not contain the compiled application.
+1. Download `HABITAT-0.14.2-x64-setup.exe` and its SHA-256 from [GitHub Releases](https://github.com/aesgalexis/habitat/releases/latest), verify the hash, and run the installer from your normal Windows session. Use the release assets; the **Source code** ZIP does not contain the compiled application.
 2. The installer installs to `%LOCALAPPDATA%\Programs\HABITAT`, adds HABITAT to the Start menu, and registers its uninstaller. It includes .NET and Windows App SDK; no SDK or administrator privileges are required. Supports Windows x64, Windows 10 version 2004 or later, and Windows 11.
 3. Open **Set up HABITAT…** (shown on first launch and always available in the menu). It detects Chrome, opens the extension in the [Chrome Web Store](https://chromewebstore.google.com/detail/ennnldolgdbbkgmpjjpkafeajihpimii), and shows each connection's status. Approve installation in Chrome and click **Enable connection**.
 4. At the time of this release, extension 0.9.0 has been submitted as Unlisted and is awaiting Google's review. If the link is not available yet, the setup wizard opens the included folder and `chrome://extensions` so you can load it unpacked. Chrome is not installed and extensions are not added silently.
@@ -20,13 +20,13 @@ WinGet distribution is being prepared. The installer, manifests, and publishing 
 
 The package includes browser bridge **0.9.0** and the **HABITAT Terminal 0.2.0** VSIX. The installer is not yet code-signed. See the [guide for another PC](docs/GETTING_STARTED.md) and [distribution details](docs/RELEASING.md). To work from source, clone the repository and follow [Build](#build).
 
-Alternatively, extract all of `HABITAT-0.14.1-win-x64.zip` and run `Install-HABITAT.cmd`. Always use the same format when updating: EXE and ZIP installations use different layouts and refuse to overwrite each other. Both preserve user data; the ZIP also keeps the previous release for recovery. WinGet preparation is documented in [WINGET.md](docs/WINGET.md).
+Alternatively, extract all of `HABITAT-0.14.2-win-x64.zip` and run `Install-HABITAT.cmd`. Always use the same format when updating: EXE and ZIP installations use different layouts and refuse to overwrite each other. Both preserve user data; the ZIP also keeps the previous release for recovery. WinGet preparation is documented in [WINGET.md](docs/WINGET.md).
 
 HABITAT checks for newer stable Windows releases at startup and every six hours while open. When an update is available, an **Update HABITAT** icon appears at the bottom of the sidebar and opens its official download page. Downloading and installing remain manual. Failed checks retry after one hour.
 
 ## Run the application
 
-When you switch to another application or the desktop, HABITAT stays visible and lets clicks, scrolling, and drags reach whatever is underneath. You can move or drop a desktop icon within the area occupied by its window. To write in HABITAT again, activate it from the taskbar, Alt+Tab, or Ctrl+H if the global shortcut is enabled.
+HABITAT behaves like a normal desktop window. After switching to another application or the desktop, click HABITAT to activate it again. Alt+Tab, the taskbar and Ctrl+H (when enabled) also remain available.
 
 1. Open `HABITAT.vbs`. It starts the application without showing a console.
 2. In Chrome, select the ChatGPT tab and conversation you want to use.

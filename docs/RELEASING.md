@@ -21,6 +21,8 @@ La versión **0.11.0** incorpora el aviso automático de versiones nuevas median
 
 La versión **0.14.0** añade Mercados, la interfaz en inglés/español, fondos personalizables y cinco ilustraciones. También corrige el cierre causado por márgenes negativos de la barra de ventana al minimizar/restaurar. Incluye los cambios de 0.12.0 a 0.13.1 que aún no tenían paquetes publicados en GitHub.
 
+La versión **0.14.2** restaura el comportamiento normal del ratón: hacer clic en HABITAT vuelve a activarlo después de usar el escritorio u otra aplicación. Se elimina el paso automático de clics que obligaba a recuperar la ventana mediante Alt+Tab.
+
 La publicación incluye dos alternativas: el instalador `HABITAT-<version>-x64-setup.exe`, con desinstalación registrada en Windows, y el ZIP con su instalador PowerShell. Ambos son autocontenidos, se instalan por usuario y tienen un SHA-256 adjunto. El EXE necesita Windows 10 2004 o posterior y admite instalación silenciosa. Consulta [la preparación para WinGet](WINGET.md).
 
 Usa siempre el mismo formato para actualizar una instalación. Los instaladores rechazan mezclar las disposiciones del EXE y el ZIP en una misma carpeta. Para cambiar de formato, cierra HABITAT y el residente, retira la instalación anterior conservando los datos de usuario y después instala el otro formato.

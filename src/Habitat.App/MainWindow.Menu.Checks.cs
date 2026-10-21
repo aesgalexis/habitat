@@ -37,10 +37,12 @@ public sealed partial class MainWindow
                 {
                     File.AppendAllText(log, $"Window lifecycle cycle {cycle}: minimize/restore/resize.\n");
                     MenuSendMessage(Handle, 0x001C /* WM_ACTIVATEAPP */, 0, 0);
+                    CheckNormalWindowInput(log);
                     presenter.Minimize();
                     await Task.Delay(30);
                     presenter.Restore();
                     MenuSendMessage(Handle, 0x001C /* WM_ACTIVATEAPP */, 1, 0);
+                    CheckNormalWindowInput(log);
                     AppWindow.Resize(new Windows.Graphics.SizeInt32(cycle % 2 == 0 ? 600 : 1080, 720));
                     await Task.Delay(30);
                     CheckMenuHitTargets(log);
@@ -96,6 +98,16 @@ public sealed partial class MainWindow
         }
         File.AppendAllText(log, $"PASS: menu receives client input across its width at window width {AppWindow.Size.Width}, scale {scale}.\n");
     }
+
+    private void CheckNormalWindowInput(string log)
+    {
+        if ((InputGetWindowLong(Handle, -20 /* GWL_EXSTYLE */) & 0x20 /* WS_EX_TRANSPARENT */) != 0)
+            throw new InvalidOperationException("HABITAT became click-through after changing application focus.");
+        File.AppendAllText(log, "PASS: window remains a normal mouse target across application activation changes.\n");
+    }
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
+    private static extern int InputGetWindowLong(nint window, int index);
 
     [DllImport("user32.dll", EntryPoint = "SendMessageW")]
     private static extern nint MenuSendMessage(nint window, uint message, nuint wParam, nint lParam);

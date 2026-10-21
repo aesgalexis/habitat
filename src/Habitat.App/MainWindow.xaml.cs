@@ -32,7 +32,6 @@ public sealed partial class MainWindow : Window, IWindowHost
     private bool _captionLayoutPending;
     private readonly DesktopAcrylicController? _acrylic;
     private readonly SystemBackdropConfiguration? _backdropConfiguration;
-    private readonly InactiveWindowPassthrough? _desktopGhost;
     private string _statusIcon = string.Empty;
     public bool IsActive { get; private set; }
 
@@ -53,11 +52,9 @@ public sealed partial class MainWindow : Window, IWindowHost
         }
         AppWindow.Resize(new Windows.Graphics.SizeInt32(860, 720));
         _page.RestoreWindowPlacement(AppWindow);
-        try { _desktopGhost = new(Handle, exception => _services.ReportError("Desktop passthrough", exception)); }
-        catch (Exception exception) { _services.ReportError("Desktop passthrough", exception); }
         Activated += OnActivated;
         AppWindow.Closing += OnClosing;
-        Closed += (_, _) => { _closing = true; _desktopGhost?.Dispose(); _acrylic?.Dispose(); };
+        Closed += (_, _) => { _closing = true; _acrylic?.Dispose(); };
     }
 
     private void BuildWindowChrome()
@@ -105,7 +102,6 @@ public sealed partial class MainWindow : Window, IWindowHost
     internal void ActivateComposer(string? text)
     {
         if (_closing) return;
-        _desktopGhost?.RestoreInput();
         if (IsIconic(Handle)) ShowWindowAsync(Handle, 9 /* SW_RESTORE */);
         Activate();
         _ = SetForegroundWindow(Handle);
@@ -302,7 +298,6 @@ public sealed partial class MainWindow : Window, IWindowHost
         IsActive = args.WindowActivationState != WindowActivationState.Deactivated;
         if (IsActive)
         {
-            _desktopGhost?.RestoreInput();
             _page.OnWindowActivated();
             _page.RefreshHybridAppearance(force: true);
             await Task.Delay(80);
