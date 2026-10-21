@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.14.3 — 2026-10-21
+
+- Cambio únicamente de versión para comprobar la detección automática de actualizaciones desde otro PC. Mismo comportamiento que 0.14.2.
+
 ## 0.14.2 — 2026-10-21
 
 - Eliminado el paso automático de clics al escritorio. HABITAT mantiene el comportamiento de una ventana normal al perder el foco: hacer clic en la aplicación vuelve a activarla, sin necesitar Alt+Tab ni la barra de tareas.
