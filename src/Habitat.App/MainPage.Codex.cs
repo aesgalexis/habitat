@@ -23,7 +23,7 @@ public sealed partial class MainPage
 
     private async Task SendToCodexAsync(string draft, ComposerDrafts.Submission submission, bool openExternally = false)
     {
-        if (_codexSendCancellation is not null || CodexChat.IsBusy) return;
+        if (_codexSendCancellation is not null || CodexChat.IsBusy || _services.CodexSchedules.IsSending) return;
         using var cancellation = new CancellationTokenSource();
         _codexSendCancellation = cancellation;
         _composerDrafts.Accept(submission);

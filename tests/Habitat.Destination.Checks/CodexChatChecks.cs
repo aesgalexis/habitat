@@ -181,6 +181,10 @@ internal static class CodexChatChecks
         await using var client = new CodexReadClient(Environment.ProcessPath!);
         var target = await client.ResolveAsync(["Home", "Chat A"], default);
         var history = await client.ReadAsync(target!, default);
+        var listed = await client.ListAsync(default);
+        var reset = await client.ReadLimitResetAsync(default);
+        check(listed.SequenceEqual(new[] { A, B }) && reset > DateTimeOffset.UtcNow && reset < DateTimeOffset.UtcNow.AddHours(2),
+            "Codex scheduling pages through local chat identities and reads account reset metadata using read-only RPC calls");
         check(target == A && history.Turns.Single().Messages.Single().Text == "synthetic reply",
             "Codex reader completes the JSON-RPC handshake and reads only the exactly selected chat through a private process");
         try { await client.ResolveAsync(["Duplicate"], default); check(false, "Duplicate Codex title must be rejected"); }
@@ -210,17 +214,18 @@ internal static class CodexChatChecks
             var method = root.GetProperty("method").GetString();
             if (method == "initialized") continue;
             var id = root.GetProperty("id").GetInt64();
-            if (method == "thread/list" && root.GetProperty("params").GetProperty("searchTerm").GetString() == "Verbose diagnostics")
+            var search = method == "thread/list" && root.GetProperty("params").TryGetProperty("searchTerm", out var term) ? term.GetString() : null;
+            if (method == "thread/list" && search == "Verbose diagnostics")
             {
                 for (var index = 0; index < 128; index++) await Console.Error.WriteLineAsync(new string('x', 4096));
                 await Console.Error.FlushAsync();
             }
-            if (method == "thread/list" && root.GetProperty("params").GetProperty("searchTerm").GetString() == "Disconnect")
+            if (method == "thread/list" && search == "Disconnect")
                 Environment.Exit(0);
-            if (method == "thread/list" && root.GetProperty("params").GetProperty("searchTerm").GetString() is
+            if (method == "thread/list" && search is
                 "Array frame" or "Null frame" or "Invalid JSON")
             {
-                var malformed = root.GetProperty("params").GetProperty("searchTerm").GetString() switch
+                var malformed = search switch
                 { "Array frame" => "[]", "Null frame" => "null", _ => "{broken" };
                 await Console.Out.WriteLineAsync(malformed);
                 await Console.Out.FlushAsync();
@@ -229,8 +234,11 @@ internal static class CodexChatChecks
             object result = method switch
             {
                 "initialize" => new { userAgent = "synthetic", codexHome = "isolated" },
-                "thread/list" => root.GetProperty("params").GetProperty("searchTerm").GetString() switch
+                "thread/list" => search switch
                 {
+                    null => root.GetProperty("params").GetProperty("cursor").ValueKind == JsonValueKind.Null
+                        ? (object)new { data = new[] { new { id = A.Id, name = A.Title } }, nextCursor = "page2" }
+                        : new { data = new[] { new { id = B.Id, name = B.Title } }, nextCursor = (string?)null },
                     "Chat A" => new { data = new[] { new { id = A.Id, name = "Chat A" }, new { id = B.Id, name = "Chat A extra" } } },
                     "Duplicate" => new { data = new[] { new { id = A.Id, name = "Duplicate" }, new { id = B.Id, name = "Duplicate" } } },
                     "Truncated" => (object)new { data = new[] { new { id = A.Id, name = "Truncated" } }, nextCursor = "more" },
@@ -238,6 +246,8 @@ internal static class CodexChatChecks
                 },
                 "thread/turns/list" => new { data = new[] { new { id = "one", status = "completed", items = new[] {
                     new { id = "reply", type = "agentMessage", phase = "final_answer", text = "synthetic reply" } } } } },
+                "account/rateLimits/read" => new { rateLimits = new { primary = new { usedPercent = 100,
+                    resetsAt = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds() } } },
                 _ => throw new InvalidOperationException("The reader attempted a non-read operation.")
             };
             await Console.Out.WriteLineAsync(JsonSerializer.Serialize(new { id, result }));

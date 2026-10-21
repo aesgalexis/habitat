@@ -5,6 +5,53 @@ namespace Habitat.Services;
 internal sealed class CodexChatService(ICodexChatDesktop desktop, ICodexHistoryReader reader,
     Func<string, CancellationToken, Task<CodexDeliveryResult>> startNew, CodexChatOrigins origins) : ICodexChatService
 {
+    public async Task<IReadOnlyList<CodexScheduleTarget>> ListScheduleTargetsAsync(bool includeAll, CancellationToken token)
+    {
+        var targets = (await reader.ListAsync(token)).Where(target => includeAll || origins.Contains(target)).ToArray();
+        using var gate = new SemaphoreSlim(4);
+        var candidates = await Task.WhenAll(targets.Select(async target =>
+        {
+            await gate.WaitAsync(token);
+            try { return new CodexScheduleTarget(target, CodexUsageLimit.IsLimited(await reader.ReadAsync(target, token))); }
+            finally { gate.Release(); }
+        }));
+        var reset = candidates.Any(item => item.UsageLimited) ? await reader.ReadLimitResetAsync(token) : null;
+        return candidates.Select(item => item.UsageLimited ? item with { ResumeAt = reset } : item)
+            .OrderByDescending(item => item.UsageLimited).ToArray();
+    }
+
+    public async Task<CodexScheduledAttempt> SendScheduledAsync(CodexChatTarget target, string text, CancellationToken token)
+    {
+        if (!CodexReadClient.ValidId(target.Id) || string.IsNullOrWhiteSpace(text) || text.Contains('\0')) return new(CodexDeliveryResult.NotSent);
+        // This path is authorized for the exact chat chosen in the scheduling
+        // dialog. Ordinary visible-chat sends keep their origin restriction.
+        var before = await reader.ReadAsync(target, token);
+        if (before.Target.Id != target.Id) return new(CodexDeliveryResult.NotSent);
+        if (before.IsRunning) return new(CodexDeliveryResult.NotSent, DateTimeOffset.UtcNow.AddSeconds(30));
+        if (CodexUsageLimit.IsLimited(before) && await reader.ReadLimitResetAsync(token) is { } reset && reset > DateTimeOffset.UtcNow)
+            return new(CodexDeliveryResult.NotSent, reset.AddSeconds(5));
+        if (!await desktop.OpenChatAsync(target, token)) return new(CodexDeliveryResult.NotSent);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+        timeout.CancelAfter(TimeSpan.FromSeconds(12));
+        while (true)
+        {
+            timeout.Token.ThrowIfCancellationRequested();
+            var visible = await desktop.ReadVisibleAsync(timeout.Token);
+            if (visible is not null && !visible.Composer.IsNewChat)
+            {
+                var selected = await reader.ResolveAsync(visible.SelectedTitles, timeout.Token);
+                if (selected?.Id == target.Id)
+                {
+                    if (!visible.CanAccept || !visible.IsEmpty) return new(CodexDeliveryResult.NotSent);
+                    if ((await reader.ReadAsync(target, timeout.Token)).IsRunning)
+                        return new(CodexDeliveryResult.NotSent, DateTimeOffset.UtcNow.AddSeconds(30));
+                    return new(await desktop.SubmitVisibleAsync(visible, text, timeout.Token));
+                }
+            }
+            await Task.Delay(150, timeout.Token);
+        }
+    }
+
     public async Task<CodexChatSelection> GetVisibleAsync(CancellationToken token)
     {
         var visible = await desktop.ReadVisibleAsync(token);

@@ -43,6 +43,7 @@ internal sealed class AppServices : IAsyncDisposable
     public Func<string, Task<bool>> LaunchNotepad { get; }
     public Func<string, CancellationToken, Task<CodexDeliveryResult>> LaunchCodex { get; }
     internal ICodexChatService Codex { get; set; }
+    internal CodexScheduleQueue CodexSchedules { get; }
     public PowerShellLauncher PowerShell { get; }
     public RunLauncher Run { get; }
     internal Func<WindowsAppDestination, string, bool> LaunchWindowsApp { get; set; }
@@ -140,6 +141,7 @@ internal sealed class AppServices : IAsyncDisposable
         var codex = paths.IsIsolated ? null : new CodexLauncher(paths: paths);
         LaunchCodex = codex is null ? (_, _) => Task.FromResult(CodexDeliveryResult.NotSent) : codex.OpenAsync;
         Codex = codex is null ? new DisabledCodexChatService() : codex;
+        CodexSchedules = new(paths.CodexSchedulesPath);
         PowerShell = paths.IsIsolated ? new PowerShellLauncher(paths.LocalDirectory, _ => false) : new PowerShellLauncher();
         Run = paths.IsIsolated ? new RunLauncher(paths.LocalDirectory, _ => false) : new RunLauncher();
         LaunchWindowsApp = paths.IsIsolated ? (_, _) => false : new WindowsAppLauncher().Open;

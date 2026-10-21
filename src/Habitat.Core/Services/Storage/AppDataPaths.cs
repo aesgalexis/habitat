@@ -21,6 +21,7 @@ internal sealed class AppDataPaths
     internal string UpdateResultPath => Path.Combine(LocalDirectory, "update-result.json");
     public string TasksPath => Path.Combine(DesktopDirectory, "tasks.json");
     public string CodexChatsPath => Path.Combine(DesktopDirectory, "codex-chats.json");
+    public string CodexSchedulesPath => Path.Combine(DesktopDirectory, "codex-scheduled-messages.json");
     public string GmailLegacyPath => Path.Combine(DesktopDirectory, "gmail-account.bin");
 
     internal static string DesktopLocalDirectory()

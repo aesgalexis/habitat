@@ -25,6 +25,8 @@ La versión **0.14.2** restaura el comportamiento normal del ratón: hacer clic 
 
 La versión **0.15.0** incorpora descarga, verificación SHA-256, instalación y reapertura desde el icono de actualización. Conserva el formato EXE/ZIP y los borradores. Las versiones anteriores necesitan una instalación manual de 0.15.0 para disponer de este flujo. Consulta [actualizaciones desde la app](AUTO_UPDATES.md).
 
+La versión **0.15.1** añade [mensajes programados para Codex](CODEX_SCHEDULING.md): selección explícita del chat, fecha y hora, prioridad para chats detenidos por límite, cola persistente y gestión de resultados sin duplicar envíos. También permite probar la actualización directa desde 0.15.0.
+
 La publicación incluye dos alternativas: el instalador `HABITAT-<version>-x64-setup.exe`, con desinstalación registrada en Windows, y el ZIP con su instalador PowerShell. Ambos son autocontenidos, se instalan por usuario y tienen un SHA-256 adjunto. El EXE necesita Windows 10 2004 o posterior y admite instalación silenciosa. Consulta [la preparación para WinGet](WINGET.md).
 
 Usa siempre el mismo formato para actualizar una instalación. Los instaladores rechazan mezclar las disposiciones del EXE y el ZIP en una misma carpeta. Para cambiar de formato, cierra HABITAT y el residente, retira la instalación anterior conservando los datos de usuario y después instala el otro formato.

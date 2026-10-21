@@ -121,7 +121,7 @@ public sealed partial class MainPage
             downloading = false;
             status.Text = UiText.Get("UpdateWaitingForActions");
             while (_bridge?.HasMessageInFlight == true || _composer.IsExclusiveBusy || CodexChat.IsBusy ||
-                _codexSendCancellation is not null || _destinationSections.Values.Any(section => section.IsBusy))
+                _codexSendCancellation is not null || _services.CodexSchedules.IsSending || _destinationSections.Values.Any(section => section.IsBusy))
                 await Task.Delay(250, cancellation.Token);
             cancellation.Token.ThrowIfCancellationRequested();
             status.Text = UiText.Get("UpdateInstalling");

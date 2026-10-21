@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.15.1 — 2026-10-21
+
+- Icono junto a «Enviar a Codex» para programar mensajes con chat de destino, fecha y hora locales; permite editar o cancelar los mensajes guardados.
+- Prioridad para los chats cuyo último turno terminó por límite de uso y sugerencia de la hora de recuperación cuando Codex la expone. El selector permite incluir otros chats locales mediante una elección explícita.
+- Cola persistente, espera de chats ocupados, protección de borradores y revisión manual de envíos dudosos o con más de cinco minutos de retraso. HABITAT debe permanecer abierto y Windows con la sesión iniciada.
+- Conserva la actualización directa de 0.15.0 para comprobar desde otro PC la detección, descarga e instalación de esta versión.
+
 ## 0.15.0 — 2026-10-21
 
 - El icono de actualización descarga el paquete oficial, verifica su SHA-256, instala y vuelve a abrir HABITAT. Conserva el formato EXE o ZIP de la instalación y los datos de usuario.

@@ -22,7 +22,7 @@ public sealed partial class MainPage
                         text => !(external && string.IsNullOrWhiteSpace(text)) && _bridge is not { HasMessageInFlight: false }, external);
                 else if (destination == ComposerDestination.Codex)
                     _composer.Register(destination, external, SendCodexComposerAsync,
-                        text => _codexSendCancellation is not null || !(external && string.IsNullOrWhiteSpace(text)) && CodexChat.IsBusy,
+                        text => _codexSendCancellation is not null || _services.CodexSchedules.IsSending || !(external && string.IsNullOrWhiteSpace(text)) && CodexChat.IsBusy,
                         exclusiveForEmpty: external);
                 else if (_destinationSections.TryGetValue(destination, out var section) && (!external || destination == ComposerDestination.VSCode))
                     _composer.Register(destination, external, SubmitSectionAsync, _ => _destinationSections[destination].IsBusy);

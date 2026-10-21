@@ -12,7 +12,7 @@ The current application is built with **C# and WinUI 3 on .NET 10**. It includes
 
 WinGet distribution is being prepared. The installer, manifests, and publishing process are documented in [docs/WINGET.md](docs/WINGET.md). HABITAT is not yet available in the public WinGet catalog. The package submission is open at [microsoft/winget-pkgs#455544](https://github.com/microsoft/winget-pkgs/pull/455544). While it is under review, you can download the installer directly from GitHub Releases.
 
-1. Download `HABITAT-0.15.0-x64-setup.exe` and its SHA-256 from [GitHub Releases](https://github.com/aesgalexis/habitat/releases/latest), verify the hash, and run the installer from your normal Windows session. Use the release assets; the **Source code** ZIP does not contain the compiled application.
+1. Download `HABITAT-0.15.1-x64-setup.exe` and its SHA-256 from [GitHub Releases](https://github.com/aesgalexis/habitat/releases/latest), verify the hash, and run the installer from your normal Windows session. Use the release assets; the **Source code** ZIP does not contain the compiled application.
 2. The installer installs to `%LOCALAPPDATA%\Programs\HABITAT`, adds HABITAT to the Start menu, and registers its uninstaller. It includes .NET and Windows App SDK; no SDK or administrator privileges are required. Supports Windows x64, Windows 10 version 2004 or later, and Windows 11.
 3. Open **Set up HABITAT…** (shown on first launch and always available in the menu). It detects Chrome, opens the extension in the [Chrome Web Store](https://chromewebstore.google.com/detail/ennnldolgdbbkgmpjjpkafeajihpimii), and shows each connection's status. Approve installation in Chrome and click **Enable connection**.
 4. At the time of this release, extension 0.9.0 has been submitted as Unlisted and is awaiting Google's review. If the link is not available yet, the setup wizard opens the included folder and `chrome://extensions` so you can load it unpacked. Chrome is not installed and extensions are not added silently.
@@ -20,7 +20,7 @@ WinGet distribution is being prepared. The installer, manifests, and publishing 
 
 The package includes browser bridge **0.9.0** and the **HABITAT Terminal 0.2.0** VSIX. The installer is not yet code-signed. See the [guide for another PC](docs/GETTING_STARTED.md) and [distribution details](docs/RELEASING.md). To work from source, clone the repository and follow [Build](#build).
 
-Alternatively, extract all of `HABITAT-0.15.0-win-x64.zip` and run `Install-HABITAT.cmd`. Always use the same format when updating: EXE and ZIP installations use different layouts and refuse to overwrite each other. Both preserve user data; the ZIP also keeps the previous release for recovery. WinGet preparation is documented in [WINGET.md](docs/WINGET.md).
+Alternatively, extract all of `HABITAT-0.15.1-win-x64.zip` and run `Install-HABITAT.cmd`. Always use the same format when updating: EXE and ZIP installations use different layouts and refuse to overwrite each other. Both preserve user data; the ZIP also keeps the previous release for recovery. WinGet preparation is documented in [WINGET.md](docs/WINGET.md).
 
 HABITAT checks for newer stable Windows releases at startup and every six hours while open. Click **Update HABITAT** at the bottom of the sidebar to download the matching EXE or ZIP, verify its SHA-256, install it and reopen the app. Downloading is cancellable; HABITAT waits for active actions and preserves drafts, tasks and preferences. Failed checks retry after one hour. Versions before 0.15.0 need one manual upgrade to gain this feature. See [in-app updates](docs/AUTO_UPDATES.md).
 
@@ -62,6 +62,8 @@ Translation uses the actual Google Translate page in Chrome through the **HABITA
 **Text-only replies** is enabled by default. It adds a visible instruction to each send asking ChatGPT to use plain text and avoid tables, images, files, and other rich content unless the message explicitly requests them. You can disable it in **Preferences…**, and the setting is saved.
 
 To bound memory usage, the local OpenAI view keeps up to 200 messages within a 2,000,000-character budget; the last message is kept in full. If older messages are removed, it shows **Earlier messages remain available in ChatGPT.** The original conversation remains complete in Chrome. Codex keeps the last twenty turns per chat and up to 32 visited chats in memory, protecting the selected chat and any pending reply; the others are queried again when opened.
+
+The calendar icon beside **Send to Codex** opens [scheduled messages](docs/CODEX_SCHEDULING.md). Choose a chat, date and time; chats stopped by a usage limit appear first, with a reset-time suggestion when available. You can explicitly include other local chats, edit or cancel queued messages. HABITAT must stay open with Windows signed in. Schedules persist across restarts; uncertain deliveries and messages more than five minutes late require review rather than automatic resending.
 
 ## Run
 

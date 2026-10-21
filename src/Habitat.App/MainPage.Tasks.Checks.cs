@@ -16,6 +16,16 @@ public sealed partial class MainPage
                 throw new InvalidOperationException("UI checks did not receive isolated services.");
             File.AppendAllText(path, "PASS: isolated services, empty in-memory Gmail credentials and explicit data paths\n");
             await _initialTaskLoad;
+            if (Environment.GetCommandLineArgs().Contains("--codex-schedules-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
+                await CheckCodexSchedulesUiAsync(path);
+            if (Environment.GetCommandLineArgs().Contains("--codex-schedules-ui-only"))
+            {
+                await StopAsync();
+                await _services.DisposeAsync();
+                window.Close();
+                Application.Current.Exit();
+                return;
+            }
             if (Environment.GetCommandLineArgs().Contains("--markets-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
                 await CheckMarketsUiAsync(path);
             if (Environment.GetCommandLineArgs().Contains("--markets-ui-only"))

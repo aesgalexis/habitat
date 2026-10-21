@@ -210,6 +210,7 @@ public sealed partial class MainPage : Page
         SendButton.SizeChanged += (_, _) => UpdateWritingLayout();
         SendButton.Click += SendButton_Click;
         _root.Children.Add(SendButton);
+        BuildCodexScheduling();
 
         surface.Children.Add(_root);
         BuildTaskInterface(surface);
@@ -266,11 +267,13 @@ public sealed partial class MainPage : Page
             Composer.TextAlignment = TextAlignment.Left;
             Composer.VerticalContentAlignment = VerticalAlignment.Bottom;
             Composer.VerticalAlignment = VerticalAlignment.Bottom;
-            Composer.Margin = new Thickness(0, 0, sendWidth + 10, bottomPadding);
+            var scheduleSpace = _destination == ComposerDestination.Codex ? 44 : 0;
+            Composer.Margin = new Thickness(0, 0, sendWidth + 10 + scheduleSpace, bottomPadding);
             SendButton.HorizontalAlignment = HorizontalAlignment.Right;
             SendButton.VerticalAlignment = VerticalAlignment.Bottom;
             SendButton.Padding = new Thickness(12, 9, 0, 9);
-            SendButton.Margin = new Thickness(0, 0, 0, bottomPadding);
+            SendButton.Margin = new Thickness(0, 0, scheduleSpace, bottomPadding);
+            PositionCodexScheduleButton(conversation: true);
 
             var editorHeight = Composer.ActualHeight > 0 ? Composer.ActualHeight : Composer.MinHeight;
             UpdateComposerHintLayout(height - bottomPadding - editorHeight);
@@ -303,6 +306,7 @@ public sealed partial class MainPage : Page
         Composer.Margin = new Thickness(0, composerTop, 0, 0);
         UpdateComposerHintLayout(composerTop);
         SendButton.Margin = new Thickness(0, sendTop, 0, 0);
+        PositionCodexScheduleButton(conversation: false);
         // Project context stays above the welcome editor without moving it.
         _destinationContent.Margin = new Thickness(0, historyTop, 0, 0);
         _destinationContent.Height = Math.Max(0, ComposerHint.Margin.Top - 16 - historyTop);
@@ -334,6 +338,7 @@ public sealed partial class MainPage : Page
         UpdateDestinationStatus();
         _timer.Start();
         TickUpdates(DateTimeOffset.UtcNow);
+        TickCodexSchedules(DateTimeOffset.UtcNow);
         RestoreUpdateRestartState();
         FocusComposer();
         if (!_preferences.SetupGuideSeen) _ = RunOperationAsync(ShowSetupAsync);
@@ -381,6 +386,7 @@ public sealed partial class MainPage : Page
         TickTasks(DateTimeOffset.UtcNow);
         TickMarkets();
         TickUpdates(DateTimeOffset.UtcNow);
+        TickCodexSchedules(DateTimeOffset.UtcNow);
         if (!_weatherRefreshing && !HasAppearanceOverlay && DateTimeOffset.UtcNow >= _nextWeatherRefresh)
         {
             _ = RefreshWeatherAsync();
@@ -603,6 +609,7 @@ public sealed partial class MainPage : Page
 
     private void UpdateSendState()
     {
+        CodexScheduleButton.IsEnabled = !_operations.IsStopping && !_services.CodexSchedules.IsSending;
         UpdateExternalDestinationState();
         if (_operations.IsStopping || _composer.IsExclusiveBusy) { SendButton.IsEnabled = false; return; }
         if (_destination.Length == 0) { SendButton.IsEnabled = true; return; }
@@ -610,7 +617,7 @@ public sealed partial class MainPage : Page
         {
             SendButton.Content = UiLanguage.Value(SendButton, "Content", () => _codexSendCancellation is not null || CodexChat.IsSubmitting ? UiText.Get("SendingToCodex") :
                 CodexChat.IsBusy ? UiText.Get("WaitingForCodex") : UiText.Get("SendToCodex"));
-            SendButton.IsEnabled = _composer.CanSend(_destination, Composer.Text);
+            SendButton.IsEnabled = !_services.CodexSchedules.IsSending && _composer.CanSend(_destination, Composer.Text);
             return;
         }
         // Keep Send visible and clickable while reconnecting. The bridge
@@ -794,6 +801,8 @@ public sealed partial class MainPage : Page
         PaintComposerCaret();
         SendButton.Background = transparent;
         SendButton.Foreground = accent;
+        CodexScheduleButton.Background = transparent;
+        CodexScheduleButton.Foreground = accent;
         foreach (var key in new[] { "ButtonForeground", "ButtonForegroundPointerOver", "ButtonForegroundPressed", "ButtonForegroundDisabled" })
             SendButton.Resources[key] = accent;
         OverflowButton.Background = transparent;

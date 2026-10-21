@@ -113,6 +113,7 @@ var destinations = ComposerDestinations.Ordered;
 await DestinationCatalogChecks.RunAsync(Check);
 await CodexDeliveryChecks.RunAsync(Check);
 await CodexChatChecks.RunAsync(Check);
+await CodexScheduleChecks.RunAsync(Check);
 CodexRetentionChecks.Run(Check);
 await VSCodeChecks.RunAsync(Check);
 await ExternalDestinationChecks.RunAsync(Check);
