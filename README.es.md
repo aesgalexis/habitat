@@ -17,7 +17,7 @@ La solicitud de alta del paquete está abierta en
 [microsoft/winget-pkgs#455544](https://github.com/microsoft/winget-pkgs/pull/455544).
 Mientras se revisa, puedes descargar el instalador directamente de GitHub Releases.
 
-1. Descarga `HABITAT-0.14.0-x64-setup.exe` y su SHA-256 desde [GitHub Releases](https://github.com/aesgalexis/habitat/releases/latest), comprueba el hash y ejecuta el instalador desde tu sesión normal de Windows. Usa los assets de la publicación; el ZIP **Source code** no contiene la aplicación compilada.
+1. Descarga `HABITAT-0.14.1-x64-setup.exe` y su SHA-256 desde [GitHub Releases](https://github.com/aesgalexis/habitat/releases/latest), comprueba el hash y ejecuta el instalador desde tu sesión normal de Windows. Usa los assets de la publicación; el ZIP **Source code** no contiene la aplicación compilada.
 2. Instala en `%LOCALAPPDATA%\Programs\HABITAT`, añade HABITAT al menú Inicio y registra su desinstalador. Incluye .NET y Windows App SDK; no requiere SDK ni permisos de administrador. Compatible con Windows x64, Windows 10 2004 o posterior y Windows 11.
 3. Abre **Set up HABITAT…** (aparece la primera vez y permanece en el menú). Detecta Chrome, abre la extensión de [Chrome Web Store](https://chromewebstore.google.com/detail/ennnldolgdbbkgmpjjpkafeajihpimii) y muestra el estado de cada conexión. Aprueba la instalación en Chrome y pulsa **Enable connection**.
 4. La extensión 0.9.0 está enviada como Unlisted y pendiente de revisión de Google al preparar esta versión. Si el enlace aún no está disponible, el asistente abre la carpeta incluida y `chrome://extensions` para cargarla descomprimida. Chrome no se instala ni añade extensiones silenciosamente.
@@ -25,7 +25,7 @@ Mientras se revisa, puedes descargar el instalador directamente de GitHub Releas
 
 El paquete incluye browser bridge **0.9.0** y el VSIX **HABITAT Terminal 0.2.0**. El instalador todavía no tiene firma de código. Consulta la [guía para otro PC](docs/GETTING_STARTED.md) y los [detalles de distribución](docs/RELEASING.md). Si prefieres trabajar desde el código fuente, clona el repositorio y sigue **Compilar**.
 
-Como alternativa, extrae todo `HABITAT-0.14.0-win-x64.zip` y ejecuta `Install-HABITAT.cmd`. Usa siempre el mismo formato para actualizar: EXE y ZIP mantienen disposiciones distintas y rechazan sobrescribirse entre sí. Ambos conservan los datos de usuario; el ZIP conserva además la publicación anterior para recuperación. La preparación para WinGet se documenta en [WINGET.md](docs/WINGET.md).
+Como alternativa, extrae todo `HABITAT-0.14.1-win-x64.zip` y ejecuta `Install-HABITAT.cmd`. Usa siempre el mismo formato para actualizar: EXE y ZIP mantienen disposiciones distintas y rechazan sobrescribirse entre sí. Ambos conservan los datos de usuario; el ZIP conserva además la publicación anterior para recuperación. La preparación para WinGet se documenta en [WINGET.md](docs/WINGET.md).
 
 HABITAT busca versiones estables nuevas para Windows al arrancar y cada seis horas mientras permanece abierto. Cuando hay una actualización, el icono **Update HABITAT**, al final del sidebar, abre su descarga oficial. La descarga y la instalación siguen siendo manuales. Los fallos se reintentan tras una hora.
 

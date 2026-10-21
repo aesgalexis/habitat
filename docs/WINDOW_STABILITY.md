@@ -17,3 +17,11 @@ La prueba usa datos aislados, ejecuta 30 ciclos de minimizar/restaurar, activaci
 La versión corregida pasó esa prueba y la suite completa de controles WinUI. Después de aplicarla a la instalación, se enviaron 60 consultas `WM_NULL` durante 30,5 segundos: todas respondieron y la latencia máxima fue de 8 ms. Esta observación breve no descarta otros bloqueos espontáneos.
 
 Las suites de lógica y las comprobaciones de distribución se ejecutaron con datos sintéticos. La verificación general se detuvo en `tests/package.checks.ps1` porque la instalación ZIP de prueba rechaza los enlaces de carpetas de la ruta de OneDrive; esa comprobación de instalación no quedó validada.
+
+## Ventana que parece congelada al perder el foco
+
+En una captura posterior de la instancia real (10:35 del 21 de octubre, hora de Madrid), la ventana respondió a `WM_NULL` en 9,8 ms y su hilo principal estaba en `GetMessageW`, dentro del bucle normal de WinUI. Su estilo extendido era `0x00080120`: los bits `WS_EX_LAYERED` y `WS_EX_TRANSPARENT` del modo de paso al escritorio seguían activos mientras otra aplicación tenía el foco.
+
+La activación por el canal interno restauró el estilo a `0x00000100` y puso la misma ventana en primer plano, sin reiniciar el proceso. El usuario confirmó que la barra de tareas y Alt+Tab también recuperaban la interacción. Ese síntoma corresponde al comportamiento de paso al escritorio; no se observó un bloqueo del hilo de interfaz en la captura.
+
+La prueba nativa cubre ahora además la recuperación mediante `WM_SETFOCUS` y activación explícita, aunque no llegue otra notificación `WM_ACTIVATEAPP`. La ruta de foco fallaba antes del refuerzo y pasa después. La desactivación de una ventana individual sigue sin activar el paso al escritorio, para conservar la interacción con los diálogos propios.

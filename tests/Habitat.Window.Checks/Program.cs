@@ -71,6 +71,18 @@ internal static class Program
                 SendMessage(window, 0x0006 /* ACTIVATE */, 0, 0);
                 Check(GetWindowLong(window, ExStyle) == originalStyle,
                     "Window deactivation alone does not strand owned menus and dialogs");
+                foreach (var message in new uint[] { 0x0006 /* WM_ACTIVATE */, 0x0007 /* WM_SETFOCUS */ })
+                {
+                    SendMessage(window, 0x001C /* WM_ACTIVATEAPP */, 0, 0);
+                    SendMessage(window, message, 1, 0);
+                    Check(GetWindowLong(window, ExStyle) == originalStyle,
+                        $"Window activation/focus restores input without relying on WM_ACTIVATEAPP: {message:X}");
+                }
+                SendMessage(window, 0x001C, 0, 0);
+                ghost.RestoreInput();
+                ghost.RestoreInput();
+                Check(GetWindowLong(window, ExStyle) == originalStyle,
+                    "Explicit activation restores input before foreground acquisition and is idempotent");
                 SendMessage(window, 0x001C, 0, 0);
                 SetWindowLong(window, ExStyle, GetWindowLong(window, ExStyle) | 0x00000010 /* ACCEPTFILES */);
             }

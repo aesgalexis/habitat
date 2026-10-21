@@ -12,6 +12,8 @@ internal sealed class InactiveWindowPassthrough : IDisposable
     private const int Layered = 0x00080000;
     private const int Transparent = 0x00000020;
     private const uint ActivateApp = 0x001C;
+    private const uint Activate = 0x0006;
+    private const uint SetFocus = 0x0007;
     private const uint NcDestroy = 0x0082;
     private const nuint SubclassId = 0x484147;
     private readonly SubclassProc _procedure;
@@ -35,6 +37,11 @@ internal sealed class InactiveWindowPassthrough : IDisposable
         // No polling or global mouse hook is needed, and taskbar/Alt+Tab/IPC
         // activation is still handled by Windows normally.
         if (message == ActivateApp) SetActive(wParam != 0);
+        // Window/focus activation can arrive without another app-activation
+        // notification, for example through an owned window or an input helper.
+        // Only application deactivation enables passthrough; every activation
+        // route must restore input immediately.
+        if (message == SetFocus || message == Activate && (wParam & 0xffff) != 0) RestoreInput();
         if (message == NcDestroy)
         {
             RemoveWindowSubclass(window, _procedure, SubclassId);
@@ -81,6 +88,8 @@ internal sealed class InactiveWindowPassthrough : IDisposable
             _reportError(exception);
         }
     }
+
+    internal void RestoreInput() => SetActive(true);
 
     private void WriteStyle(int style)
     {

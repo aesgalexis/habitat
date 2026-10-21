@@ -105,6 +105,7 @@ public sealed partial class MainWindow : Window, IWindowHost
     internal void ActivateComposer(string? text)
     {
         if (_closing) return;
+        _desktopGhost?.RestoreInput();
         if (IsIconic(Handle)) ShowWindowAsync(Handle, 9 /* SW_RESTORE */);
         Activate();
         _ = SetForegroundWindow(Handle);
@@ -301,6 +302,7 @@ public sealed partial class MainWindow : Window, IWindowHost
         IsActive = args.WindowActivationState != WindowActivationState.Deactivated;
         if (IsActive)
         {
+            _desktopGhost?.RestoreInput();
             _page.OnWindowActivated();
             _page.RefreshHybridAppearance(force: true);
             await Task.Delay(80);

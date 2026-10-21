@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.1 — 2026-10-21
+
+- Refuerzo de la recuperación de entrada al activar HABITAT, recibir el foco o usar su canal de activación: se retira el modo de paso al escritorio sin depender exclusivamente de `WM_ACTIVATEAPP`.
+- Pruebas nativas para el foco sin otra notificación de aplicación, activaciones repetidas y conservación de los estilos originales. Documentado el diagnóstico de la ventana que parecía congelada, con captura del proceso real y recuperación sin reinicio.
+
 ## 0.14.0 — 2026-10-21
 
 - Esta publicación reúne también la interfaz en inglés/español, los fondos personalizables y las cinco ilustraciones incorporados desde la última versión publicada, 0.11.0.
