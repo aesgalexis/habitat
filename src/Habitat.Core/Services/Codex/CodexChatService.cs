@@ -3,7 +3,8 @@ using Habitat.Features.Codex;
 namespace Habitat.Services;
 
 internal sealed class CodexChatService(ICodexChatDesktop desktop, ICodexHistoryReader reader,
-    Func<string, CancellationToken, Task<CodexDeliveryResult>> startNew, CodexChatOrigins origins) : ICodexChatService
+    Func<string, CancellationToken, Task<CodexDeliveryResult>> startNew, CodexChatOrigins origins,
+    Action<string>? trace = null) : ICodexChatService
 {
     public async Task<IReadOnlyList<CodexScheduleTarget>> ListScheduleTargetsAsync(CancellationToken token)
     {
@@ -99,6 +100,9 @@ internal sealed class CodexChatService(ICodexChatDesktop desktop, ICodexHistoryR
         var startedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var delivery = await startNew(text, token);
         if (delivery != CodexDeliveryResult.Sent) return new(delivery);
+        // Delivery has already been acknowledged. Linking the new chat is a
+        // separate step: failing to link must never turn Sent into Unconfirmed.
+        var sent = new CodexChatSubmission(CodexDeliveryResult.Sent);
         // New-chat naming and its sidebar row can settle after submission.
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromSeconds(8));
@@ -113,7 +117,7 @@ internal sealed class CodexChatService(ICodexChatDesktop desktop, ICodexHistoryR
                 {
                     if (created.Id == previousId || created.CreatedAt is not { } createdAt || createdAt < startedAt - 1 ||
                         createdAt > DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 1 || origins.Contains(created))
-                        return new(CodexDeliveryResult.Unconfirmed);
+                        return sent;
                     var history = await reader.ReadAsync(created, timeout.Token);
                     // A recent timestamp alone could belong to a different
                     // chat opened while delivery was settling. Verify its
@@ -121,8 +125,8 @@ internal sealed class CodexChatService(ICodexChatDesktop desktop, ICodexHistoryR
                     var first = history.Turns.FirstOrDefault()?.Messages.FirstOrDefault(message => message.Author == "YOU");
                     if (first is not null)
                     {
-                        if (history.Target.Id != created.Id || !CodexDelivery.SameText(first.Text, text))
-                            return new(CodexDeliveryResult.Unconfirmed);
+                        if (history.Target.Id != created.Id || !CodexDelivery.SameHistoryText(first.Text, text))
+                            return sent;
                         origins.Register(created);
                         return new(delivery, created);
                     }
@@ -130,9 +134,12 @@ internal sealed class CodexChatService(ICodexChatDesktop desktop, ICodexHistoryR
                 await Task.Delay(150, timeout.Token);
             }
         }
-        catch (OperationCanceledException) when (!token.IsCancellationRequested) { return new(CodexDeliveryResult.Unconfirmed); }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        { return new(CodexDeliveryResult.Unconfirmed); }
+        catch (Exception exception)
+        {
+            try { trace?.Invoke($"Codex delivery confirmed; chat linking unavailable: {exception.GetType().Name} {exception.HResult:X8}."); }
+            catch { /* Diagnostics cannot change an acknowledged delivery. */ }
+            return sent;
+        }
     }
 
     public Task<bool> OpenChatAsync(CodexChatTarget? target, CancellationToken token) => desktop.OpenChatAsync(target, token);

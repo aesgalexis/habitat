@@ -18,6 +18,8 @@
   "CodexScheduleLoading": "Loading chats and usage limits…",
   "CodexScheduleRequirements": "Keep HABITAT open and Windows signed in. The selected chat opens at the scheduled time. Messages more than five minutes late stay here for rescheduling.",
   "CodexScheduleQueued": "Scheduled messages",
+  "CodexScheduleHistory": "Sent and cancelled messages",
+  "CodexScheduleHideHistory": "Hide sent and cancelled messages",
   "CodexScheduleSave": "Schedule message",
   "CodexScheduleReschedule": "Save schedule",
   "CodexScheduleEdit": "Edit schedule",

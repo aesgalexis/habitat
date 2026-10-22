@@ -18,6 +18,8 @@
   "CodexScheduleLoading": "Cargando chats y límites de uso…",
   "CodexScheduleRequirements": "Mantén HABITAT abierto y la sesión de Windows iniciada. El chat elegido se abrirá a la hora programada. Los mensajes con más de cinco minutos de retraso quedan aquí para reprogramarlos.",
   "CodexScheduleQueued": "Mensajes programados",
+  "CodexScheduleHistory": "Mensajes enviados y cancelados",
+  "CodexScheduleHideHistory": "Ocultar mensajes enviados y cancelados",
   "CodexScheduleSave": "Programar mensaje",
   "CodexScheduleReschedule": "Guardar programación",
   "CodexScheduleEdit": "Editar programación",

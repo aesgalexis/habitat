@@ -140,7 +140,9 @@ public sealed partial class MainPage
             _codexScheduleSnapshot = _services.CodexSchedules.Messages;
             RenderCodexScheduleNotice();
             queued.Children.Clear();
-            foreach (var item in _services.CodexSchedules.Messages.OrderBy(item => item.State == CodexScheduleState.Pending ? 0 : 1).ThenBy(item => item.SendAt))
+            var finished = new StackPanel { Spacing = 12 };
+            foreach (var item in _services.CodexSchedules.Messages.OrderBy(item => item.State switch
+                { CodexScheduleState.NeedsAttention => 0, CodexScheduleState.Pending => 1, CodexScheduleState.Sending => 2, _ => 3 }).ThenBy(item => item.SendAt))
             {
                 var row = new StackPanel { Spacing = 4 };
                 row.Children.Add(new TextBlock { Text = item.Target?.Title ?? UiText.Get("CodexScheduleNewChat"), TextWrapping = TextWrapping.Wrap });
@@ -182,9 +184,23 @@ public sealed partial class MainPage
                     };
                     actions.Children.Add(remove);
                 }
-                row.Children.Add(actions); queued.Children.Add(row);
+                row.Children.Add(actions);
+                (item.State is CodexScheduleState.Sent or CodexScheduleState.Cancelled ? finished : queued).Children.Add(row);
             }
             if (queued.Children.Count == 0) queued.Children.Add(new TextBlock { Text = UiText.Get("CodexScheduleEmpty"), TextWrapping = TextWrapping.Wrap });
+            if (finished.Children.Count > 0)
+            {
+                // Use the existing Tasks/VS Code toggle pattern: Expander's
+                // template is unstable in the bundled WinUI runtime.
+                finished.Visibility = Visibility.Collapsed;
+                var history = new Button { Content = UiText.Get("CodexScheduleHistory") };
+                history.Click += (_, _) =>
+                {
+                    finished.Visibility = finished.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+                    history.Content = UiText.Get(finished.Visibility == Visibility.Visible ? "CodexScheduleHideHistory" : "CodexScheduleHistory");
+                };
+                queued.Children.Add(history); queued.Children.Add(finished);
+            }
         }
         async Task ListAsync()
         {

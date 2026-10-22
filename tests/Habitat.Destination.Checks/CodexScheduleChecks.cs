@@ -36,10 +36,10 @@ internal static class CodexScheduleChecks
         await queue.RunDueAsync(now.AddMinutes(5), Send, default);
         check(calls == 1 && queue.IsSending && !queue.Cancel(first.Id) && !queue.Remove(first.Id),
             "Overlapping ticks, cancellation and removal cannot duplicate an in-flight scheduled send");
-        finish.SetResult(new(CodexDeliveryResult.Sent)); await pending;
+        finish.SetResult(new(CodexDeliveryResult.Sent, now.AddMinutes(20))); await pending;
         await queue.RunDueAsync(now.AddMinutes(6), Send, default);
-        check(calls == 1 && !queue.IsSending && new CodexScheduleQueue(file).Messages.Single().State == CodexScheduleState.Sent,
-            "Confirmed scheduled delivery is persisted and cannot run again after a tick or restart");
+        check(calls == 1 && !queue.IsSending && new CodexScheduleQueue(file).Messages.Single() is { State: CodexScheduleState.Sent, Issue: null, RetryAt: null },
+            "Acknowledged delivery takes precedence over retry metadata, persists Sent without review and never runs again");
 
         var uncertain = queue.Add(B, text, now.AddMinutes(8), now);
         await queue.RunDueAsync(now.AddMinutes(8), (_, _) => Task.FromResult(new CodexScheduledAttempt(CodexDeliveryResult.Unconfirmed)), default);
@@ -106,7 +106,7 @@ internal static class CodexScheduleChecks
             check(text == literal && desktop.Opens == 0 && desktop.Sends == 0 && reader.Reads.Count == 0,
                 "A scheduled first message opens a separate new chat without reading or submitting to the visible foreign chat");
             reader.Created = new("33333333-3333-3333-3333-333333333333", "Created by HABITAT", DateTimeOffset.UtcNow.ToUnixTimeSeconds());
-            reader.InitialText = text;
+            reader.InitialText = text + "\n";
             desktop.NoEditor = false;
             return Task.FromResult(CodexDeliveryResult.Sent);
         }, origins);

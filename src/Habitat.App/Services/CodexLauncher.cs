@@ -34,7 +34,7 @@ internal sealed class CodexLauncher(Action<string>? trace = null, AppDataPaths? 
             package.Executable, trace);
         return _chat ??= new CodexChatService(_desktop, new CodexReadClient(package.Reader),
             (text, cancellation) => new CodexDelivery(_desktop, trace: trace).SendAsync(text, cancellation),
-            new CodexChatOrigins((paths ?? AppDataPaths.Production).CodexChatsPath));
+            new CodexChatOrigins((paths ?? AppDataPaths.Production).CodexChatsPath), trace);
     }
 
     public async Task<CodexChatSelection> GetVisibleAsync(CancellationToken token) => await (await GetChatAsync(token)).GetVisibleAsync(token);

@@ -174,6 +174,29 @@ public sealed partial class MainPage
             !AutomationProperties.GetName(CodexScheduleButton).Contains(UiText.Get("CodexScheduleStorageFailed")))
             throw new InvalidOperationException("Unreadable storage must show a warning rather than imply that the queue is empty.");
         _codexSchedulesFailed = false; PaintCodexScheduleNotice();
+        var delivered = _services.CodexSchedules.Add(null, "Delivered synthetic message", now.AddMinutes(1), now);
+        await _services.CodexSchedules.RunDueAsync(now.AddMinutes(1), (_, _) => Task.FromResult(new CodexScheduledAttempt(CodexDeliveryResult.Sent)), default);
+        _codexScheduleSnapshot = await Task.Run(() => new CodexScheduleQueue(_services.Paths.CodexSchedulesPath).Messages);
+        RenderCodexScheduleNotice();
+        if (_codexScheduleBadge.Visibility != Visibility.Collapsed || _codexScheduleWarning.Visibility != Visibility.Collapsed ||
+            AutomationProperties.GetName(CodexScheduleButton) != UiText.Get("CodexScheduleOpen"))
+            throw new InvalidOperationException("An acknowledged message must remain free of pending counts and review warnings after restarting.");
+        var original = Composer.Text;
+        Composer.Text = "";
+        var showing = ShowCodexScheduleAsync();
+        try
+        {
+            await Task.Delay(180);
+            var dialog = _activeDialog!;
+            var history = FindButton(dialog, UiText.Get("CodexScheduleHistory"));
+            var finished = (StackPanel)((Panel)history.Parent).Children[((Panel)history.Parent).Children.IndexOf(history) + 1];
+            if (finished.Visibility != Visibility.Collapsed || !Descendants(dialog).OfType<TextBlock>().Any(item => item.Text == UiText.Get("CodexScheduleEmpty")))
+                throw new InvalidOperationException("Sent messages belong in collapsed history, with an empty active queue and no review request.");
+            await InvokeAsync(history);
+            if (finished.Visibility != Visibility.Visible || history.Content as string != UiText.Get("CodexScheduleHideHistory"))
+                throw new InvalidOperationException("Completed-message history must be explicitly expandable without reopening an active request.");
+        }
+        finally { _activeDialog?.Hide(); await showing; Composer.Text = original; _services.CodexSchedules.Remove(delivered.Id); }
         File.AppendAllText(log, $"PASS: Codex schedule indicators in {UiText.Language}: restart recovery, distinct pending/review states, both themes, language changes, rescheduling and storage warnings; isolated data only.\n");
     }
 

@@ -44,7 +44,7 @@ internal static class CodexChatChecks
         session.Accept(new(CodexDeliveryResult.Unconfirmed, A), "uncertain");
         check(!session.IsWaiting, "An uncertain Codex send never creates a second request or invents a confirmed pending turn");
 
-        var desktop = new Desktop(); var reader = new Reader(); var newChats = 0;
+        var desktop = new Desktop(); var reader = new Reader { InitialText = "new chat\n" }; var newChats = 0;
         var newResult = CodexDeliveryResult.NotSent;
         var origins = new CodexChatOrigins(null);
         await using var service = new CodexChatService(desktop, reader, (_, _) =>
@@ -59,7 +59,7 @@ internal static class CodexChatChecks
         newResult = CodexDeliveryResult.Sent;
         reader.Target = A with { CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds() };
         check((await service.SendAsync(null, "new chat", default)).Target == reader.Target && origins.Contains(A),
-            "Only a confirmed HABITAT new-chat delivery with its matching initial instruction records the chat origin");
+            "A confirmed HABITAT delivery records its origin even when Codex history appends its final paragraph newline");
         reader.Target = A; newChats = 0; newResult = CodexDeliveryResult.NotSent;
         check((await service.GetVisibleAsync(default)).Target == A, "Codex links the visible sidebar selection only when HABITAT started that exact chat identity");
         var sent = await service.SendAsync(A, "follow up", default);
@@ -89,10 +89,10 @@ internal static class CodexChatChecks
         check((await service.SendAsync(null, "new chat", default)).Target == reader.Target && newChats == 1,
             "A confirmed new Codex chat links its response only after resolving a recently created local chat");
         desktop.Visible = null; reader.Target = B with { CreatedAt = 1 };
-        check((await service.SendAsync(null, "changed after send", default)).Result == CodexDeliveryResult.Unconfirmed && newChats == 2,
-            "Switching to an older chat during new-chat confirmation cannot bind the pending response to that chat or resend");
+        check((await service.SendAsync(null, "changed after send", default)) is { Result: CodexDeliveryResult.Sent, Target: null } && newChats == 2,
+            "Switching to an older chat after acknowledged delivery cannot downgrade Sent, link the wrong chat or resend");
         desktop.Visible = null; reader.Target = B with { CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds() };
-        check((await service.SendAsync(null, "different instruction", default)).Result == CodexDeliveryResult.Unconfirmed && !origins.Contains(B) &&
+        check((await service.SendAsync(null, "different instruction", default)) is { Result: CodexDeliveryResult.Sent, Target: null } && !origins.Contains(B) &&
             (await service.GetVisibleAsync(default)).Target is null,
             "Even a newly created external chat cannot be adopted when its initial instruction differs from HABITAT's delivery");
         await CheckOriginsAsync(check);
@@ -139,9 +139,25 @@ internal static class CodexChatChecks
             emptyDesktop.Visible = Desktop.Ready();
             return Task.FromResult(CodexDeliveryResult.Sent);
         }, blocked);
-        check((await cannotPersist.SendAsync(null, instruction, default)).Result == CodexDeliveryResult.Unconfirmed &&
+        check((await cannotPersist.SendAsync(null, instruction, default)) is { Result: CodexDeliveryResult.Sent, Target: null } &&
             !blocked.Contains(A) && (await cannotPersist.GetVisibleAsync(default)).Target is null,
-            "A delivered chat remains unlinked when saving its origin fails, without retrying or importing its response");
+            "An acknowledged delivery stays Sent when saving its origin fails, without retrying or importing an unlinked response");
+
+        foreach (var failure in new Exception[] { new IOException(), new OperationCanceledException(), new InvalidOperationException() })
+        {
+            var noOrigins = new CodexChatOrigins(null);
+            var unresolvedReader = new Reader { ResolveFailure = failure };
+            var freshDesktop = new Desktop { Visible = null };
+            var sends = 0;
+            await using var acknowledged = new CodexChatService(freshDesktop, unresolvedReader, (_, _) =>
+            { sends++; freshDesktop.Visible = Desktop.Ready(); return Task.FromResult(CodexDeliveryResult.Sent); }, noOrigins);
+            check((await acknowledged.SendAsync(null, instruction, default)) is { Result: CodexDeliveryResult.Sent, Target: null } && sends == 1 && !noOrigins.Contains(A),
+                "Post-delivery chat linking failures cannot downgrade Sent or repeat the message: " + failure.GetType().Name);
+        }
+        check(CodexDelivery.SameHistoryText("  literal\n", "  literal") &&
+            !CodexDelivery.SameHistoryText("literal ", "literal") && !CodexDelivery.SameHistoryText(" literal\n", "literal") &&
+            !CodexDelivery.SameHistoryText("literal\n\n", "literal") && !CodexDelivery.SameText("literal\n", "literal"),
+            "History receipts allow one appended paragraph newline without relaxing editor checks or trimming user whitespace");
     }
 
     private static async Task CheckOriginsAsync(Action<bool, string> check)
@@ -272,8 +288,10 @@ internal static class CodexChatChecks
         public bool Running;
         public int Reads;
         public string InitialText = "new chat";
+        public Exception? ResolveFailure;
         public List<string> ReadTargets = [];
-        public Task<CodexChatTarget?> ResolveAsync(IReadOnlyList<string> titles, CancellationToken token) => Task.FromResult<CodexChatTarget?>(Target);
+        public Task<CodexChatTarget?> ResolveAsync(IReadOnlyList<string> titles, CancellationToken token) => ResolveFailure is { } error
+            ? Task.FromException<CodexChatTarget?>(error) : Task.FromResult<CodexChatTarget?>(Target);
         public Task<CodexChatHistory> ReadAsync(CodexChatTarget target, CancellationToken token)
         {
             Reads++;

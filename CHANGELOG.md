@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.15.6 — 2026-10-22
+
+- Un envío confirmado por Codex se mantiene como enviado aunque falle la identificación posterior del chat, su registro local o el acceso al historial. Estas comprobaciones ya no generan avisos falsos de revisión ni reintentos de un mensaje entregado.
+- Se reconoce el salto de línea final que Codex añade al guardar un mensaje, sin modificar el texto enviado ni relajar la comprobación del editor.
+- Los mensajes enviados y cancelados quedan en un historial cerrado por defecto. La lista principal y los avisos se reservan para envíos pendientes o que requieren atención real.
+- Pruebas de regresión para confirmación, fallos posteriores al envío, conservación de espacios, reinicios y ausencia de avisos para mensajes entregados.
+
 ## 0.15.5 — 2026-10-22
 
 - El calendario de Codex muestra el número de mensajes pendientes y la hora del próximo envío en su tooltip y etiqueta accesible. El contador se recupera tras reiniciar y se actualiza al enviar, reprogramar o cancelar.

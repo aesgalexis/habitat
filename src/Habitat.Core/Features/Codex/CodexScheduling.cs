@@ -155,10 +155,12 @@ internal sealed class CodexScheduleQueue(string path)
             CodexScheduledAttempt attempt;
             try { attempt = await send(item, token); }
             catch { attempt = new(CodexDeliveryResult.Unconfirmed); }
-            var next = attempt.RetryAt is { } retry && retry > now
+            var next = attempt.Result == CodexDeliveryResult.Sent
+                ? item with { State = CodexScheduleState.Sent, Issue = null, RetryAt = null }
+                : attempt.RetryAt is { } retry && retry > now
                 ? item with { RetryAt = retry, State = CodexScheduleState.Pending }
-                : item with { State = attempt.Result == CodexDeliveryResult.Sent ? CodexScheduleState.Sent : CodexScheduleState.NeedsAttention,
-                    Issue = attempt.Result == CodexDeliveryResult.Sent ? null : attempt.Result == CodexDeliveryResult.NotSent
+                : item with { State = CodexScheduleState.NeedsAttention,
+                    Issue = attempt.Result == CodexDeliveryResult.NotSent
                         ? "CodexScheduleNotSent" : "CodexScheduleUnconfirmed" };
             await Task.Run(() => Change(next));
         }
