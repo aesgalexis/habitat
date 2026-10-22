@@ -31,6 +31,9 @@ internal sealed partial class CodexDesktopAutomation
         }
         using var automation = new Automation();
         var state = ReadWindow(automation, _lastChatWindow);
+        // Codex home/Work views may have no chat editor. They are not an
+        // existing conversation and do not prevent starting a separate chat.
+        if (state.Composers.Count == 0) return null;
         if (state.Composers.Count != 1) throw new InvalidDataException("Open a chat in Codex, then reload.");
         var composer = state.Composers[0];
         var root = automation.Root(_lastChatWindow);

@@ -25,6 +25,8 @@ internal sealed class CodexChatService(ICodexChatDesktop desktop, ICodexHistoryR
         if (string.IsNullOrWhiteSpace(text) || text.Contains('\0')) return new(CodexDeliveryResult.NotSent);
         if (target is null)
         {
+            var visible = await desktop.ReadVisibleAsync(token);
+            if (visible is { Composer.IsNewChat: true, IsEmpty: false }) return new(CodexDeliveryResult.NotSent);
             if (await reader.ReadLimitResetAsync(token) is { } newReset && newReset > DateTimeOffset.UtcNow)
                 return new(CodexDeliveryResult.NotSent, newReset.AddSeconds(5));
             return new((await StartNewAsync(text, null, token)).Result);

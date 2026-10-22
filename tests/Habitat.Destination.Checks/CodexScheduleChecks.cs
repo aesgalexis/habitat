@@ -107,16 +107,30 @@ internal static class CodexScheduleChecks
                 "A scheduled first message opens a separate new chat without reading or submitting to the visible foreign chat");
             reader.Created = new("33333333-3333-3333-3333-333333333333", "Created by HABITAT", DateTimeOffset.UtcNow.ToUnixTimeSeconds());
             reader.InitialText = text;
+            desktop.NoEditor = false;
             return Task.FromResult(CodexDeliveryResult.Sent);
         }, origins);
         check((await service.ListScheduleTargetsAsync(default)).Count == 0 && reader.Reads.Count == 0,
             "An empty HABITAT registry never exposes external chats just to enable the first scheduled message");
         await queue.RunDueAsync(now, (item, token) => service.SendScheduledAsync(item.Target, item.Text, token), default);
         check(starts == 0, "Saving a first-message schedule does not create a Codex chat or send early");
+        desktop.NewChat = true; desktop.Empty = false;
+        check((await service.SendScheduledAsync(null, literal, default)).Result == CodexDeliveryResult.NotSent && starts == 0 &&
+            desktop.Opens == 0 && desktop.Sends == 0 && reader.Reads.Count == 0,
+            "A first-message schedule cannot replace an unsent draft in Codex's new-chat editor");
+        desktop.NewChat = false;
+        reader.Reset = null;
+        desktop.Empty = false;
+        desktop.NoEditor = true;
+        check((await service.SendScheduledAsync(null, "", default)).Result == CodexDeliveryResult.NotSent && starts == 0,
+            "An empty first-message request never navigates to Codex even without an editor");
+        desktop.NoEditor = false;
+        reader.Reset = DateTimeOffset.UtcNow.AddHours(1);
         await queue.RunDueAsync(now.AddMinutes(5), (item, token) => service.SendScheduledAsync(item.Target, item.Text, token), default);
         check(starts == 0 && queue.Messages.Single().RetryAt == reader.Reset!.Value.AddSeconds(5),
             "A new-chat schedule also waits for a known exhausted account limit before creating the chat");
         reader.Reset = null;
+        desktop.NoEditor = true;
         await queue.RunDueAsync(queue.Messages.Single().RetryAt!.Value, (item, token) => service.SendScheduledAsync(item.Target, item.Text, token), default);
         check(starts == 1 && queue.Messages.Single().State == CodexScheduleState.Sent && origins.Contains(reader.Created!) &&
             (await service.ListScheduleTargetsAsync(default)).Single().Target == reader.Created && reader.Reads.All(id => id == reader.Created.Id),
@@ -240,11 +254,11 @@ internal static class CodexScheduleChecks
     }
     private sealed class Desktop : ICodexChatDesktop
     {
-        public bool Empty = true;
+        public bool Empty = true, NewChat, NoEditor;
         public int Opens, Sends;
         public CodexChatTarget? LastTarget;
         public string? Text;
-        public Task<CodexVisibleChat?> ReadVisibleAsync(CancellationToken token) => Task.FromResult<CodexVisibleChat?>(new(new(1, "editor", "send", Empty ? "" : "Protected draft", false, true), [B.Title], Empty, true));
+        public Task<CodexVisibleChat?> ReadVisibleAsync(CancellationToken token) => Task.FromResult<CodexVisibleChat?>(NoEditor ? null : new(new(1, "editor", "send", Empty ? "" : "Protected draft", NewChat, true), [B.Title], Empty, true));
         public Task<bool> OpenChatAsync(CodexChatTarget? target, CancellationToken token) { Opens++; LastTarget = target; return Task.FromResult(true); }
         public Task<CodexDeliveryResult> SubmitVisibleAsync(CodexVisibleChat expected, string text, CancellationToken token) { Sends++; Text = text; return Task.FromResult(CodexDeliveryResult.Sent); }
         public void ReturnFocus(nint ownerWindow) { }

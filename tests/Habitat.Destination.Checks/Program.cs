@@ -42,6 +42,20 @@ if (args.Contains("--vscode-smoke"))
     return;
 }
 
+if (args.Contains("--codex-composer-inspect"))
+{
+    if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
+    var family = args.First(arg => arg.StartsWith("--codex-family="))["--codex-family=".Length..];
+    var executable = args.First(arg => arg.StartsWith("--codex-executable="))["--codex-executable=".Length..];
+    var desktop = new CodexDesktopAutomation(family, _ => Task.FromResult(false), executable);
+    var composers = await desktop.ReadComposersAsync(default);
+    var visible = await desktop.ReadVisibleAsync(default);
+    Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { ComposerCount = composers.Count,
+        HasVisibleChat = visible is not null, HasDraft = visible is { IsEmpty: false } }));
+    // No navigation, interaction, thread resolution or history reads.
+    return;
+}
+
 if (args.Contains("--codex-chat-inspect"))
 {
     if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();

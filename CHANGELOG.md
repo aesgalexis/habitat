@@ -1,10 +1,11 @@
 # Changelog
 
-## 0.15.3 — 2026-10-22
+## 0.15.4 — 2026-10-22
 
 - La programación permite elegir **Nuevo chat de Codex**, incluso antes de haber enviado el primer mensaje desde HABITAT. El chat se crea a la hora programada; guardar no envía nada.
 - Los chats existentes creados desde HABITAT mantienen la prioridad por límite de uso. Si su listado falla, sigue siendo posible programar un chat nuevo sin cambiar el destino de una programación existente.
 - La cola distingue de forma explícita un chat nuevo de un destino existente, conserva las programaciones anteriores y evita repetir un envío dudoso tras un reinicio.
+- Un borrador en el editor de nuevo chat de Codex bloquea la entrega programada para conservarlo. Las vistas de Codex sin editor dejan de producir errores repetidos al consultar el chat visible.
 
 ## 0.15.2 — 2026-10-21
 
