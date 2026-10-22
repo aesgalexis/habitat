@@ -33,6 +33,7 @@ public sealed partial class MainPage
     private async Task StopCoreAsync()
     {
         _timer.Stop();
+        _codexScheduleConfirmation.Hide();
         _composer.Stop();
         CancelEmptyYouTubeReset();
         CancelPendingCodexSend();

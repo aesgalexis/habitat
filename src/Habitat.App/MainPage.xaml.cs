@@ -803,6 +803,7 @@ public sealed partial class MainPage : Page
         SendButton.Foreground = accent;
         CodexScheduleButton.Background = transparent;
         CodexScheduleButton.Foreground = accent;
+        PaintCodexScheduleNotice();
         foreach (var key in new[] { "ButtonForeground", "ButtonForegroundPointerOver", "ButtonForegroundPressed", "ButtonForegroundDisabled" })
             SendButton.Resources[key] = accent;
         OverflowButton.Background = transparent;

@@ -26,8 +26,7 @@ public sealed partial class MainPage
     private void BuildCodexScheduling()
     {
         UseStableWidgetButton(CodexScheduleButton);
-        UiLanguage.SetName(CodexScheduleButton, () => UiText.Get("CodexScheduleOpen"));
-        UiLanguage.SetToolTip(CodexScheduleButton, () => UiText.Get("CodexScheduleOpen"));
+        BuildCodexScheduleNotice();
         CodexScheduleButton.Click += async (_, _) => await RunOperationAsync(ShowCodexScheduleAsync);
         _root.Children.Add(CodexScheduleButton);
     }
@@ -45,6 +44,7 @@ public sealed partial class MainPage
 
     private void TickCodexSchedules(DateTimeOffset now)
     {
+        TickCodexScheduleConfirmation(now);
         if (_services.Paths.IsIsolated || _operations.IsStopping || _checkingCodexSchedules || _codexSchedulesFailed ||
             HasAppearanceOverlay || _activeDialog is not null || _openingUpdate || now < _nextCodexScheduleTick ||
             _codexSendCancellation is not null || _composer.IsExclusiveBusy || CodexChat.IsSubmitting) return;
@@ -54,24 +54,29 @@ public sealed partial class MainPage
         {
             try
             {
-                var due = await Task.Run(() => _services.CodexSchedules.Messages.Any(item => item.State == CodexScheduleState.Pending &&
-                    (item.RetryAt ?? item.SendAt) <= now), _operations.Token);
+                _codexScheduleSnapshot = await Task.Run(() => _services.CodexSchedules.Messages, _operations.Token);
+                RenderCodexScheduleNotice();
+                var due = _codexScheduleSnapshot.Any(item => item.State == CodexScheduleState.Pending && (item.RetryAt ?? item.SendAt) <= now);
                 if (!due || _operations.IsStopping) return;
                 await _services.CodexSchedules.RunDueAsync(now, async (message, token) =>
                 {
                     UpdateSendState();
+                    _codexScheduleSnapshot = await Task.Run(() => _services.CodexSchedules.Messages, token);
+                    RenderCodexScheduleNotice();
                     if (_codexSendCancellation is not null || _composer.IsExclusiveBusy || CodexChat.IsSubmitting ||
                         HasAppearanceOverlay || _activeDialog is not null || _openingUpdate)
                         return new(CodexDeliveryResult.NotSent, DateTimeOffset.UtcNow.AddSeconds(30));
                     return await _services.Codex.SendScheduledAsync(message.Target, message.Text, token);
                 }, _operations.Token);
+                _codexScheduleSnapshot = await Task.Run(() => _services.CodexSchedules.Messages, _operations.Token);
+                RenderCodexScheduleNotice();
                 if (!_operations.IsStopping && _destination == ComposerDestination.Codex) await CodexChat.RefreshAsync();
             }
             catch (Exception exception)
             {
                 _codexSchedulesFailed = true;
                 _services.ReportError("Codex scheduled outbox", exception);
-                UiLanguage.SetHelpText(CodexScheduleButton, () => UiText.Get("CodexScheduleStorageFailed"));
+                RenderCodexScheduleNotice();
             }
             finally { _checkingCodexSchedules = false; UpdateSendState(); }
         });
@@ -80,6 +85,7 @@ public sealed partial class MainPage
     private async Task ShowCodexScheduleAsync()
     {
         if (_operations.IsStopping || HasAppearanceOverlay || _activeDialog is not null || _services.CodexSchedules.IsSending) return;
+        _codexScheduleConfirmation.Hide();
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(_operations.Token);
         var original = Composer.Text;
         var submission = _composerDrafts.Capture(_destination);
@@ -94,11 +100,12 @@ public sealed partial class MainPage
         var status = new TextBlock { Text = UiText.Get("CodexScheduleLoading"), TextWrapping = TextWrapping.Wrap };
         AutomationProperties.SetLiveSetting(status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         var queued = new StackPanel { Spacing = 12 };
+        var queuedHeading = new TextBlock { Text = UiText.Get("CodexScheduleQueued"), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
         var body = new StackPanel { Spacing = 12, MinWidth = 320, MaxWidth = 520 };
         body.Children.Add(new TextBlock { Text = UiText.Get("CodexScheduleRequirements"), TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
         body.Children.Add(message); body.Children.Add(target);
         body.Children.Add(date); body.Children.Add(time); body.Children.Add(reset); body.Children.Add(status);
-        body.Children.Add(new TextBlock { Text = UiText.Get("CodexScheduleQueued"), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+        body.Children.Add(queuedHeading);
         body.Children.Add(queued);
         var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = UiText.Get("CodexScheduleTitle"),
             Content = new ScrollViewer { Content = body, MaxHeight = 540, VerticalScrollBarVisibility = ScrollBarVisibility.Auto },
@@ -109,6 +116,7 @@ public sealed partial class MainPage
         var ready = false;
         var listing = false;
         var saving = false;
+        DateTimeOffset? savedAt = null;
         Task<ContentDialogResult>? showing = null;
         DateTimeOffset? When()
         {
@@ -129,6 +137,8 @@ public sealed partial class MainPage
         }
         void RenderQueued()
         {
+            _codexScheduleSnapshot = _services.CodexSchedules.Messages;
+            RenderCodexScheduleNotice();
             queued.Children.Clear();
             foreach (var item in _services.CodexSchedules.Messages.OrderBy(item => item.State == CodexScheduleState.Pending ? 0 : 1).ThenBy(item => item.SendAt))
             {
@@ -164,7 +174,11 @@ public sealed partial class MainPage
                             if (editing == item.Id) { editing = null; dialog.PrimaryButtonText = UiText.Get("CodexScheduleSave"); }
                             RenderQueued(); Validate();
                         }
-                        catch (Exception exception) { _services.ReportError("Cancel scheduled Codex message", exception); status.Text = UiText.Get("CodexScheduleStorageFailed"); }
+                        catch (Exception exception)
+                        {
+                            _services.ReportError("Cancel scheduled Codex message", exception); status.Text = UiText.Get("CodexScheduleStorageFailed");
+                            _codexSchedulesFailed = true; RenderCodexScheduleNotice();
+                        }
                     };
                     actions.Children.Add(remove);
                 }
@@ -226,12 +240,18 @@ public sealed partial class MainPage
                 if (editing is { } id) await Task.Run(() => _services.CodexSchedules.Reschedule(id, selected.Target, text, at, DateTimeOffset.Now));
                 else await Task.Run(() => _services.CodexSchedules.Add(selected.Target, text, at, DateTimeOffset.Now));
                 _codexSchedulesFailed = false;
+                _codexScheduleSnapshot = _services.CodexSchedules.Messages;
+                RenderCodexScheduleNotice();
                 if (_destination == ComposerDestination.Codex && text == original && Composer.Text == original)
                 { _composerDrafts.Accept(submission); _composerDrafts.Clear(submission); RestoreComposerDraft(); }
-                status.Text = UiText.Format("CodexScheduleSaved", at.ToLocalTime());
+                savedAt = at;
                 args.Cancel = false;
             }
-            catch (Exception exception) { _services.ReportError("Save scheduled Codex message", exception); status.Text = UiText.Get("CodexScheduleStorageFailed"); }
+            catch (Exception exception)
+            {
+                _services.ReportError("Save scheduled Codex message", exception); status.Text = UiText.Get("CodexScheduleStorageFailed");
+                _codexSchedulesFailed = true; RenderCodexScheduleNotice();
+            }
             finally { saving = false; Validate(); deferral.Complete(); }
         };
         _appearanceDialogOpen = true;
@@ -239,12 +259,22 @@ public sealed partial class MainPage
         {
             showing = ShowDialogAsync(dialog);
             await Task.Run(() => _services.CodexSchedules.Messages, cancel.Token);
+            _codexSchedulesFailed = false;
             RenderQueued();
+            if (_codexScheduleSnapshot.Count > 0 && string.IsNullOrWhiteSpace(original))
+            {
+                body.Children.Remove(queuedHeading); body.Children.Remove(queued);
+                body.Children.Insert(0, queuedHeading); body.Children.Insert(1, queued);
+            }
             await ListAsync();
             await showing;
         }
         catch (OperationCanceledException) when (cancel.IsCancellationRequested) { }
-        catch (Exception exception) { _services.ReportError("Codex scheduled messages", exception); SetStatus(UiText.Get("CodexScheduleStorageFailed"), StatusTone.Warning); }
+        catch (Exception exception)
+        {
+            _services.ReportError("Codex scheduled messages", exception); SetStatus(UiText.Get("CodexScheduleStorageFailed"), StatusTone.Warning);
+            _codexSchedulesFailed = true; RenderCodexScheduleNotice();
+        }
         finally
         {
             dialog.Hide();
@@ -252,5 +282,6 @@ public sealed partial class MainPage
             _appearanceDialogOpen = false;
             if (!_operations.IsStopping) FocusComposer();
         }
+        if (savedAt is { } confirmed) ShowCodexScheduleConfirmation(confirmed);
     }
 }

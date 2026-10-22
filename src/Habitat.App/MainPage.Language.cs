@@ -13,6 +13,7 @@ public sealed partial class MainPage
         RenderGmail();
         RenderMarkets();
         RenderUpdateNotice();
+        RenderCodexScheduleNotice();
         UpdateDestinationPresentation();
         _conversationView.RefreshLanguage();
         CodexChat.RefreshLanguage();

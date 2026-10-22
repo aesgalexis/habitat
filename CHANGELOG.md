@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.15.5 — 2026-10-22
+
+- El calendario de Codex muestra el número de mensajes pendientes y la hora del próximo envío en su tooltip y etiqueta accesible. El contador se recupera tras reiniciar y se actualiza al enviar, reprogramar o cancelar.
+- Guardar muestra una confirmación temporal junto al calendario sin quitar el foco al editor. Con el editor vacío, abrir el calendario muestra primero la lista de programaciones existentes.
+- Los envíos que requieren revisión y los errores de almacenamiento muestran una señal ámbar persistente. Los estados enviados o cancelados no cuentan como pendientes.
+- Textos y comprobaciones en español e inglés, con ambos temas y datos de prueba aislados.
+
 ## 0.15.4 — 2026-10-22
 
 - La programación permite elegir **Nuevo chat de Codex**, incluso antes de haber enviado el primer mensaje desde HABITAT. El chat se crea a la hora programada; guardar no envía nada.

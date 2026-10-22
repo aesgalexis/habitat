@@ -61,9 +61,21 @@ public sealed partial class MainPage
                     throw new InvalidOperationException("Use reset time must set a local date/time after the known account reset.");
                 await InvokeAsync(FindButton(dialog, UiText.Get("CodexScheduleSave")));
                 await showing.WaitAsync(TimeSpan.FromSeconds(8)); showing = null;
+                await Task.Delay(100);
                 var saved = _services.CodexSchedules.Messages.Single();
                 if (saved.Target != fake.Limited || saved.Text != literal || saved.State != CodexScheduleState.Pending || Composer.Text.Length != 0 || fake.Sends != 0)
                     throw new InvalidOperationException("Scheduling must durably preserve the exact draft and chosen chat, then clear only that draft without sending early.");
+                var notice = AutomationProperties.GetName(CodexScheduleButton);
+                var open = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetOpenPopupsForXamlRoot(XamlRoot);
+                if (_codexScheduleBadge.Visibility != Visibility.Visible || _codexScheduleCount.Text != "1" ||
+                    !notice.Contains(UiText.Get("CodexSchedulePendingOne")) ||
+                    !notice.Contains(UiText.Format("CodexScheduleNext", CodexScheduleLocalTime(saved.SendAt))) ||
+                    ToolTipService.GetToolTip(CodexScheduleButton) as string != notice ||
+                    !open.Any(popup => popup.Child is { } child && Descendants(child).OfType<TextBlock>().Any(text => text.Text == UiText.Format("CodexScheduleSaved", CodexScheduleLocalTime(saved.SendAt)))) ||
+                    !Equals(Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot), Composer))
+                    throw new InvalidOperationException($"Saving must show a localized confirmation and next-send count/tooltip while preserving editor focus: badge={_codexScheduleBadge.Visibility}, count={_codexScheduleCount.Text}, notice={notice}, tooltip={ToolTipService.GetToolTip(CodexScheduleButton)}, popups={open.Count}, confirmation={_codexScheduleConfirmationText.Text}, at={_codexScheduleConfirmedAt}, focus={Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot)?.GetType().Name}.");
+                TickCodexScheduleConfirmation(DateTimeOffset.UtcNow.AddSeconds(6)); await Task.Delay(250);
+                if (_codexScheduleConfirmedAt is not null) throw new InvalidOperationException("The save confirmation must dismiss automatically.");
                 Composer.Text = "A newer draft remains here";
                 showing = ShowCodexScheduleAsync(); await Task.Delay(150);
                 dialog = _activeDialog!;
@@ -72,8 +84,11 @@ public sealed partial class MainPage
                 await InvokeAsync(FindButton(dialog, UiText.Get("Cancel")));
                 if (_services.CodexSchedules.Messages.Single().State != CodexScheduleState.Cancelled || Composer.Text != "A newer draft remains here" || fake.Sends != 0)
                     throw new InvalidOperationException("Cancelling a queued message must preserve a newer composer draft and never send.");
+                if (_codexScheduleBadge.Visibility != Visibility.Collapsed || AutomationProperties.GetName(CodexScheduleButton) != UiText.Get("CodexScheduleOpen"))
+                    throw new InvalidOperationException("Cancelled messages must immediately disappear from the count and next-send tooltip.");
                 dialog.Hide(); await showing; showing = null;
                 _services.CodexSchedules.Remove(saved.Id);
+                await CheckCodexScheduleNoticeStatesAsync(log);
 
                 fake.Empty = true;
                 Composer.Text = literal;
@@ -91,6 +106,8 @@ public sealed partial class MainPage
                 if (saved is not { Target: null, StartNewChat: true } || saved.Text != literal || fake.Sends != 0 || Composer.Text.Length != 0)
                     throw new InvalidOperationException("The first scheduled message must persist an explicit new-chat request and exact text without sending early.");
                 showing = ShowCodexScheduleAsync(); await Task.Delay(150); dialog = _activeDialog!;
+                if (((StackPanel)((ScrollViewer)dialog.Content).Content).Children.First() is not TextBlock { Text: var heading } || heading != UiText.Get("CodexScheduleQueued"))
+                    throw new InvalidOperationException("Opening the calendar with an empty composer must show existing schedules first.");
                 await InvokeAsync(FindButton(dialog, UiText.Get("CodexScheduleEdit")));
                 if (!dialog.IsPrimaryButtonEnabled) throw new InvalidOperationException("Editing a scheduled new chat must restore its destination.");
                 await InvokeAsync(FindButton(dialog, UiText.Get("Cancel")));
@@ -107,15 +124,57 @@ public sealed partial class MainPage
                 SelectDestination(ComposerDestination.OpenAI); UpdateLayout();
                 if (CodexScheduleButton.Visibility != Visibility.Collapsed)
                     throw new InvalidOperationException("The scheduler icon belongs only to Codex.");
-                File.AppendAllText(log, $"PASS: Codex scheduling in {language}: adjacent icon, centered initial layout, loading cancellation, limited-chat priority, reset-time suggestion, persistence, draft preservation, editing, cancellation, first message to a new chat and listing-failure fallback; no real messages.\n");
+                File.AppendAllText(log, $"PASS: Codex scheduling in {language}: adjacent icon, centered initial layout, loading cancellation, limited-chat priority, reset-time suggestion, persistence, draft preservation, editing, cancellation, first message, listing fallback, count, next-send tooltip, transient confirmation and editor focus; no real messages.\n");
             }
         }
         finally
         {
+            _codexScheduleConfirmation.Hide();
             _activeDialog?.Hide(); if (showing is not null) await showing;
             _services.Codex = previous; _preferences = preferences; ApplyInterfaceLanguage();
             SelectDestination(destination); Composer.Text = original;
         }
+    }
+
+    private async Task CheckCodexScheduleNoticeStatesAsync(string log)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var pending = _services.CodexSchedules.Add(null, "Pending synthetic message", now.AddMinutes(20), now);
+        var failed = _services.CodexSchedules.Add(null, "Uncertain synthetic message", now.AddMinutes(1), now);
+        await _services.CodexSchedules.RunDueAsync(now.AddMinutes(1), (_, _) => Task.FromResult(new CodexScheduledAttempt(CodexDeliveryResult.Unconfirmed)), default);
+        // Use a fresh queue to verify the badge can be rebuilt after restart.
+        _codexScheduleSnapshot = await Task.Run(() => new CodexScheduleQueue(_services.Paths.CodexSchedulesPath).Messages);
+        RenderCodexScheduleNotice();
+        var notice = AutomationProperties.GetName(CodexScheduleButton);
+        if (_codexScheduleCount.Text != "1" || _codexScheduleBadge.Visibility != Visibility.Visible ||
+            _codexScheduleWarning.Visibility != Visibility.Visible || !notice.Contains(UiText.Get("CodexScheduleReviewOne")))
+            throw new InvalidOperationException("Pending and uncertain messages must restore separate count/review indicators after restarting.");
+        foreach (var theme in new[] { ElementTheme.Light, ElementTheme.Dark })
+        {
+            var previous = RequestedTheme;
+            RequestedTheme = theme; PaintCodexScheduleNotice();
+            if (_codexScheduleWarning.Visibility != Visibility.Visible || _codexScheduleBadge.ActualWidth > CodexScheduleButton.Width)
+                throw new InvalidOperationException("The count and amber warning must fit inside the existing calendar button in both themes.");
+            RequestedTheme = previous;
+        }
+        var language = _preferences.InterfaceLanguage;
+        _preferences = _preferences with { InterfaceLanguage = language == "en" ? "es" : "en" };
+        ApplyInterfaceLanguage();
+        if (!AutomationProperties.GetName(CodexScheduleButton).Contains(UiText.Get("CodexScheduleReviewOne")))
+            throw new InvalidOperationException("A pending/review tooltip must follow interface language changes without losing its state.");
+        _preferences = _preferences with { InterfaceLanguage = language }; ApplyInterfaceLanguage();
+        _services.CodexSchedules.Reschedule(failed.Id, null, failed.Text, now.AddMinutes(10), now);
+        _codexScheduleSnapshot = _services.CodexSchedules.Messages; RenderCodexScheduleNotice();
+        if (_codexScheduleWarning.Visibility != Visibility.Collapsed || _codexScheduleCount.Text != "2" ||
+            !AutomationProperties.GetName(CodexScheduleButton).Contains(CodexScheduleLocalTime(now.AddMinutes(10))))
+            throw new InvalidOperationException("Rescheduling a review item must clear its warning and update the pending count and next-send time.");
+        foreach (var id in new[] { pending.Id, failed.Id }) { _services.CodexSchedules.Cancel(id); _services.CodexSchedules.Remove(id); }
+        _codexScheduleSnapshot = _services.CodexSchedules.Messages; _codexSchedulesFailed = true; RenderCodexScheduleNotice();
+        if (_codexScheduleBadge.Visibility != Visibility.Collapsed || _codexScheduleWarning.Visibility != Visibility.Visible ||
+            !AutomationProperties.GetName(CodexScheduleButton).Contains(UiText.Get("CodexScheduleStorageFailed")))
+            throw new InvalidOperationException("Unreadable storage must show a warning rather than imply that the queue is empty.");
+        _codexSchedulesFailed = false; PaintCodexScheduleNotice();
+        File.AppendAllText(log, $"PASS: Codex schedule indicators in {UiText.Language}: restart recovery, distinct pending/review states, both themes, language changes, rescheduling and storage warnings; isolated data only.\n");
     }
 
     private sealed class ScheduleUiService : ICodexChatService

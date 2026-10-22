@@ -12,6 +12,10 @@ La entrega comprueba el origen antes de leer el historial, abrir el chat o envia
 
 ## Ejecución y gestión
 
+Desde 0.15.5, el calendario muestra el número de mensajes pendientes (hasta **99+**); su tooltip y etiqueta accesible indican el próximo envío, incluida una espera por recuperación de la cuenta. Los enviados, cancelados y revisables no suman al contador. La señal **!** ámbar indica mensajes que requieren revisión o un problema de almacenamiento; se mantiene hasta resolverlo, reprogramar o retirar el registro correspondiente. Estos indicadores se reconstruyen al abrir HABITAT y siguen el idioma elegido.
+
+Guardar muestra una confirmación durante cinco segundos junto al calendario y conserva el foco en el editor. Al abrir el calendario con el editor vacío, la lista de programaciones aparece antes del formulario para facilitar su consulta, edición y cancelación.
+
 - HABITAT debe permanecer abierto y Windows con una sesión interactiva iniciada. El equipo suspendido o apagado no ejecuta la programación. Los mensajes vencidos hace más de cinco minutos quedan para revisión y reprogramación; dentro de esa tolerancia se ejecutan al siguiente tick.
 - Para un chat existente, la programación fija su identificador. Cambiar después la conversación visible no cambia el destino. Al vencer, HABITAT abre ese chat, comprueba su identidad y que el editor esté vacío, y usa el mecanismo habitual de entrega verificada. Los títulos duplicados impiden identificar el destino y requieren revisión. Para **Nuevo chat de Codex**, crea un chat separado sin enviar al que esté visible.
 - Si hay un turno en ejecución se espera, comprobando de nuevo tras treinta segundos. Un reset de cuenta conocido pospone el intento hasta después de esa hora. El diálogo muestra la próxima comprobación. No se sustituye un borrador escrito directamente en Codex: para un chat nuevo también se comprueba que su editor no contenga un borrador antes de navegar.
