@@ -84,7 +84,73 @@ internal static class CodexScheduleChecks
         { check(rejected.Messages.Count == 0, "A failed save cannot create an in-memory scheduled send"); }
 
         await CheckServiceAsync(root, check);
+        await CheckNewChatsAsync(root, now, check);
         CheckLimitMetadata(now, check);
+    }
+
+    private static async Task CheckNewChatsAsync(string root, DateTimeOffset now, Action<bool, string> check)
+    {
+        var file = Path.Combine(root, "first-message.json");
+        const string literal = "  Primer mensaje ☕\r\n**literal**  ";
+        var queue = new CodexScheduleQueue(file);
+        var added = queue.Add(null, literal, now.AddMinutes(5), now);
+        queue = new CodexScheduleQueue(file);
+        check(queue.Messages.Single() is { Target: null, StartNewChat: true, Text: literal },
+            "The first message can explicitly schedule a new chat and survives a restart without a fabricated existing chat ID");
+
+        var origins = new CodexChatOrigins(Path.Combine(root, "new-origins.json"));
+        var reader = new Reader(); var desktop = new Desktop(); var starts = 0;
+        await using var service = new CodexChatService(desktop, reader, (text, token) =>
+        {
+            starts++;
+            check(text == literal && desktop.Opens == 0 && desktop.Sends == 0 && reader.Reads.Count == 0,
+                "A scheduled first message opens a separate new chat without reading or submitting to the visible foreign chat");
+            reader.Created = new("33333333-3333-3333-3333-333333333333", "Created by HABITAT", DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+            reader.InitialText = text;
+            return Task.FromResult(CodexDeliveryResult.Sent);
+        }, origins);
+        check((await service.ListScheduleTargetsAsync(default)).Count == 0 && reader.Reads.Count == 0,
+            "An empty HABITAT registry never exposes external chats just to enable the first scheduled message");
+        await queue.RunDueAsync(now, (item, token) => service.SendScheduledAsync(item.Target, item.Text, token), default);
+        check(starts == 0, "Saving a first-message schedule does not create a Codex chat or send early");
+        await queue.RunDueAsync(now.AddMinutes(5), (item, token) => service.SendScheduledAsync(item.Target, item.Text, token), default);
+        check(starts == 0 && queue.Messages.Single().RetryAt == reader.Reset!.Value.AddSeconds(5),
+            "A new-chat schedule also waits for a known exhausted account limit before creating the chat");
+        reader.Reset = null;
+        await queue.RunDueAsync(queue.Messages.Single().RetryAt!.Value, (item, token) => service.SendScheduledAsync(item.Target, item.Text, token), default);
+        check(starts == 1 && queue.Messages.Single().State == CodexScheduleState.Sent && origins.Contains(reader.Created!) &&
+            (await service.ListScheduleTargetsAsync(default)).Single().Target == reader.Created && reader.Reads.All(id => id == reader.Created.Id),
+            "At the scheduled time a confirmed first message creates and registers only its own chat for future destinations");
+        queue = new CodexScheduleQueue(file);
+        await queue.RunDueAsync(now.AddYears(1), (_, _) => throw new Exception("Must not create another chat"), default);
+        check(starts == 1, "Restarting after a confirmed new-chat send never creates a second chat");
+
+        queue.Reschedule(queue.Add(A, literal, now.AddMinutes(10), now).Id, null, literal, now.AddMinutes(11), now);
+        check(queue.Messages.Last() is { Target: null, StartNewChat: true }, "Explicitly changing an existing schedule to a new chat preserves its destination kind");
+        check(queue.Cancel(queue.Messages.Last().Id), "A first-message schedule can be cancelled without sending");
+
+        var legacyPath = Path.Combine(root, "version-one.json");
+        new CodexScheduleQueue(legacyPath).Add(A, literal, now.AddMinutes(1), now);
+        var doc = JsonNode.Parse(File.ReadAllText(legacyPath))!;
+        doc["Version"] = 1;
+        doc["Messages"]![0]!.AsObject().Remove("StartNewChat");
+        File.WriteAllText(legacyPath, doc.ToJsonString());
+        check(new CodexScheduleQueue(legacyPath).Messages.Single() is { Target: not null, StartNewChat: false },
+            "Version-one schedules retain their existing destination and can still be loaded");
+        doc["Messages"]![0]!.AsObject().Remove("Target");
+        foreach (var version in new[] { 1, 2 })
+        {
+            doc["Version"] = version;
+            File.WriteAllText(legacyPath, doc.ToJsonString());
+            try { _ = new CodexScheduleQueue(legacyPath).Messages; check(false, "A missing target must not turn into a new-chat request"); }
+            catch (InvalidDataException) { check(true, "Missing destinations never imply permission to start a new chat, schema " + version); }
+        }
+
+        var uncertain = new CodexScheduleQueue(Path.Combine(root, "new-unconfirmed.json"));
+        uncertain.Add(null, literal, now.AddMinutes(1), now);
+        await uncertain.RunDueAsync(now.AddMinutes(1), (_, _) => Task.FromResult(new CodexScheduledAttempt(CodexDeliveryResult.Unconfirmed)), default);
+        await uncertain.RunDueAsync(now.AddMinutes(2), (_, _) => throw new Exception("No second chat"), default);
+        check(uncertain.Messages.Single().Issue == "CodexScheduleUnconfirmed", "An uncertain new-chat delivery is never automatically retried");
     }
 
     private static void CheckLimitMetadata(DateTimeOffset now, Action<bool, string> check)
@@ -158,13 +224,16 @@ internal static class CodexScheduleChecks
     {
         public List<string> Reads = [];
         public bool Running, ResolveWrong;
+        public CodexChatTarget? Created;
+        public string? InitialText;
         public DateTimeOffset? Reset = DateTimeOffset.UtcNow.AddHours(1);
-        public Task<IReadOnlyList<CodexChatTarget>> ListAsync(CancellationToken token) => Task.FromResult<IReadOnlyList<CodexChatTarget>>([A, B]);
+        public Task<IReadOnlyList<CodexChatTarget>> ListAsync(CancellationToken token) => Task.FromResult<IReadOnlyList<CodexChatTarget>>(Created is null ? [A, B] : [A, B, Created]);
         public Task<DateTimeOffset?> ReadLimitResetAsync(CancellationToken token) => Task.FromResult(Reset);
-        public Task<CodexChatTarget?> ResolveAsync(IReadOnlyList<string> titles, CancellationToken token) => Task.FromResult<CodexChatTarget?>(ResolveWrong ? A : B);
+        public Task<CodexChatTarget?> ResolveAsync(IReadOnlyList<string> titles, CancellationToken token) => Task.FromResult<CodexChatTarget?>(Created ?? (ResolveWrong ? A : B));
         public Task<CodexChatHistory> ReadAsync(CodexChatTarget target, CancellationToken token)
         {
             Reads.Add(target.Id);
+            if (target == Created) return Task.FromResult(new CodexChatHistory(target, [new("initial", "inProgress", [new("user", "YOU", InitialText!)])]));
             return Task.FromResult(new CodexChatHistory(target, [new("last", Running ? "inProgress" : target == B ? "failed" : "completed", [],
                 target == B ? "You've hit your usage limit" : null, target == B ? "UsageLimitExceeded" : null)]));
         }

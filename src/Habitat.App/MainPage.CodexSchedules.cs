@@ -86,7 +86,7 @@ public sealed partial class MainPage
         var message = new TextBox { Header = UiText.Get("CodexScheduleMessage"), AcceptsReturn = true,
             TextWrapping = TextWrapping.Wrap, MinHeight = 80, MaxHeight = 160, MaxLength = 200000, Text = original };
         var target = new ComboBox { Header = UiText.Get("CodexScheduleChat"), HorizontalAlignment = HorizontalAlignment.Stretch };
-        var date = new CalendarDatePicker { Header = UiText.Get("CodexScheduleDate"), Date = DateTimeOffset.Now,
+        var date = new CalendarDatePicker { Header = UiText.Get("CodexScheduleDate"), Date = DateTimeOffset.Now.AddMinutes(5),
             MinDate = DateTimeOffset.Now.Date, MaxDate = DateTimeOffset.Now.AddYears(1) };
         var time = new TimePicker { Header = UiText.Get("CodexScheduleTime"), ClockIdentifier = "24HourClock",
             Time = DateTime.Now.AddMinutes(5).TimeOfDay };
@@ -123,9 +123,9 @@ public sealed partial class MainPage
                 target.SelectedItem is ComboBoxItem { Tag: CodexScheduleTarget } && When() is { } when && when > DateTimeOffset.Now && when < DateTimeOffset.Now.AddYears(1);
             reset.IsEnabled = target.SelectedItem is ComboBoxItem { Tag: CodexScheduleTarget { ResumeAt: { } at } } && at > DateTimeOffset.Now;
         }
-        void Choose(CodexChatTarget chosen)
+        void Choose(CodexChatTarget? chosen)
         {
-            target.SelectedItem = target.Items.Cast<ComboBoxItem>().FirstOrDefault(item => ((CodexScheduleTarget)item.Tag).Target.Id == chosen.Id);
+            target.SelectedItem = target.Items.Cast<ComboBoxItem>().FirstOrDefault(item => ((CodexScheduleTarget)item.Tag).Target?.Id == chosen?.Id);
         }
         void RenderQueued()
         {
@@ -133,7 +133,7 @@ public sealed partial class MainPage
             foreach (var item in _services.CodexSchedules.Messages.OrderBy(item => item.State == CodexScheduleState.Pending ? 0 : 1).ThenBy(item => item.SendAt))
             {
                 var row = new StackPanel { Spacing = 4 };
-                row.Children.Add(new TextBlock { Text = item.Target.Title, TextWrapping = TextWrapping.Wrap });
+                row.Children.Add(new TextBlock { Text = item.Target?.Title ?? UiText.Get("CodexScheduleNewChat"), TextWrapping = TextWrapping.Wrap });
                 row.Children.Add(new TextBlock { Text = UiText.Format("CodexScheduleSummary", item.SendAt.ToLocalTime(), ScheduleStateText(item.State)),
                     TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
                 if (item.State == CodexScheduleState.Pending && item.RetryAt is { } retry)
@@ -177,6 +177,7 @@ public sealed partial class MainPage
             if (listing) return;
             listing = true; Validate();
             var previous = (target.SelectedItem as ComboBoxItem)?.Tag as CodexScheduleTarget;
+            var hasPreferred = previous is not null || editing is not null;
             var preferred = previous?.Target ?? (editing is { } editId ? _services.CodexSchedules.Messages.SingleOrDefault(item => item.Id == editId)?.Target : null);
             try
             {
@@ -185,19 +186,24 @@ public sealed partial class MainPage
                 var candidates = await _services.Codex.ListScheduleTargetsAsync(loading.Token);
                 cancel.Token.ThrowIfCancellationRequested();
                 target.Items.Clear();
-                foreach (var candidate in candidates.OrderByDescending(item => item.UsageLimited))
+                foreach (var candidate in candidates.Where(item => item.Target is not null).OrderByDescending(item => item.UsageLimited))
                     target.Items.Add(new ComboBoxItem { Tag = candidate, Content = candidate.UsageLimited
-                        ? candidate.ResumeAt is { } at ? UiText.Format("CodexScheduleLimitedUntil", candidate.Target.Title, at.ToLocalTime())
-                            : UiText.Format("CodexScheduleLimited", candidate.Target.Title) : candidate.Target.Title });
-                if (preferred is not null) Choose(preferred);
-                if (preferred is null && target.SelectedIndex < 0 && target.Items.Count > 0) target.SelectedIndex = 0;
+                        ? candidate.ResumeAt is { } at ? UiText.Format("CodexScheduleLimitedUntil", candidate.Target!.Title, at.ToLocalTime())
+                            : UiText.Format("CodexScheduleLimited", candidate.Target!.Title) : candidate.Target!.Title });
+                target.Items.Add(new ComboBoxItem { Tag = new CodexScheduleTarget(null, false), Content = UiText.Get("CodexScheduleNewChat") });
+                if (hasPreferred) Choose(preferred);
+                if (!hasPreferred && target.SelectedIndex < 0) target.SelectedIndex = 0;
                 status.Text = UiText.Get(candidates.Count == 0 ? "CodexScheduleNoChats" : "CodexScheduleChooseTime");
                 ready = true;
             }
             catch (OperationCanceledException) when (cancel.IsCancellationRequested) { }
             catch (Exception exception)
             {
-                _services.ReportError("List scheduled Codex chats", exception); ready = false;
+                _services.ReportError("List scheduled Codex chats", exception);
+                target.Items.Clear();
+                target.Items.Add(new ComboBoxItem { Tag = new CodexScheduleTarget(null, false), Content = UiText.Get("CodexScheduleNewChat") });
+                if (!hasPreferred || preferred is null) target.SelectedIndex = 0;
+                ready = true;
                 status.Text = UiText.Get("CodexScheduleLoadFailed");
             }
             finally { listing = false; Validate(); }

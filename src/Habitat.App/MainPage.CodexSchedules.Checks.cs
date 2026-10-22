@@ -74,10 +74,40 @@ public sealed partial class MainPage
                     throw new InvalidOperationException("Cancelling a queued message must preserve a newer composer draft and never send.");
                 dialog.Hide(); await showing; showing = null;
                 _services.CodexSchedules.Remove(saved.Id);
+
+                fake.Empty = true;
+                Composer.Text = literal;
+                showing = ShowCodexScheduleAsync(); await Task.Delay(180);
+                dialog = _activeDialog!;
+                controls = Descendants(dialog).ToArray();
+                select = controls.OfType<ComboBox>().First(control => control.Header as string == UiText.Get("CodexScheduleChat"));
+                if (select.Items.Count != 1 || (select.SelectedItem as ComboBoxItem) is not { Tag: CodexScheduleTarget { Target: null } } newChat ||
+                    newChat.Content as string != UiText.Get("CodexScheduleNewChat") || !dialog.IsPrimaryButtonEnabled ||
+                    !controls.OfType<TextBlock>().Any(item => item.Text == UiText.Get("CodexScheduleNoChats")))
+                    throw new InvalidOperationException("A first message must offer a localized new-chat destination and allow scheduling with no existing HABITAT chats.");
+                await InvokeAsync(FindButton(dialog, UiText.Get("CodexScheduleSave")));
+                await showing.WaitAsync(TimeSpan.FromSeconds(8)); showing = null;
+                saved = _services.CodexSchedules.Messages.Single();
+                if (saved is not { Target: null, StartNewChat: true } || saved.Text != literal || fake.Sends != 0 || Composer.Text.Length != 0)
+                    throw new InvalidOperationException("The first scheduled message must persist an explicit new-chat request and exact text without sending early.");
+                showing = ShowCodexScheduleAsync(); await Task.Delay(150); dialog = _activeDialog!;
+                await InvokeAsync(FindButton(dialog, UiText.Get("CodexScheduleEdit")));
+                if (!dialog.IsPrimaryButtonEnabled) throw new InvalidOperationException("Editing a scheduled new chat must restore its destination.");
+                await InvokeAsync(FindButton(dialog, UiText.Get("Cancel")));
+                dialog.Hide(); await showing; showing = null;
+                _services.CodexSchedules.Remove(saved.Id);
+                fake.FailListing = true; Composer.Text = literal;
+                showing = ShowCodexScheduleAsync(); await Task.Delay(180); dialog = _activeDialog!;
+                if (!dialog.IsPrimaryButtonEnabled || !Descendants(dialog).OfType<TextBlock>().Any(item => item.Text == UiText.Get("CodexScheduleLoadFailed")))
+                    throw new InvalidOperationException("Failure to list existing chats must still allow explicitly scheduling a new chat, with a localized explanation.");
+                dialog.Hide(); await showing; showing = null;
+                if (Composer.Text != literal || _services.CodexSchedules.Messages.Count != 0 || fake.Sends != 0)
+                    throw new InvalidOperationException("Closing the new-chat fallback must leave the draft and outbox unchanged.");
+                fake.FailListing = false; fake.Empty = false;
                 SelectDestination(ComposerDestination.OpenAI); UpdateLayout();
                 if (CodexScheduleButton.Visibility != Visibility.Collapsed)
                     throw new InvalidOperationException("The scheduler icon belongs only to Codex.");
-                File.AppendAllText(log, $"PASS: Codex scheduling in {language}: adjacent icon, centered initial layout, loading cancellation, limited-chat priority, reset-time suggestion, persistence, draft preservation, editing and cancellation; no real messages.\n");
+                File.AppendAllText(log, $"PASS: Codex scheduling in {language}: adjacent icon, centered initial layout, loading cancellation, limited-chat priority, reset-time suggestion, persistence, draft preservation, editing, cancellation, first message to a new chat and listing-failure fallback; no real messages.\n");
             }
         }
         finally
@@ -92,7 +122,7 @@ public sealed partial class MainPage
     {
         public CodexChatTarget Limited = new("22222222-2222-2222-2222-222222222222", "Keep original title — límite");
         public DateTimeOffset Reset = DateTimeOffset.Now.AddHours(1);
-        public bool WaitForCancellation, CancelObserved;
+        public bool WaitForCancellation, CancelObserved, Empty, FailListing;
         public int Sends;
         public async Task<IReadOnlyList<CodexScheduleTarget>> ListScheduleTargetsAsync(CancellationToken token)
         {
@@ -101,7 +131,8 @@ public sealed partial class MainPage
                 try { await Task.Delay(Timeout.InfiniteTimeSpan, token); }
                 catch (OperationCanceledException) { CancelObserved = true; throw; }
             }
-            return [new(new("11111111-1111-1111-1111-111111111111", "Regular chat"), false), new(Limited, true, Reset)];
+            if (FailListing) throw new IOException("Simulated unavailable chat list");
+            return Empty ? [] : [new(new("11111111-1111-1111-1111-111111111111", "Regular chat"), false), new(Limited, true, Reset)];
         }
         public Task<CodexChatSelection> GetVisibleAsync(CancellationToken token) => Task.FromResult(new CodexChatSelection(null, true));
         public Task<CodexChatHistory> ReadAsync(CodexChatTarget target, CancellationToken token) => Task.FromResult(new CodexChatHistory(target, []));

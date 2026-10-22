@@ -21,7 +21,7 @@ internal interface ICodexChatService : IAsyncDisposable
 {
     Task<IReadOnlyList<CodexScheduleTarget>> ListScheduleTargetsAsync(CancellationToken token) =>
         Task.FromResult<IReadOnlyList<CodexScheduleTarget>>([]);
-    Task<CodexScheduledAttempt> SendScheduledAsync(CodexChatTarget target, string text, CancellationToken token) =>
+    Task<CodexScheduledAttempt> SendScheduledAsync(CodexChatTarget? target, string text, CancellationToken token) =>
         Task.FromResult(new CodexScheduledAttempt(CodexDeliveryResult.NotSent));
     Task<CodexChatSelection> GetVisibleAsync(CancellationToken token);
     Task<CodexChatHistory> ReadAsync(CodexChatTarget target, CancellationToken token);

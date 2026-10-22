@@ -5,11 +5,12 @@ using Habitat.Services;
 
 namespace Habitat.Features.Codex;
 
-internal sealed record CodexScheduleTarget(CodexChatTarget Target, bool UsageLimited, DateTimeOffset? ResumeAt = null);
+internal sealed record CodexScheduleTarget(CodexChatTarget? Target, bool UsageLimited, DateTimeOffset? ResumeAt = null);
 internal sealed record CodexScheduledAttempt(CodexDeliveryResult Result, DateTimeOffset? RetryAt = null);
 internal enum CodexScheduleState { Pending, Sending, Sent, NeedsAttention, Cancelled }
-internal sealed record CodexScheduledMessage(Guid Id, CodexChatTarget Target, string Text, DateTimeOffset SendAt,
-    CodexScheduleState State = CodexScheduleState.Pending, string? Issue = null, DateTimeOffset? RetryAt = null);
+internal sealed record CodexScheduledMessage(Guid Id, CodexChatTarget? Target, string Text, DateTimeOffset SendAt,
+    CodexScheduleState State = CodexScheduleState.Pending, string? Issue = null, DateTimeOffset? RetryAt = null,
+    bool StartNewChat = false);
 
 internal static class CodexUsageLimit
 {
@@ -45,8 +46,9 @@ internal sealed class CodexScheduleQueue(string path)
         if (!File.Exists(path)) { _messages = []; return; }
         if (new FileInfo(path).Length > 16 * 1024 * 1024) throw new InvalidDataException("The Codex outbox is too large.");
         var doc = JsonSerializer.Deserialize<Document>(File.ReadAllBytes(path), Json);
-        if (doc is not { Version: 1, Messages: not null } || doc.Messages.Length > 500 ||
+        if (doc is not { Version: 1 or 2, Messages: not null } || doc.Messages.Length > 500 ||
             doc.Messages.Any(item => item is null || item.Id == Guid.Empty || !Valid(item.Target, item.Text) ||
+                item.StartNewChat != (item.Target is null) || doc.Version == 1 && item.StartNewChat ||
                 !Enum.IsDefined(item.State) || item.Issue is not (null or "CodexScheduleUnconfirmed" or "CodexScheduleNotSent" or "CodexScheduleMissed")) ||
             doc.Messages.Select(item => item.Id).Distinct().Count() != doc.Messages.Length)
             throw new InvalidDataException("Invalid Codex outbox.");
@@ -57,11 +59,12 @@ internal sealed class CodexScheduleQueue(string path)
         _messages = recovered;
     }
 
-    private static bool Valid(CodexChatTarget? target, string? text) => target is not null && CodexReadClient.ValidId(target.Id) &&
-        target.Title is { Length: > 0 and <= 2000 } && text is { Length: > 0 and <= 200_000 } && !string.IsNullOrWhiteSpace(text) && !text.Contains('\0');
+    private static bool Valid(CodexChatTarget? target, string? text) =>
+        (target is null || CodexReadClient.ValidId(target.Id) && target.Title is { Length: > 0 and <= 2000 }) &&
+        text is { Length: > 0 and <= 200_000 } && !string.IsNullOrWhiteSpace(text) && !text.Contains('\0');
     private void Save(List<CodexScheduledMessage> next)
     {
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(new Document(1, next.ToArray()), Json);
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(new Document(2, next.ToArray()), Json);
         if (bytes.Length > 16 * 1024 * 1024) throw new InvalidDataException("The Codex outbox is full.");
         AtomicFile.Write(path, bytes);
     }
@@ -75,14 +78,14 @@ internal sealed class CodexScheduleQueue(string path)
         }
     }
 
-    public CodexScheduledMessage Add(CodexChatTarget target, string text, DateTimeOffset when, DateTimeOffset now)
+    public CodexScheduledMessage Add(CodexChatTarget? target, string text, DateTimeOffset when, DateTimeOffset now)
     {
         if (!Valid(target, text) || when <= now || when > now.AddYears(1)) throw new ArgumentException("Invalid scheduled Codex message.");
         lock (_gate)
         {
             Load();
             if (_messages!.Count >= 500) throw new InvalidDataException("The Codex outbox is full.");
-            var item = new CodexScheduledMessage(Guid.NewGuid(), target, text, when.ToUniversalTime());
+            var item = new CodexScheduledMessage(Guid.NewGuid(), target, text, when.ToUniversalTime(), StartNewChat: target is null);
             var next = new List<CodexScheduledMessage>(_messages) { item };
             Save(next); _messages = next;
             return item;
@@ -101,7 +104,7 @@ internal sealed class CodexScheduleQueue(string path)
         }
     }
 
-    public void Reschedule(Guid id, CodexChatTarget target, string text, DateTimeOffset when, DateTimeOffset now)
+    public void Reschedule(Guid id, CodexChatTarget? target, string text, DateTimeOffset when, DateTimeOffset now)
     {
         if (!Valid(target, text) || when <= now || when > now.AddYears(1)) throw new ArgumentException("Invalid scheduled Codex message.");
         lock (_gate)
@@ -110,7 +113,7 @@ internal sealed class CodexScheduleQueue(string path)
             var item = _messages!.SingleOrDefault(item => item.Id == id);
             if (item is null || item.State is not (CodexScheduleState.Pending or CodexScheduleState.NeedsAttention))
                 throw new InvalidOperationException("This scheduled message can no longer be edited.");
-            Change(new(id, target, text, when.ToUniversalTime()));
+            Change(new(id, target, text, when.ToUniversalTime(), StartNewChat: target is null));
         }
     }
 
