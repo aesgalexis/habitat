@@ -8,36 +8,48 @@ internal sealed class CodexChatService(ICodexChatDesktop desktop, ICodexHistoryR
 {
     public async Task<IReadOnlyList<CodexScheduleTarget>> ListScheduleTargetsAsync(CancellationToken token)
     {
-        var targets = (await reader.ListAsync(token)).Where(origins.Contains).ToArray();
+        var targets = await reader.ListAsync(token);
         using var gate = new SemaphoreSlim(4);
         var candidates = await Task.WhenAll(targets.Select(async target =>
         {
             await gate.WaitAsync(token);
-            try { return new CodexScheduleTarget(target, CodexUsageLimit.IsLimited(await reader.ReadAsync(target, token))); }
+            try
+            {
+                var history = await reader.ReadAsync(target, token);
+                var limited = history.Target.Id == target.Id && CodexUsageLimit.IsLimited(history);
+                return new CodexScheduleTarget(target, limited, InterruptedTurnId: limited ? history.LatestTurnId : null);
+            }
+            catch (IOException) { return new CodexScheduleTarget(target, false); }
             finally { gate.Release(); }
         }));
         var reset = candidates.Any(item => item.UsageLimited) ? await reader.ReadLimitResetAsync(token) : null;
-        return candidates.Select(item => item.UsageLimited ? item with { ResumeAt = reset } : item)
+        return candidates.Where(item => item.UsageLimited || origins.Contains(item.Target!))
+            .Select(item => item.UsageLimited ? item with { ResumeAt = reset } : item)
             .OrderByDescending(item => item.UsageLimited).ToArray();
     }
 
-    public async Task<CodexScheduledAttempt> SendScheduledAsync(CodexChatTarget? target, string text, CancellationToken token)
+    public async Task<CodexScheduledAttempt> SendScheduledAsync(CodexChatTarget? target, string text, CancellationToken token, string? interruptedTurnId = null)
     {
         if (string.IsNullOrWhiteSpace(text) || text.Contains('\0')) return new(CodexDeliveryResult.NotSent);
         if (target is null)
         {
+            if (interruptedTurnId is not null) return new(CodexDeliveryResult.NotSent);
             var visible = await desktop.ReadVisibleAsync(token);
             if (visible is { Composer.IsNewChat: true, IsEmpty: false }) return new(CodexDeliveryResult.NotSent);
             if (await reader.ReadLimitResetAsync(token) is { } newReset && newReset > DateTimeOffset.UtcNow)
                 return new(CodexDeliveryResult.NotSent, newReset.AddSeconds(5));
             return new((await StartNewAsync(text, null, token)).Result);
         }
-        if (!CodexReadClient.ValidId(target.Id) || !origins.Contains(target))
+        if (!CodexReadClient.ValidId(target.Id) || !origins.Contains(target) && string.IsNullOrWhiteSpace(interruptedTurnId))
             return new(CodexDeliveryResult.NotSent);
-        // Apply the same origin boundary to the picker and actual delivery,
-        // including messages persisted by an earlier version of HABITAT.
+        // External chats require an explicitly selected interrupted turn.
+        // This does not adopt them into HABITAT's ordinary chat history.
+        if (interruptedTurnId is not null && !(await reader.ListAsync(token)).Any(item => item.Id == target.Id))
+            return new(CodexDeliveryResult.NotSent);
         var before = await reader.ReadAsync(target, token);
         if (before.Target.Id != target.Id) return new(CodexDeliveryResult.NotSent);
+        if (interruptedTurnId is not null && (before.LatestTurnId != interruptedTurnId || !CodexUsageLimit.IsLimited(before)))
+            return new(CodexDeliveryResult.NotSent);
         if (before.IsRunning) return new(CodexDeliveryResult.NotSent, DateTimeOffset.UtcNow.AddSeconds(30));
         if (CodexUsageLimit.IsLimited(before) && await reader.ReadLimitResetAsync(token) is { } reset && reset > DateTimeOffset.UtcNow)
             return new(CodexDeliveryResult.NotSent, reset.AddSeconds(5));
@@ -54,7 +66,11 @@ internal sealed class CodexChatService(ICodexChatDesktop desktop, ICodexHistoryR
                 if (selected?.Id == target.Id)
                 {
                     if (!visible.CanAccept || !visible.IsEmpty) return new(CodexDeliveryResult.NotSent);
-                    if ((await reader.ReadAsync(target, timeout.Token)).IsRunning)
+                    var current = await reader.ReadAsync(target, timeout.Token);
+                    if (current.Target.Id != target.Id || interruptedTurnId is not null &&
+                        (current.LatestTurnId != interruptedTurnId || !CodexUsageLimit.IsLimited(current)))
+                        return new(CodexDeliveryResult.NotSent);
+                    if (current.IsRunning)
                         return new(CodexDeliveryResult.NotSent, DateTimeOffset.UtcNow.AddSeconds(30));
                     return new(await desktop.SubmitVisibleAsync(visible, text, timeout.Token));
                 }

@@ -218,6 +218,7 @@ public sealed partial class MainPage : Page
         surface.Children.Add(_widgets);
         BuildWeatherInterface(_widgets);
         BuildMarketsInterface();
+        BuildSidebarCustomization();
         BuildDestinationInterface(surface);
         BuildUpdateInterface(surface);
         surface.SizeChanged += (_, _) => SizeTopWidgets(surface);
@@ -672,6 +673,7 @@ public sealed partial class MainPage : Page
 
     private void ApplyPreferences()
     {
+        ApplySidebarPreferences();
         _previewWallpaper = null;
         var dark = _preferences.Theme == "night" || _preferences.Theme == "hybrid" && DetectHybridTheme();
         _hybridDark = dark;
@@ -876,6 +878,8 @@ public sealed partial class MainPage : Page
         Composer.Resources["TextControlForegroundDisabled"] = muted;
 
         _conversationView.RefreshAppearance();
+        if (_destinationSections.TryGetValue(ComposerDestination.Codex, out var codex))
+            ((Features.Codex.CodexSection)codex).RefreshAppearance();
     }
 
     private void PaintComposerCaret()

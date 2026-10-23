@@ -25,6 +25,8 @@ public sealed partial class MainPage
         Task? showing = null;
         try
         {
+            _preferences = _preferences with { SidebarWidgets = SidebarCatalog.Available.ToArray() };
+            ApplySidebarPreferences();
             _services.Markets = service;
             _marketsSession = new MarketsSession(service);
             _marketsSession.Changed += RenderMarkets;
@@ -103,6 +105,7 @@ public sealed partial class MainPage
             _services.Markets = originalService;
             _marketNews.Clear();
             _preferences = originalPreferences;
+            ApplySidebarPreferences();
             ApplyInterfaceLanguage();
             SelectDestination(ComposerDestination.OpenAI);
             Composer.Text = originalChatDraft;
@@ -119,8 +122,10 @@ public sealed partial class MainPage
 
     private sealed class MarketUiHandler : HttpMessageHandler
     {
+        internal int Requests { get; private set; }
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
         {
+            Requests++;
             var symbol = Uri.UnescapeDataString(request.RequestUri!.Segments[^1]);
             var body = request.RequestUri.Host == "feeds.finance.yahoo.com" ? "<rss><channel /></rss>" :
                 System.Text.Json.JsonSerializer.Serialize(new

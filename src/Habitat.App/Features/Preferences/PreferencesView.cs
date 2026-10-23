@@ -20,8 +20,9 @@ internal sealed class PreferencesView : Grid
     internal HyperlinkButton LocationSettings { get; }
     internal DestinationsView Destinations { get; }
     internal MarketsPreferencesView Markets { get; }
+    internal SidebarPreferencesView Sidebar { get; }
     internal string Category => ((ListViewItem)Categories.SelectedItem).Tag as string ?? "Appearance";
-    private readonly ScrollViewer _scroll = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+    private readonly ScrollViewer _scroll = ScrollEdgeFade.Enable(new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
 
     public PreferencesView(Habitat.Preferences saved, Func<Task<IReadOnlyList<WindowsAppDestination>>>? discoverApps = null,
         Func<Task<string?>>? browseApp = null, WallpaperService? wallpapers = null,
@@ -82,6 +83,8 @@ internal sealed class PreferencesView : Grid
         AddCategory("Destinations", "\uE8A7", UiText.Get("ChooseAndOrderYourDestinationsRemovingOneKeeps"), Destinations);
         Markets = new MarketsPreferencesView(saved.Markets);
         AddCategory("Markets", "\uE9D2", UiText.Get("MarketsPreferencesDescription"), Markets);
+        Sidebar = new SidebarPreferencesView(saved.SidebarWidgets);
+        AddCategory("Sidebar", "\uE700", UiText.Get("SidebarDescription"), Sidebar);
         Categories.SelectionChanged += (_, _) =>
         {
             _scroll.Content = ((ListViewItem)Categories.SelectedItem).Content is StackPanel label ? label.Tag : null;

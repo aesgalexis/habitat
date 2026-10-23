@@ -29,6 +29,8 @@ La versión **0.15.1** añade [mensajes programados para Codex](CODEX_SCHEDULING
 
 La versión **0.15.2** limita el selector y la entrega de mensajes programados a chats creados desde HABITAT. También rechaza las programaciones externas guardadas por versiones anteriores antes de leer o abrir su destino.
 
+La versión **0.16.0** incorpora la personalización de la barra lateral, la reanudación programada de varios chats de Codex detenidos por límite, la lectura del modelo y razonamiento del chat y el desvanecido de los bordes de lectura. También corrige avisos de finalización obsoletos y unifica los colores de los autores.
+
 La publicación incluye dos alternativas: el instalador `HABITAT-<version>-x64-setup.exe`, con desinstalación registrada en Windows, y el ZIP con su instalador PowerShell. Ambos son autocontenidos, se instalan por usuario y tienen un SHA-256 adjunto. El EXE necesita Windows 10 2004 o posterior y admite instalación silenciosa. Consulta [la preparación para WinGet](WINGET.md).
 
 Usa siempre el mismo formato para actualizar una instalación. Los instaladores rechazan mezclar las disposiciones del EXE y el ZIP en una misma carpeta. Para cambiar de formato, cierra HABITAT y el residente, retira la instalación anterior conservando los datos de usuario y después instala el otro formato.

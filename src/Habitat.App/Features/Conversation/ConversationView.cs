@@ -9,7 +9,7 @@ namespace Habitat.Features.Conversation;
 internal sealed class ConversationView(ConversationSession session, Func<MessageTone, Brush> toneBrush, Func<Brush> textBrush)
 {
     public StackPanel Messages { get; } = new() { Spacing = 22 };
-    public ScrollViewer Scroll { get; } = new();
+    public ScrollViewer Scroll { get; } = ScrollEdgeFade.Enable(new());
     private readonly TextBlock _notice = UiLanguage.Watch(new TextBlock()
     {
         Text = UiText.Get("EarlierMessagesRemainAvailableInChatGPT"), FontSize = 12, TextWrapping = TextWrapping.Wrap

@@ -56,7 +56,7 @@ public sealed partial class MainPage
                         UpdateButton.VerticalAlignment != VerticalAlignment.Bottom ||
                         AutomationProperties.GetName(UpdateButton) != "Update HABITAT to 0.11.0" ||
                         ToolTipService.GetToolTip(UpdateButton) as string != UiText.Format("UpdateDirectAvailable", "0.11.0") ||
-                        _widgets.RowDefinitions.Count != 4)
+                        _widgets.RowDefinitions.Count != _sidebarCatalog.Enabled.Count + 1)
                         throw new InvalidOperationException("The accessible update icon must stay at the bottom in both sidebar states and themes.");
                     var origin = UpdateButton.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point());
                     var sidebar = _widgets.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point());

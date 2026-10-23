@@ -2,6 +2,9 @@
 using Habitat.Services;
 using Habitat.Features.Codex;
 using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 
 namespace Habitat;
 
@@ -89,12 +92,13 @@ public sealed partial class MainPage
             Composer.Text = "";
         }
         await CheckCodexConversationUiAsync(logPath);
+        await CheckCodexSettingsUiAsync(logPath);
         var previousService = _services.Codex;
         var stoppingService = new CheckCodexService { WaitForOpenCancellation = true };
         try
         {
             _services.Codex = stoppingService;
-            using var section = new Habitat.Features.Codex.CodexSection(() => _services.Codex, _ => { });
+            using var section = new Habitat.Features.Codex.CodexSection(() => _services.Codex, _ => { }, ToneBrush);
             var opening = section.OpenAsync();
             section.Dispose();
             await opening;
@@ -129,6 +133,10 @@ public sealed partial class MainPage
             SendCurrentMessage();
             if (fake.Sends != 1 || !CodexChat.IsBusy)
                 throw new InvalidOperationException("Editing while Codex responds must preserve response tracking and prevent duplicate sends.");
+            fake.Interrupted = true;
+            await CodexChat.RefreshAsync();
+            if (CodexChat.IsBusy || CodexChat.StatusText != UiText.Get("TheCodexTurnDidNotCompleteOpenThe"))
+                throw new InvalidOperationException("An interrupted snapshot must end the local wait with a notice.");
             fake.Visible = fake.B;
             await CodexChat.RefreshAsync();
             if (CodexChat.Target != fake.B || CodexChat.Messages.Last().Text != "B reply")
@@ -142,8 +150,10 @@ public sealed partial class MainPage
             SelectDestination(ComposerDestination.Codex);
             await CodexChat.RefreshAsync();
             if (CodexChat.Messages[^2].Text != original || CodexChat.Messages[^1].Text != "A recovered reply" ||
-                Composer.Text != "Next instruction" || !SendButton.IsEnabled)
+                Composer.Text != "Next instruction" || !SendButton.IsEnabled ||
+                CodexChat.StatusText != UiText.Get("FollowingACodexChatStartedFromHABITAT"))
                 throw new InvalidOperationException("Returning to Codex must recover the final response and preserve the next draft.");
+            CheckCodexMessageAppearance();
             fake.Result = CodexDeliveryResult.Unconfirmed;
             await LaunchDestinationAsync(ComposerDestination.Codex, Composer.Text);
             if (Composer.Text != "Next instruction" || CodexChat.IsBusy || !CodexChat.StatusText.Contains("could not be confirmed"))
@@ -157,6 +167,39 @@ public sealed partial class MainPage
         }
     }
 
+    private void CheckCodexMessageAppearance()
+    {
+        var theme = RequestedTheme;
+        var language = UiText.Language;
+        try
+        {
+            foreach (var currentLanguage in new[] { "en", "es" })
+            foreach (var currentTheme in new[] { ElementTheme.Light, ElementTheme.Dark })
+            {
+                UiText.SetLanguage(currentLanguage);
+                CodexChat.RefreshLanguage();
+                RequestedTheme = currentTheme;
+                CodexChat.RefreshAppearance();
+                var scroll = ((Grid)CodexChat.View).Children.OfType<ScrollViewer>().Single();
+                foreach (var group in ((StackPanel)scroll.Content).Children.OfType<StackPanel>())
+                {
+                    var tone = (MessageTone)group.Tag;
+                    var author = (TextBlock)group.Children[0];
+                    if (((SolidColorBrush)author.Foreground).Color != ((SolidColorBrush)ToneBrush(tone)).Color ||
+                        author.Opacity != 1 || author.Text != (tone == MessageTone.User ? UiText.Get("YOU") : "Codex"))
+                        throw new InvalidOperationException("Codex authors must match OpenAI colors in both themes and interface languages.");
+                }
+            }
+        }
+        finally
+        {
+            RequestedTheme = theme;
+            UiText.SetLanguage(language);
+            CodexChat.RefreshLanguage();
+            CodexChat.RefreshAppearance();
+        }
+    }
+
     private sealed class CheckCodexService : ICodexChatService
     {
         public readonly CodexChatTarget A = new("11111111-1111-1111-1111-111111111111", "Check A");
@@ -165,6 +208,7 @@ public sealed partial class MainPage
         public int Sends;
         public int Opens;
         public bool WaitForOpenCancellation;
+        public bool Interrupted;
         public CodexDeliveryResult Result = CodexDeliveryResult.Sent;
         private bool _complete;
         public CheckCodexService() => Visible = A;
@@ -172,7 +216,7 @@ public sealed partial class MainPage
         public Task<CodexChatHistory> ReadAsync(CodexChatTarget target, CancellationToken token)
         {
             List<CodexChatTurn> turns = [new("before", "completed", [new("old", "Codex", target == A ? "A previous reply" : "B reply")])];
-            if (target == A && Sends > 0) turns.Add(new("ours", _complete ? "completed" : "inProgress",
+            if (target == A && Sends > 0) turns.Add(new("ours", _complete ? "completed" : Interrupted ? "interrupted" : "inProgress",
                 [new("user", "YOU", "serialized input"), .. _complete ? new[] { new CodexChatMessage("reply", "Codex", "A recovered reply") } : []]));
             return Task.FromResult(new CodexChatHistory(target, turns));
         }

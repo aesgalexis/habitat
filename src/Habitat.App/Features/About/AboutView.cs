@@ -49,11 +49,11 @@ internal sealed class AboutView : Grid
         panel.Children.Add(CopyDetails);
         AutomationProperties.SetLiveSetting(ActionStatus, AutomationLiveSetting.Polite);
         panel.Children.Add(ActionStatus);
-        Children.Add(new ScrollViewer
+        Children.Add(ScrollEdgeFade.Enable(new ScrollViewer
         {
             Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
-        });
+        }));
     }
 
     private void AddLink(StackPanel panel, string label, string address)

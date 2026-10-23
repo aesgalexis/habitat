@@ -66,7 +66,7 @@ public sealed partial class MainPage
                     if (_codexSendCancellation is not null || _composer.IsExclusiveBusy || CodexChat.IsSubmitting ||
                         HasAppearanceOverlay || _activeDialog is not null || _openingUpdate)
                         return new(CodexDeliveryResult.NotSent, DateTimeOffset.UtcNow.AddSeconds(30));
-                    return await _services.Codex.SendScheduledAsync(message.Target, message.Text, token);
+                    return await _services.Codex.SendScheduledAsync(message.Target, message.Text, token, message.InterruptedTurnId);
                 }, _operations.Token);
                 _codexScheduleSnapshot = await Task.Run(() => _services.CodexSchedules.Messages, _operations.Token);
                 RenderCodexScheduleNotice();
@@ -92,6 +92,9 @@ public sealed partial class MainPage
         var message = new TextBox { Header = UiText.Get("CodexScheduleMessage"), AcceptsReturn = true,
             TextWrapping = TextWrapping.Wrap, MinHeight = 80, MaxHeight = 160, MaxLength = 200000, Text = original };
         var target = new ComboBox { Header = UiText.Get("CodexScheduleChat"), HorizontalAlignment = HorizontalAlignment.Stretch };
+        var multiple = new CheckBox { Content = UiText.Get("CodexScheduleSelectLimited"), IsEnabled = false };
+        var limitedChats = new StackPanel { Spacing = 4, Visibility = Visibility.Collapsed };
+        var useContinue = new Button { Content = UiText.Get("CodexScheduleUseContinue"), IsEnabled = false };
         var date = new CalendarDatePicker { Header = UiText.Get("CodexScheduleDate"), Date = DateTimeOffset.Now.AddMinutes(5),
             MinDate = DateTimeOffset.Now.Date, MaxDate = DateTimeOffset.Now.AddYears(1) };
         var time = new TimePicker { Header = UiText.Get("CodexScheduleTime"), ClockIdentifier = "24HourClock",
@@ -103,12 +106,13 @@ public sealed partial class MainPage
         var queuedHeading = new TextBlock { Text = UiText.Get("CodexScheduleQueued"), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
         var body = new StackPanel { Spacing = 12, MinWidth = 320, MaxWidth = 520 };
         body.Children.Add(new TextBlock { Text = UiText.Get("CodexScheduleRequirements"), TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
-        body.Children.Add(message); body.Children.Add(target);
+        body.Children.Add(message); body.Children.Add(useContinue); body.Children.Add(target);
+        body.Children.Add(multiple); body.Children.Add(limitedChats);
         body.Children.Add(date); body.Children.Add(time); body.Children.Add(reset); body.Children.Add(status);
         body.Children.Add(queuedHeading);
         body.Children.Add(queued);
         var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = UiText.Get("CodexScheduleTitle"),
-            Content = new ScrollViewer { Content = body, MaxHeight = 540, VerticalScrollBarVisibility = ScrollBarVisibility.Auto },
+            Content = ScrollEdgeFade.Enable(new() { Content = body, MaxHeight = 540, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }),
             PrimaryButtonText = UiText.Get("CodexScheduleSave"), CloseButtonText = UiText.Get("Close"), IsPrimaryButtonEnabled = false };
         StyleDialog(dialog);
         dialog.Closed += (_, _) => cancel.Cancel();
@@ -118,6 +122,16 @@ public sealed partial class MainPage
         var saving = false;
         DateTimeOffset? savedAt = null;
         Task<ContentDialogResult>? showing = null;
+        CodexScheduleTarget[] SelectedTargets() => multiple.IsChecked == true
+            ? limitedChats.Children.OfType<CheckBox>().Where(item => item.IsChecked == true)
+                .Select(item => (CodexScheduleTarget)item.Tag).ToArray()
+            : target.SelectedItem is ComboBoxItem { Tag: CodexScheduleTarget selected } ? [selected] : [];
+        DateTimeOffset? SelectedReset()
+        {
+            var selected = SelectedTargets();
+            return selected.Length > 0 && selected.All(item => item.ResumeAt is not null)
+                ? selected.Max(item => item.ResumeAt) : null;
+        }
         DateTimeOffset? When()
         {
             if (date.Date is not { } day) return null;
@@ -128,8 +142,9 @@ public sealed partial class MainPage
         void Validate()
         {
             dialog.IsPrimaryButtonEnabled = ready && !listing && !saving && !string.IsNullOrWhiteSpace(message.Text) &&
-                target.SelectedItem is ComboBoxItem { Tag: CodexScheduleTarget } && When() is { } when && when > DateTimeOffset.Now && when < DateTimeOffset.Now.AddYears(1);
-            reset.IsEnabled = target.SelectedItem is ComboBoxItem { Tag: CodexScheduleTarget { ResumeAt: { } at } } && at > DateTimeOffset.Now;
+                SelectedTargets().Length > 0 && When() is { } when && when > DateTimeOffset.Now && when < DateTimeOffset.Now.AddYears(1);
+            reset.IsEnabled = !saving && SelectedReset() is { } at && at > DateTimeOffset.Now;
+            useContinue.IsEnabled = !saving && SelectedTargets() is { Length: > 0 } selected && selected.All(item => item.UsageLimited);
         }
         void Choose(CodexChatTarget? chosen)
         {
@@ -158,7 +173,8 @@ public sealed partial class MainPage
                     var edit = new Button { Content = UiText.Get("CodexScheduleEdit"), IsEnabled = !saving };
                     edit.Click += (_, _) =>
                     {
-                        editing = item.Id; message.Text = item.Text; Choose(item.Target);
+                        editing = item.Id; multiple.IsChecked = false; multiple.IsEnabled = false;
+                        message.Text = item.Text; Choose(item.Target);
                         var at = item.SendAt > DateTimeOffset.Now ? item.SendAt.ToLocalTime() : DateTimeOffset.Now.AddMinutes(5);
                         date.Date = at; time.Time = at.TimeOfDay; dialog.PrimaryButtonText = UiText.Get("CodexScheduleReschedule"); Validate();
                     };
@@ -173,7 +189,7 @@ public sealed partial class MainPage
                         try
                         {
                             await Task.Run(() => item.State == CodexScheduleState.Pending ? _services.CodexSchedules.Cancel(item.Id) : _services.CodexSchedules.Remove(item.Id));
-                            if (editing == item.Id) { editing = null; dialog.PrimaryButtonText = UiText.Get("CodexScheduleSave"); }
+                            if (editing == item.Id) { editing = null; multiple.IsEnabled = limitedChats.Children.Count > 0; dialog.PrimaryButtonText = UiText.Get("CodexScheduleSave"); }
                             RenderQueued(); Validate();
                         }
                         catch (Exception exception)
@@ -216,10 +232,22 @@ public sealed partial class MainPage
                 var candidates = await _services.Codex.ListScheduleTargetsAsync(loading.Token);
                 cancel.Token.ThrowIfCancellationRequested();
                 target.Items.Clear();
+                limitedChats.Children.Clear();
                 foreach (var candidate in candidates.Where(item => item.Target is not null).OrderByDescending(item => item.UsageLimited))
-                    target.Items.Add(new ComboBoxItem { Tag = candidate, Content = candidate.UsageLimited
+                {
+                    var label = candidate.UsageLimited
                         ? candidate.ResumeAt is { } at ? UiText.Format("CodexScheduleLimitedUntil", candidate.Target!.Title, at.ToLocalTime())
-                            : UiText.Format("CodexScheduleLimited", candidate.Target!.Title) : candidate.Target!.Title });
+                            : UiText.Format("CodexScheduleLimited", candidate.Target!.Title) : candidate.Target!.Title;
+                    target.Items.Add(new ComboBoxItem { Tag = candidate, Content = label });
+                    if (candidate.UsageLimited && candidate.InterruptedTurnId is not null)
+                    {
+                        var choice = new CheckBox { Content = label, Tag = candidate, IsChecked = true };
+                        AutomationProperties.SetName(choice, label);
+                        choice.Checked += (_, _) => Validate(); choice.Unchecked += (_, _) => Validate();
+                        limitedChats.Children.Add(choice);
+                    }
+                }
+                multiple.IsEnabled = editing is null && limitedChats.Children.Count > 0;
                 target.Items.Add(new ComboBoxItem { Tag = new CodexScheduleTarget(null, false), Content = UiText.Get("CodexScheduleNewChat") });
                 if (hasPreferred) Choose(preferred);
                 if (!hasPreferred && target.SelectedIndex < 0) target.SelectedIndex = 0;
@@ -239,22 +267,33 @@ public sealed partial class MainPage
             finally { listing = false; Validate(); }
         }
         message.TextChanged += (_, _) => Validate(); target.SelectionChanged += (_, _) => Validate();
+        multiple.Checked += (_, _) =>
+        {
+            limitedChats.Visibility = Visibility.Visible; target.IsEnabled = false;
+            if (string.IsNullOrWhiteSpace(message.Text)) message.Text = UiText.Get("CodexScheduleContinueMessage");
+            Validate();
+        };
+        multiple.Unchecked += (_, _) => { limitedChats.Visibility = Visibility.Collapsed; target.IsEnabled = true; Validate(); };
+        useContinue.Click += (_, _) => { message.Text = UiText.Get("CodexScheduleContinueMessage"); Validate(); };
         date.DateChanged += (_, _) => Validate(); time.TimeChanged += (_, _) => Validate();
         reset.Click += (_, _) =>
         {
-            if ((target.SelectedItem as ComboBoxItem)?.Tag is CodexScheduleTarget { ResumeAt: { } at })
+            if (SelectedReset() is { } at)
             { at = at.AddSeconds(10).ToLocalTime().AddMinutes(1); date.Date = at; time.Time = new TimeSpan(at.Hour, at.Minute, 0); Validate(); }
         };
         dialog.PrimaryButtonClick += async (_, args) =>
         {
             args.Cancel = true;
-            if (!dialog.IsPrimaryButtonEnabled || saving || target.SelectedItem is not ComboBoxItem { Tag: CodexScheduleTarget selected } || When() is not { } at) return;
+            var selected = SelectedTargets();
+            if (!dialog.IsPrimaryButtonEnabled || saving || selected.Length == 0 || When() is not { } at) return;
             var deferral = args.GetDeferral(); saving = true; Validate();
             try
             {
                 var text = message.Text;
-                if (editing is { } id) await Task.Run(() => _services.CodexSchedules.Reschedule(id, selected.Target, text, at, DateTimeOffset.Now));
-                else await Task.Run(() => _services.CodexSchedules.Add(selected.Target, text, at, DateTimeOffset.Now));
+                if (editing is { } id) await Task.Run(() => _services.CodexSchedules.Reschedule(id, selected[0].Target, text, at, DateTimeOffset.Now, selected[0].InterruptedTurnId));
+                else if (multiple.IsChecked == true || selected[0].InterruptedTurnId is not null)
+                    await Task.Run(() => _services.CodexSchedules.AddResumptions(selected, text, at, DateTimeOffset.Now));
+                else await Task.Run(() => _services.CodexSchedules.Add(selected[0].Target, text, at, DateTimeOffset.Now));
                 _codexSchedulesFailed = false;
                 _codexScheduleSnapshot = _services.CodexSchedules.Messages;
                 RenderCodexScheduleNotice();
@@ -262,6 +301,10 @@ public sealed partial class MainPage
                 { _composerDrafts.Accept(submission); _composerDrafts.Clear(submission); RestoreComposerDraft(); }
                 savedAt = at;
                 args.Cancel = false;
+            }
+            catch (CodexResumptionAlreadyQueuedException)
+            {
+                status.Text = UiText.Get("CodexScheduleAlreadyQueued");
             }
             catch (Exception exception)
             {

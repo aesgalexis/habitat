@@ -1,6 +1,6 @@
 # Mercados
 
-El widget **Markets / Mercados** ocupa la cuarta fila del sidebar, debajo de Tareas. La barra recogida conserva el icono y la variación porcentual. Al desplegarla muestra el nombre, la cotización en la moneda de origen, la variación diaria y la hora del dato. Su nombre accesible y tooltip incluyen la fecha completa de la cotización.
+El widget **Markets / Mercados** se añade, retira y ordena desde **Preferences → Sidebar / Preferencias → Barra lateral**. Está desactivado en instalaciones nuevas; los perfiles anteriores conservan su posición debajo de Tareas hasta personalizarla. La barra recogida conserva el icono y la variación porcentual. Al desplegarla muestra el nombre, la cotización en la moneda de origen, la variación diaria y la hora del dato. Su nombre accesible y tooltip incluyen la fecha completa de la cotización. Véase [Barra lateral](SIDEBAR.md).
 
 Al pulsarlo abre un panel con los favoritos, precios, variación diaria, gráfica del último mes y hasta tres titulares con fecha y dominio de origen. Los enlaces abren Chrome mediante el lanzador habitual de HABITAT. Los titulares conservan el texto original del proveedor; la interfaz, los estados y la accesibilidad siguen el idioma de Preferencias.
 
@@ -14,7 +14,7 @@ Los valores iniciales son `^GSPC` (S&P 500), `^IBEX` (IBEX 35), `EURUSD=X` (euro
 
 Se consultan los datos públicos de Yahoo Finance: `query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=1mo` y `feeds.finance.yahoo.com/rss/2.0/headline`. No requieren una clave de API en esta implementación. El acceso no constituye una API contratada; el proveedor puede cambiar o limitar estos endpoints. Las cotizaciones pueden llevar retraso y se muestra su fecha de origen, sin afirmar que sean datos en tiempo real.
 
-La aplicación consulta los favoritos al arrancar y después cada quince minutos. Ante fallos conserva la última cotización válida, la marca como pendiente de actualización y programa otro intento tras cinco minutos. Los fallos de un símbolo no descartan los demás. El botón de actualización permite reintentar manualmente. Los titulares se solicitan al abrir o seleccionar un activo y se guardan en memoria hasta quince minutos; la caché está limitada a diez combinaciones de símbolo e idioma. No se guardan precios ni noticias en el perfil del usuario.
+Con el widget activado, la aplicación consulta los favoritos al arrancar y después cada quince minutos. Al retirarlo deja de iniciar consultas periódicas, conservando sus favoritos. Ante fallos conserva la última cotización válida, la marca como pendiente de actualización y programa otro intento tras cinco minutos. Los fallos de un símbolo no descartan los demás. El botón de actualización permite reintentar manualmente. Los titulares se solicitan al abrir o seleccionar un activo y se guardan en memoria hasta quince minutos; la caché está limitada a diez combinaciones de símbolo e idioma. No se guardan precios ni noticias en el perfil del usuario.
 
 La variación diaria utiliza el porcentaje del proveedor cuando existe. En su ausencia se calcula a partir del cierre anterior a la fecha del dato en la zona del mercado. No utiliza `chartPreviousClose` de una petición mensual, porque corresponde al principio del periodo de la gráfica. Si no hay una referencia válida se muestra un guion.
 

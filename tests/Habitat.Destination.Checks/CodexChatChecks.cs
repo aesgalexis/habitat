@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Habitat;
 using Habitat.Features.Codex;
 using Habitat.Services;
 
@@ -11,6 +12,7 @@ internal static class CodexChatChecks
 
     internal static async Task RunAsync(Action<bool, string> check)
     {
+        CodexSettingsChecks.Run(check);
         using var fixture = JsonDocument.Parse("""
         {"data":[{"id":"new","status":"completed","items":[
           {"id":"user","type":"userMessage","content":[{"type":"text","text":"original Español"},{"type":"image","url":"ignored"}]},
@@ -43,6 +45,7 @@ internal static class CodexChatChecks
         check(!session.IsWaiting, "Stopping the local Codex wait does not require executing or interrupting a turn");
         session.Accept(new(CodexDeliveryResult.Unconfirmed, A), "uncertain");
         check(!session.IsWaiting, "An uncertain Codex send never creates a second request or invents a confirmed pending turn");
+        CheckOutcomeRefresh(check);
 
         var desktop = new Desktop(); var reader = new Reader { InitialText = "new chat\n" }; var newChats = 0;
         var newResult = CodexDeliveryResult.NotSent;
@@ -98,6 +101,45 @@ internal static class CodexChatChecks
         await CheckOriginsAsync(check);
         await CheckForeignStartAsync(check);
         await CheckReaderAsync(check);
+    }
+
+    private static void CheckOutcomeRefresh(Action<bool, string> check)
+    {
+        var language = UiText.Language;
+        try
+        {
+            foreach (var currentLanguage in new[] { "en", "es" })
+            {
+                UiText.SetLanguage(currentLanguage);
+                var session = new CodexChatSession();
+                session.Select(A);
+                session.Accept(new(CodexDeliveryResult.Sent, A), "original");
+                session.Observe(new(A, [Turn("ours", "interrupted", "")]));
+                check(!session.IsWaiting && session.Issue == UiText.Get("TheCodexTurnDidNotCompleteOpenThe"),
+                    "An interrupted Codex turn retains its localized warning: " + currentLanguage);
+                session.Select(B);
+                session.Observe(new(A, [Turn("ours", "completed", "final reply")]));
+                check(session.Issue.Length == 0, "A background completion cannot add a notice to another chat");
+                session.Select(A);
+                check(session.Issue.Length == 0 && session.Messages.Last().Text == "final reply",
+                    "A completed snapshot clears a previous interrupted warning after waiting has ended");
+                session.Observe(new(A, [Turn("ours", "completed", "  ")]));
+                check(session.Issue == UiText.Get("CodexFinishedWithoutATextReplyOpenThe"),
+                    "A completed Codex turn without text reports its localized empty reply notice");
+                session.Observe(new(A, [Turn("ours", "completed", "late final text")]));
+                check(session.Issue.Length == 0, "Final text arriving after completion clears the empty reply notice");
+                session.Observe(new(A, [Turn("ours", "failed", "partial answer")]));
+                check(session.Issue == UiText.Get("TheCodexTurnDidNotCompleteOpenThe"),
+                    "Partial assistant text cannot conceal a real failed turn");
+                session.SetIssue(A, UiText.Get("CouldNotReadTheCodexResponseRetrying"));
+                session.Observe(new(A, [Turn("ours", "completed", "recovered")]));
+                check(session.Issue.Length == 0, "A successful read recovers both connection and stale turn notices");
+                session.Observe(new(A, [Turn("ours", "failed", ""), Turn("next", "inProgress", "")]));
+                check(session.Issue.Length == 0 && session.Current!.IsRunning,
+                    "A later Codex turn cannot inherit the previous turn's failure notice");
+            }
+        }
+        finally { UiText.SetLanguage(language); }
     }
 
     private static async Task CheckForeignStartAsync(Action<bool, string> check)
@@ -199,9 +241,12 @@ internal static class CodexChatChecks
         var history = await client.ReadAsync(target!, default);
         var listed = await client.ListAsync(default);
         var reset = await client.ReadLimitResetAsync(default);
-        check(listed.SequenceEqual(new[] { A, B }) && reset > DateTimeOffset.UtcNow && reset < DateTimeOffset.UtcNow.AddHours(2),
+        check(listed.Select(item => item.Id).SequenceEqual(new[] { A.Id, B.Id }) &&
+            listed[0].Settings == new CodexChatSettings("test-model", "high") && listed[1].Settings is null &&
+            reset > DateTimeOffset.UtcNow && reset < DateTimeOffset.UtcNow.AddHours(2),
             "Codex scheduling pages through local chat identities and reads account reset metadata using read-only RPC calls");
-        check(target == A && history.Turns.Single().Messages.Single().Text == "synthetic reply",
+        check(target?.Id == A.Id && history.Turns.Single().Messages.Single().Text == "synthetic reply" &&
+            target.Settings == new CodexChatSettings("test-model", "high"),
             "Codex reader completes the JSON-RPC handshake and reads only the exactly selected chat through a private process");
         try { await client.ResolveAsync(["Duplicate"], default); check(false, "Duplicate Codex title must be rejected"); }
         catch (InvalidDataException) { check(true, "Duplicate Codex titles fail closed instead of guessing a chat"); }
@@ -209,15 +254,15 @@ internal static class CodexChatChecks
         catch (InvalidDataException) { check(true, "A truncated Codex title search cannot claim an unambiguous chat identity"); }
         try { await client.ResolveAsync(["Disconnect"], default); check(false, "The synthetic reader must disconnect"); }
         catch (IOException) { }
-        check(await client.ResolveAsync(["Chat A"], default) == A, "The read-only Codex connection recovers after its private process disconnects");
+        check((await client.ResolveAsync(["Chat A"], default))?.Id == A.Id, "The read-only Codex connection recovers after its private process disconnects");
         foreach (var malformed in new[] { "Array frame", "Null frame", "Invalid JSON" })
         {
             try { await client.ResolveAsync([malformed], default); check(false, "Malformed reader output must fail"); }
             catch (IOException) { }
-            check(await client.ResolveAsync(["Chat A"], default) == A,
+            check((await client.ResolveAsync(["Chat A"], default))?.Id == A.Id,
                 "The Codex reader recovers after malformed output: " + malformed);
         }
-        check(await client.ResolveAsync(["Verbose diagnostics", "Chat A"], default) == A,
+        check((await client.ResolveAsync(["Verbose diagnostics", "Chat A"], default))?.Id == A.Id,
             "Verbose helper diagnostics are drained without blocking read-only requests or shutdown");
     }
 
@@ -253,9 +298,10 @@ internal static class CodexChatChecks
                 "thread/list" => search switch
                 {
                     null => root.GetProperty("params").GetProperty("cursor").ValueKind == JsonValueKind.Null
-                        ? (object)new { data = new[] { new { id = A.Id, name = A.Title } }, nextCursor = "page2" }
+                        ? (object)new { data = new[] { new { id = A.Id, name = A.Title, model = "test-model", reasoningEffort = "high" } }, nextCursor = "page2" }
                         : new { data = new[] { new { id = B.Id, name = B.Title } }, nextCursor = (string?)null },
-                    "Chat A" => new { data = new[] { new { id = A.Id, name = "Chat A" }, new { id = B.Id, name = "Chat A extra" } } },
+                    "Chat A" => new { data = new[] { new { id = A.Id, name = "Chat A", model = "test-model", reasoningEffort = "high" },
+                        new { id = B.Id, name = "Chat A extra", model = "other-model", reasoningEffort = "low" } } },
                     "Duplicate" => new { data = new[] { new { id = A.Id, name = "Duplicate" }, new { id = B.Id, name = "Duplicate" } } },
                     "Truncated" => (object)new { data = new[] { new { id = A.Id, name = "Truncated" } }, nextCursor = "more" },
                     _ => new { data = Array.Empty<object>() }

@@ -96,6 +96,7 @@ internal sealed class SearchSection : IDestinationSection
         _view.Children.Add(status);
         _scroll = new ScrollViewer { Content = _results, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Padding = new Thickness(0, 8, 12, 8) };
+        ScrollEdgeFade.Enable(_scroll);
         Grid.SetRow(_scroll, 2);
         _view.Children.Add(_scroll);
         var navigation = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };

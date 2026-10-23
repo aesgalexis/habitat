@@ -85,6 +85,7 @@ internal static class CodexScheduleChecks
 
         await CheckServiceAsync(root, check);
         await CheckNewChatsAsync(root, now, check);
+        await CheckResumptionsAsync(root, now, check);
         CheckLimitMetadata(now, check);
     }
 
@@ -110,8 +111,9 @@ internal static class CodexScheduleChecks
             desktop.NoEditor = false;
             return Task.FromResult(CodexDeliveryResult.Sent);
         }, origins);
-        check((await service.ListScheduleTargetsAsync(default)).Count == 0 && reader.Reads.Count == 0,
-            "An empty HABITAT registry never exposes external chats just to enable the first scheduled message");
+        check((await service.ListScheduleTargetsAsync(default)).Single() is { Target: var limited, InterruptedTurnId: "last" } && limited == B,
+            "An empty registry still offers external chats stopped by a usage limit for explicit resumption");
+        reader.Reads.Clear();
         await queue.RunDueAsync(now, (item, token) => service.SendScheduledAsync(item.Target, item.Text, token), default);
         check(starts == 0, "Saving a first-message schedule does not create a Codex chat or send early");
         desktop.NewChat = true; desktop.Empty = false;
@@ -133,7 +135,7 @@ internal static class CodexScheduleChecks
         desktop.NoEditor = true;
         await queue.RunDueAsync(queue.Messages.Single().RetryAt!.Value, (item, token) => service.SendScheduledAsync(item.Target, item.Text, token), default);
         check(starts == 1 && queue.Messages.Single().State == CodexScheduleState.Sent && origins.Contains(reader.Created!) &&
-            (await service.ListScheduleTargetsAsync(default)).Single().Target == reader.Created && reader.Reads.All(id => id == reader.Created.Id),
+            (await service.ListScheduleTargetsAsync(default)).Any(item => item.Target == reader.Created) && !origins.Contains(B),
             "At the scheduled time a confirmed first message creates and registers only its own chat for future destinations");
         queue = new CodexScheduleQueue(file);
         await queue.RunDueAsync(now.AddYears(1), (_, _) => throw new Exception("Must not create another chat"), default);
@@ -176,8 +178,9 @@ internal static class CodexScheduleChecks
         }
         CodexChatTurn Turn(string id, string author, string notice) => new(id, "completed", [new("text", author, notice)]);
         check(!CodexUsageLimit.IsLimited(new(A, [Turn("old", "Codex", "You've hit your usage limit"), Turn("new", "Codex", "Finished")])) &&
-            !CodexUsageLimit.IsLimited(new(A, [Turn("last", "YOU", "You've hit your usage limit")])),
-            "An older limit or user-provided quotation cannot mark the last Codex turn as limited");
+            !CodexUsageLimit.IsLimited(new(A, [Turn("last", "YOU", "You've hit your usage limit")])) &&
+            !CodexUsageLimit.IsLimited(new(A, [Turn("last", "Codex", "The message 'You've hit your usage limit' means you should wait.")])),
+            "An older limit, user quotation or assistant explanation cannot mark the last Codex turn as limited");
         check(CodexUsageLimit.IsLimited(new(A, [Turn("last", "Codex", "Llegaste al límite, puedes seguir a las 18:00")])) &&
             CodexUsageLimit.IsLimited(new(A, [Turn("last", "Codex", "You've hit your usage limit. Try again later.")])),
             "English and Spanish final limit notices are recognized without inventing a reset timestamp");
@@ -196,7 +199,8 @@ internal static class CodexScheduleChecks
         var reader = new Reader(); var desktop = new Desktop(); var origins = new CodexChatOrigins(null); origins.Register(A);
         await using var service = new CodexChatService(desktop, reader, (_, _) => throw new Exception("Must never create a chat"), origins);
         var own = await service.ListScheduleTargetsAsync(default);
-        check(own.Count == 1 && own[0].Target == A && !reader.Reads.Contains(B.Id), "The default schedule picker respects HABITAT chat provenance");
+        check(own.Count == 2 && own[0] is { Target: var limited, InterruptedTurnId: "last" } && limited == B,
+            "The picker identifies external interrupted chats by stable chat and turn IDs before regular HABITAT chats");
         var reads = reader.Reads.Count;
         check((await service.SendScheduledAsync(B, "forbidden follow-up", default)).Result == CodexDeliveryResult.NotSent &&
             desktop.Opens == 0 && desktop.Sends == 0 && reader.Reads.Count == reads,
@@ -209,7 +213,7 @@ internal static class CodexScheduleChecks
             desktop.Opens == 0 && desktop.Sends == 0 && reader.Reads.Count == reads,
             "An older persisted foreign-chat schedule cannot bypass the origin boundary or send automatically");
         check((await service.GetVisibleAsync(default)).Target is null && (await service.SendAsync(B, "ordinary send", default)).Result == CodexDeliveryResult.NotSent,
-            "Normal and scheduled Codex sends share the same HABITAT-only origin boundary");
+            "Normal sends and legacy schedules still require HABITAT origin; external resumption is separate");
         origins.Register(B);
         var allowed = await service.ListScheduleTargetsAsync(default);
         check(allowed.Count == 2 && allowed[0] is { UsageLimited: true, ResumeAt: not null } && allowed[0].Target == B,
@@ -234,21 +238,67 @@ internal static class CodexScheduleChecks
         check(desktop.Sends == 1, "Navigation that resolves to a different chat never sends to the currently visible conversation");
     }
 
+    private static async Task CheckResumptionsAsync(string root, DateTimeOffset now, Action<bool, string> check)
+    {
+        var reader = new Reader(); var desktop = new Desktop(); var origins = new CodexChatOrigins(null);
+        await using var service = new CodexChatService(desktop, reader, (_, _) => throw new Exception("Must not start a chat"), origins);
+        var candidates = await service.ListScheduleTargetsAsync(default);
+        check(candidates.Count == 1 && candidates[0].Target == B && candidates[0].InterruptedTurnId == "last",
+            "External completed chats are excluded while the current usage-limit interruption is identifiable");
+        reader.Running = true;
+        check((await service.ListScheduleTargetsAsync(default)).Count == 0, "Running external chats are not offered as interrupted");
+        reader.Running = false;
+        var file = Path.Combine(root, "resumptions.json");
+        var queue = new CodexScheduleQueue(file);
+        var batch = new[] { candidates[0], new CodexScheduleTarget(A, true, reader.Reset, "other-turn") };
+        queue.AddResumptions(batch, "  Continúa ☕  ", now.AddMinutes(1), now);
+        queue = new CodexScheduleQueue(file);
+        check(queue.Messages.Count == 2 && queue.Messages.All(item => item.Text == "  Continúa ☕  " && item.InterruptedTurnId is not null),
+            "A multi-chat selection persists exact text and each interrupted turn atomically across restarts");
+        try { queue.AddResumptions(batch, "Continue", now.AddMinutes(2), now); check(false, "Duplicate resumptions must fail"); }
+        catch (InvalidOperationException) { check(queue.Messages.Count == 2, "A second resumption for the same pending turns cannot duplicate the batch"); }
+        var blocked = Path.Combine(root, "blocked-resumptions"); Directory.CreateDirectory(blocked);
+        var unsaved = new CodexScheduleQueue(blocked);
+        try { unsaved.AddResumptions(batch, "Continue", now.AddMinutes(1), now); check(false, "Batch storage failure must fail closed"); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        { check(unsaved.Messages.Count == 0, "A failed batch save leaves no partial in-memory schedules"); }
+        check((await service.SendScheduledAsync(B, "Continue", default, "last")).RetryAt == reader.Reset!.Value.AddSeconds(5) && desktop.Opens == 0,
+            "An explicitly selected external interruption waits for the known account reset");
+        reader.Reset = null;
+        reader.LatestId = "continued";
+        check((await service.SendScheduledAsync(B, "Continue", default, "last")).Result == CodexDeliveryResult.NotSent && desktop.Opens == 0,
+            "A chat already continued by the user is never resumed again, even if its next turn also hits a limit");
+        reader.LatestId = "last"; reader.Listed = false;
+        check((await service.SendScheduledAsync(B, "Continue", default, "last")).Result == CodexDeliveryResult.NotSent && desktop.Opens == 0,
+            "A chat archived or removed after scheduling is not reopened");
+        reader.Listed = true; desktop.OnOpen = () => reader.LatestId = "racing-turn";
+        check((await service.SendScheduledAsync(B, "Continue", default, "last")).Result == CodexDeliveryResult.NotSent && desktop.Sends == 0,
+            "A new turn between navigation and delivery cancels the stale resumption");
+        desktop.OnOpen = null; reader.LatestId = "last";
+        check((await service.SendScheduledAsync(B, "Continúa", default, "last")).Result == CodexDeliveryResult.Sent && desktop.Sends == 1 &&
+            desktop.LastTarget == B && !origins.Contains(B), "External resumption reaches the exact selected chat without adopting it into HABITAT history");
+        var item = queue.Messages.First();
+        queue.Reschedule(item.Id, item.Target, item.Text, now.AddMinutes(3), now);
+        check(queue.Messages.First().InterruptedTurnId == item.InterruptedTurnId, "Editing the time preserves the interrupted-turn guard");
+    }
+
     private sealed class Reader : ICodexHistoryReader
     {
         public List<string> Reads = [];
         public bool Running, ResolveWrong;
+        public bool Listed = true;
+        public string LatestId = "last";
         public CodexChatTarget? Created;
         public string? InitialText;
         public DateTimeOffset? Reset = DateTimeOffset.UtcNow.AddHours(1);
-        public Task<IReadOnlyList<CodexChatTarget>> ListAsync(CancellationToken token) => Task.FromResult<IReadOnlyList<CodexChatTarget>>(Created is null ? [A, B] : [A, B, Created]);
+        public Task<IReadOnlyList<CodexChatTarget>> ListAsync(CancellationToken token) => Task.FromResult<IReadOnlyList<CodexChatTarget>>(!Listed ? [] : Created is null ? [A, B] : [A, B, Created]);
         public Task<DateTimeOffset?> ReadLimitResetAsync(CancellationToken token) => Task.FromResult(Reset);
         public Task<CodexChatTarget?> ResolveAsync(IReadOnlyList<string> titles, CancellationToken token) => Task.FromResult<CodexChatTarget?>(Created ?? (ResolveWrong ? A : B));
         public Task<CodexChatHistory> ReadAsync(CodexChatTarget target, CancellationToken token)
         {
             Reads.Add(target.Id);
             if (target == Created) return Task.FromResult(new CodexChatHistory(target, [new("initial", "inProgress", [new("user", "YOU", InitialText!)])]));
-            return Task.FromResult(new CodexChatHistory(target, [new("last", Running ? "inProgress" : target == B ? "failed" : "completed", [],
+            return Task.FromResult(new CodexChatHistory(target, [new(LatestId, Running ? "inProgress" : target == B ? "failed" : "completed", [],
                 target == B ? "You've hit your usage limit" : null, target == B ? "UsageLimitExceeded" : null)]));
         }
     }
@@ -258,8 +308,9 @@ internal static class CodexScheduleChecks
         public int Opens, Sends;
         public CodexChatTarget? LastTarget;
         public string? Text;
+        public Action? OnOpen;
         public Task<CodexVisibleChat?> ReadVisibleAsync(CancellationToken token) => Task.FromResult<CodexVisibleChat?>(NoEditor ? null : new(new(1, "editor", "send", Empty ? "" : "Protected draft", NewChat, true), [B.Title], Empty, true));
-        public Task<bool> OpenChatAsync(CodexChatTarget? target, CancellationToken token) { Opens++; LastTarget = target; return Task.FromResult(true); }
+        public Task<bool> OpenChatAsync(CodexChatTarget? target, CancellationToken token) { Opens++; LastTarget = target; OnOpen?.Invoke(); return Task.FromResult(true); }
         public Task<CodexDeliveryResult> SubmitVisibleAsync(CodexVisibleChat expected, string text, CancellationToken token) { Sends++; Text = text; return Task.FromResult(CodexDeliveryResult.Sent); }
         public void ReturnFocus(nint ownerWindow) { }
     }

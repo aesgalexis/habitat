@@ -52,8 +52,8 @@ internal sealed class VSCodeRunView
         View.Children.Add(_preview);
         View.Children.Add(_links);
         _expanded.Children.Add(_truncated);
-        _expanded.Children.Add(new ScrollViewer { Content = _output, MaxHeight = 240,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+        _expanded.Children.Add(ScrollEdgeFade.Enable(new ScrollViewer { Content = _output, MaxHeight = 240,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }));
         // Use the same native toggle pattern as Tasks: Expander's template
         // crashes in this application's bundled WinUI runtime.
         _details = UiLanguage.Watch(new Button { Content = UiText.Get("ShowOutput"), HorizontalAlignment = HorizontalAlignment.Left,

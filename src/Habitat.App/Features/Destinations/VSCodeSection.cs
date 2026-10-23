@@ -70,6 +70,7 @@ internal sealed class VSCodeSection : IDestinationSection
             _selection.Available.FirstOrDefault(project => VSCodeFolders.Same(project.Folder.Path, folder.Path))));
         _view = new ScrollViewer { Content = _content, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        ScrollEdgeFade.Enable(_view);
         _content.Children.Add(_projects);
         _content.Children.Add(_path);
         _content.Children.Add(_status);

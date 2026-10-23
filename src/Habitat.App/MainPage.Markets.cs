@@ -26,7 +26,6 @@ public sealed partial class MainPage
 
     private void BuildMarketsInterface()
     {
-        _widgets.RowDefinitions.Add(new RowDefinition { Height = new GridLength(78) });
         var content = new Grid { ColumnSpacing = 8, VerticalAlignment = VerticalAlignment.Center };
         content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
         content.ColumnDefinitions.Add(new ColumnDefinition());
@@ -49,14 +48,13 @@ public sealed partial class MainPage
         MarketsButton.PointerExited += (_, _) => { _marketsHovered = false; _marketsSession.Tick(true); };
         MarketsButton.GotFocus += (_, _) => _marketsFocused = true;
         MarketsButton.LostFocus += (_, _) => { _marketsFocused = false; _marketsSession.Tick(true); };
-        Grid.SetRow(MarketsButton, 3);
         _widgets.Children.Add(MarketsButton);
         RenderMarkets();
     }
 
     private void TickMarkets()
     {
-        if (_operations.IsStopping) return;
+        if (_operations.IsStopping || !_sidebarCatalog.Enabled.Contains(SidebarCatalog.Markets)) return;
         _marketsSession.Tick(_marketsHovered || _marketsFocused || _marketsPanelOpen || HasAppearanceOverlay || _marketsSession.IsRefreshing);
         if (!_marketsSession.IsRefreshing && DateTimeOffset.UtcNow >= _marketsSession.NextRefresh)
             _ = RunOperationAsync(() => _marketsSession.RefreshAsync(_operations.Token));

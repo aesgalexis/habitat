@@ -1,8 +1,38 @@
 using Habitat.Services;
+using System.Text.Json.Serialization;
 
 namespace Habitat.Features.Codex;
 
-internal sealed record CodexChatTarget(string Id, string Title, long? CreatedAt = null);
+internal sealed record CodexChatTarget(string Id, string Title, long? CreatedAt = null)
+{
+    // Display metadata refreshed by the reader, never part of a scheduled delivery.
+    [JsonIgnore]
+    public CodexChatSettings? Settings { get; init; }
+}
+
+internal sealed record CodexChatSettings(string? Model, string? ReasoningEffort)
+{
+    internal static string Format(CodexChatSettings? settings)
+    {
+        var model = string.IsNullOrWhiteSpace(settings?.Model) ? UiText.Get("CodexSettingUnavailable") : settings.Model;
+        var effort = settings?.ReasoningEffort switch
+        {
+            "none" => UiText.Get("CodexReasoningNone"),
+            "minimal" => UiText.Get("CodexReasoningMinimal"),
+            "low" => UiText.Get("CodexReasoningLow"),
+            "medium" => UiText.Get("CodexReasoningMedium"),
+            "high" => UiText.Get("CodexReasoningHigh"),
+            "xhigh" => UiText.Get("CodexReasoningExtraHigh"),
+            "max" => UiText.Get("CodexReasoningMax"),
+            "ultra" => UiText.Get("CodexReasoningUltra"),
+            "auto" => UiText.Get("CodexReasoningAuto"),
+            { } value when !string.IsNullOrWhiteSpace(value) => value,
+            _ => UiText.Get("CodexSettingUnavailable")
+        };
+        return UiText.Format(string.IsNullOrWhiteSpace(settings?.Model) && string.IsNullOrWhiteSpace(settings?.ReasoningEffort)
+            ? "CodexChatSettings" : "CodexChatLastKnownSettings", model, effort);
+    }
+}
 internal sealed record CodexChatMessage(string Id, string Author, string Text);
 internal sealed record CodexChatTurn(string Id, string Status, IReadOnlyList<CodexChatMessage> Messages, string? Error = null,
     string? ErrorCode = null)
@@ -21,7 +51,7 @@ internal interface ICodexChatService : IAsyncDisposable
 {
     Task<IReadOnlyList<CodexScheduleTarget>> ListScheduleTargetsAsync(CancellationToken token) =>
         Task.FromResult<IReadOnlyList<CodexScheduleTarget>>([]);
-    Task<CodexScheduledAttempt> SendScheduledAsync(CodexChatTarget? target, string text, CancellationToken token) =>
+    Task<CodexScheduledAttempt> SendScheduledAsync(CodexChatTarget? target, string text, CancellationToken token, string? interruptedTurnId = null) =>
         Task.FromResult(new CodexScheduledAttempt(CodexDeliveryResult.NotSent));
     Task<CodexChatSelection> GetVisibleAsync(CancellationToken token);
     Task<CodexChatHistory> ReadAsync(CodexChatTarget target, CancellationToken token);

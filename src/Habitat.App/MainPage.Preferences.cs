@@ -83,6 +83,7 @@ public sealed partial class MainPage
             InterfaceLanguage = view.InterfaceLanguage.SelectedIndex == 1 ? "es" : "en",
             Wallpaper = view.Wallpaper.Settings,
             Markets = view.Markets.Settings.Normalize(),
+            SidebarWidgets = view.Sidebar.EnabledWidgets,
             WeatherCity = view.WeatherCity.Text.Trim(), UseDeviceLocation = view.UseDeviceLocation.IsOn,
             EnabledDestinations = view.Destinations.EnabledDestinations,
             WindowsApps = view.Destinations.Applications, DefaultDestination = view.Destinations.DefaultDestination

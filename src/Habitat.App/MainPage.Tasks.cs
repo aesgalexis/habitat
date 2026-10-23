@@ -82,9 +82,7 @@ public sealed partial class MainPage
 
     private void BuildTaskInterface(Grid surface)
     {
-        _widgets.RowDefinitions.Add(new RowDefinition { Height = new GridLength(78) });
-        _widgets.RowDefinitions.Add(new RowDefinition { Height = new GridLength(78) });
-        _widgets.RowDefinitions.Add(new RowDefinition { Height = new GridLength(78) });
+        ScrollEdgeFade.Enable(_taskArea);
         surface.Children.Add(SidebarToggle);
         SidebarToggle.Click += (_, _) =>
         {
@@ -110,7 +108,6 @@ public sealed partial class MainPage
         Grid.SetColumn(TasksPreview, 1);
         content.Children.Add(TasksPreview);
         TasksButton.Content = content;
-        Grid.SetRow(TasksButton, 2);
         TasksButton.Height = 78;
         TasksButton.Padding = new Thickness(8);
         TasksButton.HorizontalContentAlignment = HorizontalAlignment.Stretch;
@@ -130,7 +127,6 @@ public sealed partial class MainPage
             _nextTaskRotation = DateTimeOffset.UtcNow + TaskRotationInterval;
         };
         _widgets.Children.Add(TasksButton);
-        Grid.SetRow(GmailWidget, 1);
 
         TasksPanel.Children.Add(UiLanguage.Watch(new TextBlock { Text = UiText.Get("Tasks"), FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }, ("Text", () => (object?)(UiText.Get("Tasks")))));
         var inputRow = new Grid { ColumnSpacing = 8 };

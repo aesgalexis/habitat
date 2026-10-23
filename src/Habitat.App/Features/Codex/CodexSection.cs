@@ -4,6 +4,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 
 namespace Habitat.Features.Codex;
 
@@ -11,12 +12,14 @@ internal sealed class CodexSection : IDestinationSection
 {
     private readonly Grid _view = new() { RowSpacing = 10 };
     private readonly TextBlock _title = new() { Text = "Codex", FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap };
+    private readonly TextBlock _settings = new() { FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
     private readonly TextBlock _status = new() { FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap };
     private readonly StackPanel _messages = new() { Spacing = 22 };
     private readonly ScrollViewer _scroll;
     private readonly Button _stop = UiLanguage.Watch(new Button() { Content = UiText.Get("StopWaiting"), Visibility = Visibility.Collapsed }, ("Content", () => (object?)(UiText.Get("StopWaiting"))));
     private readonly Func<ICodexChatService> _service;
     private readonly Action<Exception> _report;
+    private readonly Func<MessageTone, Brush> _toneBrush;
     private readonly AsyncOperationScope _operations = new();
     private readonly DispatcherQueueTimer _timer;
     private readonly CodexChatSession _session = new();
@@ -34,17 +37,22 @@ internal sealed class CodexSection : IDestinationSection
     internal CodexChatTarget? Target => _session.Selected;
     internal IReadOnlyList<CodexChatMessage> Messages => _session.Messages;
     internal string StatusText => _status.Text;
+    internal string SettingsText => _settings.Text;
+    internal bool HasSettingsLine => _settings.Visibility == Visibility.Visible;
 
-    public CodexSection(Func<ICodexChatService> service, Action<Exception> report)
+    public CodexSection(Func<ICodexChatService> service, Action<Exception> report, Func<MessageTone, Brush> toneBrush)
     {
-        _service = service; _report = report;
+        _service = service; _report = report; _toneBrush = toneBrush;
         _view.RowDefinitions.Add(new() { Height = GridLength.Auto });
         _view.RowDefinitions.Add(new() { Height = GridLength.Auto });
         _view.RowDefinitions.Add(new() { Height = new GridLength(1, GridUnitType.Star) });
         var header = new Grid { ColumnSpacing = 12 };
         header.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
         header.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        header.Children.Add(_title);
+        var heading = new StackPanel { Spacing = 4 };
+        heading.Children.Add(_title);
+        heading.Children.Add(_settings);
+        header.Children.Add(heading);
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         var open = UiLanguage.Watch(new Button { Content = UiText.Get("OpenInCodex") }, ("Content", () => (object?)(UiText.Get("OpenInCodex"))));
         var reload = UiLanguage.Watch(new Button { Content = UiText.Get("ReloadChat") }, ("Content", () => (object?)(UiText.Get("ReloadChat"))));
@@ -56,6 +64,7 @@ internal sealed class CodexSection : IDestinationSection
         Grid.SetRow(_status, 1); _view.Children.Add(_status);
         _scroll = new ScrollViewer { Content = _messages, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Padding = new Thickness(0, 8, 12, 8) };
+        ScrollEdgeFade.Enable(_scroll);
         Grid.SetRow(_scroll, 2); _view.Children.Add(_scroll);
         UiLanguage.SetName(_title, () => UiText.Get("LinkedCodexChat"));
         UiLanguage.SetName(_messages, () => UiText.Get("CodexConversation"));
@@ -225,6 +234,9 @@ internal sealed class CodexSection : IDestinationSection
     {
         var messages = Messages;
         _title.Text = Target is { } target ? "Codex · " + target.Title : "Codex";
+        _settings.Text = UiLanguage.Value(_settings, "Text", () => Target is null ? "" : CodexChatSettings.Format(Target.Settings));
+        _settings.Visibility = Target is null ? Visibility.Collapsed : Visibility.Visible;
+        UiLanguage.SetName(_settings, () => Target is null ? "" : CodexChatSettings.Format(Target.Settings));
         _status.Text = UiLanguage.Value(_status, "Text", () => IsSubmitting ? UiText.Get("SendingToCodex") : _session.Issue.Length > 0 ? _session.Issue :
             _session.IsWaiting ? _session.PendingTarget?.Id == Target?.Id ? UiText.Get("CodexIsResponding") : UiText.Get("WaitingForCodexInAnotherChat") :
             _session.Current?.IsRunning is true ? UiText.Get("CodexIsWorkingOpenInCodexIfIt") :
@@ -238,8 +250,9 @@ internal sealed class CodexSection : IDestinationSection
             _rendered = rendered; _messages.Children.Clear();
             foreach (var message in messages)
             {
-                var group = new StackPanel { Spacing = 5 };
-                group.Children.Add(UiLanguage.Watch(new TextBlock { Text = message.Author == "YOU" ? UiText.Get("YOU") : message.Author, FontSize = 11, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Opacity = 0.75 }, ("Text", () => (object?)(message.Author == "YOU" ? UiText.Get("YOU") : message.Author))));
+                var tone = message.Author == "YOU" ? MessageTone.User : MessageTone.Assistant;
+                var group = new StackPanel { Spacing = 5, Tag = tone };
+                group.Children.Add(UiLanguage.Watch(new TextBlock { Text = message.Author == "YOU" ? UiText.Get("YOU") : message.Author, FontSize = 11, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = _toneBrush(tone) }, ("Text", () => (object?)(message.Author == "YOU" ? UiText.Get("YOU") : message.Author))));
                 group.Children.Add(new TextBlock { Text = message.Text, FontSize = 15, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true });
                 _messages.Children.Add(group);
             }
@@ -250,6 +263,13 @@ internal sealed class CodexSection : IDestinationSection
     }
 
     internal void RefreshLanguage() { _rendered = ""; Render(); }
+
+    internal void RefreshAppearance()
+    {
+        foreach (var group in _messages.Children.OfType<StackPanel>())
+            if (group.Tag is MessageTone tone && group.Children[0] is TextBlock author)
+                author.Foreground = _toneBrush(tone);
+    }
 
     public void Dispose()
     {

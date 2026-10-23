@@ -11,6 +11,10 @@ public sealed partial class MainPage
 {
     private async Task CheckCodexSchedulesUiAsync(string log)
     {
+        var dispatch = typeof(CodexLauncher).GetInterfaceMap(typeof(ICodexChatService));
+        var scheduled = Array.FindIndex(dispatch.InterfaceMethods, method => method.Name == nameof(ICodexChatService.SendScheduledAsync));
+        if (scheduled < 0 || dispatch.TargetMethods[scheduled].DeclaringType != typeof(CodexLauncher))
+            throw new InvalidOperationException("Scheduled deliveries must dispatch to the production launcher with their interrupted turn identity.");
         var previous = _services.Codex;
         var preferences = _preferences;
         var destination = _destination;
@@ -52,7 +56,7 @@ public sealed partial class MainPage
                 var select = controls.OfType<ComboBox>().First(control => control.Header as string == UiText.Get("CodexScheduleChat"));
                 var date = controls.OfType<CalendarDatePicker>().Single();
                 var time = controls.OfType<TimePicker>().Single();
-                if (controls.OfType<CheckBox>().Any() || (select.SelectedItem as ComboBoxItem)?.Tag is not CodexScheduleTarget { UsageLimited: true } picked || picked.Target != fake.Limited ||
+                if ((select.SelectedItem as ComboBoxItem)?.Tag is not CodexScheduleTarget { UsageLimited: true } picked || picked.Target != fake.Limited ||
                     dialog.PrimaryButtonText != UiText.Get("CodexScheduleSave") || !dialog.IsPrimaryButtonEnabled)
                     throw new InvalidOperationException("The limited destination must be prioritized while date, time and action follow the interface language.");
                 await InvokeAsync(FindButton(dialog, UiText.Get("CodexScheduleAtReset")));
@@ -89,6 +93,27 @@ public sealed partial class MainPage
                 dialog.Hide(); await showing; showing = null;
                 _services.CodexSchedules.Remove(saved.Id);
                 await CheckCodexScheduleNoticeStatesAsync(log);
+
+                fake.Multiple = true; Composer.Text = "";
+                showing = ShowCodexScheduleAsync(); await Task.Delay(180); dialog = _activeDialog!;
+                controls = Descendants(dialog).ToArray();
+                var multiple = controls.OfType<CheckBox>().Single(control => control.Content as string == UiText.Get("CodexScheduleSelectLimited"));
+                multiple.IsChecked = true;
+                var editor = controls.OfType<TextBox>().Single(control => control.Header as string == UiText.Get("CodexScheduleMessage"));
+                if (editor.Text != UiText.Get("CodexScheduleContinueMessage") || !dialog.IsPrimaryButtonEnabled)
+                    throw new InvalidOperationException("Selecting interrupted chats must offer Continue in the interface language without an early send.");
+                var choices = Descendants(dialog).OfType<CheckBox>().Where(control => control.Tag is CodexScheduleTarget).ToArray();
+                foreach (var choice in choices) choice.IsChecked = false;
+                if (dialog.IsPrimaryButtonEnabled) throw new InvalidOperationException("An empty resumption selection cannot be saved.");
+                foreach (var choice in choices) choice.IsChecked = true;
+                await InvokeAsync(FindButton(dialog, UiText.Get("CodexScheduleAtReset")));
+                await InvokeAsync(FindButton(dialog, UiText.Get("CodexScheduleSave")));
+                await showing.WaitAsync(TimeSpan.FromSeconds(8)); showing = null;
+                var batch = _services.CodexSchedules.Messages;
+                if (batch.Count != 2 || batch.Any(item => item.InterruptedTurnId is null || item.Text != UiText.Get("CodexScheduleContinueMessage")) || fake.Sends != 0)
+                    throw new InvalidOperationException("Several interrupted chats must persist separately with their turn identities and localized Continue message.");
+                foreach (var item in batch) { _services.CodexSchedules.Cancel(item.Id); _services.CodexSchedules.Remove(item.Id); }
+                fake.Multiple = false;
 
                 fake.Empty = true;
                 Composer.Text = literal;
@@ -204,7 +229,7 @@ public sealed partial class MainPage
     {
         public CodexChatTarget Limited = new("22222222-2222-2222-2222-222222222222", "Keep original title — límite");
         public DateTimeOffset Reset = DateTimeOffset.Now.AddHours(1);
-        public bool WaitForCancellation, CancelObserved, Empty, FailListing;
+        public bool WaitForCancellation, CancelObserved, Empty, FailListing, Multiple;
         public int Sends;
         public async Task<IReadOnlyList<CodexScheduleTarget>> ListScheduleTargetsAsync(CancellationToken token)
         {
@@ -214,7 +239,8 @@ public sealed partial class MainPage
                 catch (OperationCanceledException) { CancelObserved = true; throw; }
             }
             if (FailListing) throw new IOException("Simulated unavailable chat list");
-            return Empty ? [] : [new(new("11111111-1111-1111-1111-111111111111", "Regular chat"), false), new(Limited, true, Reset)];
+            return Empty ? [] : [new(new("11111111-1111-1111-1111-111111111111", "Regular chat"), Multiple, Multiple ? Reset : null,
+                Multiple ? "other-interrupted-turn" : null), new(Limited, true, Reset, "interrupted-turn")];
         }
         public Task<CodexChatSelection> GetVisibleAsync(CancellationToken token) => Task.FromResult(new CodexChatSelection(null, true));
         public Task<CodexChatHistory> ReadAsync(CodexChatTarget target, CancellationToken token) => Task.FromResult(new CodexChatHistory(target, []));

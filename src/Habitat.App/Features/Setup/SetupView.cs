@@ -23,6 +23,7 @@ internal sealed class SetupView : Grid
     {
         var scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+        ScrollEdgeFade.Enable(scroll);
         var panel = new StackPanel { Spacing = 18, Padding = new Thickness(0, 0, 12, 8) };
         panel.Children.Add(Text(UiText.Get("ConnectTheToolsYouWantToUseTasks")));
         panel.Children.Add(Card("1. Google Chrome", ChromeStatus, GetChrome));

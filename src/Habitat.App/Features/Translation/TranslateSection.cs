@@ -114,6 +114,7 @@ internal sealed class TranslateSection : IDestinationSection
         _copyActions.Children.Add(_copyStatus);
         translated.Children.Add(_copyActions);
         var scroll = new ScrollViewer { Content = translated, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+        ScrollEdgeFade.Enable(scroll);
         Grid.SetRow(scroll, 3);
         _view.Children.Add(scroll);
         _copy.Click += (_, _) => CopyResult();

@@ -9,6 +9,7 @@ internal sealed class CodexChatSession(int maxCachedChats = 32)
     private readonly Dictionary<string, CodexChatHistory> _history = new(StringComparer.Ordinal);
     private readonly Dictionary<(string Chat, string Turn), string> _originalText = new();
     private readonly Dictionary<string, string> _issues = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _finishedTurns = new(StringComparer.Ordinal);
     private readonly Dictionary<string, long> _access = new(StringComparer.Ordinal);
     private long _sequence;
     private Pending? _pending;
@@ -16,7 +17,25 @@ internal sealed class CodexChatSession(int maxCachedChats = 32)
     public CodexChatTarget? PendingTarget => _pending?.Target;
     public bool IsWaiting => _pending is not null;
     public CodexChatHistory? Current => Selected is { } target ? _history.GetValueOrDefault(target.Id) : null;
-    public string Issue => UiText.LocalizeMessage(_issues.GetValueOrDefault(Selected?.Id ?? "", ""));
+    public string Issue
+    {
+        get
+        {
+            var issue = _issues.GetValueOrDefault(Selected?.Id ?? "", "");
+            if (issue.Length > 0) return UiText.LocalizeMessage(issue);
+            // A reader can report an interrupted turn before its final snapshot arrives.
+            // Derive the outcome from the latest history, even after local waiting ends.
+            if (Current is not { } history || history.Turns.LastOrDefault() is not { } turn ||
+                _finishedTurns.GetValueOrDefault(history.Target.Id) != turn.Id) return "";
+            return turn.Status switch
+            {
+                "failed" or "interrupted" => UiText.Get("TheCodexTurnDidNotCompleteOpenThe"),
+                "completed" when !turn.Messages.Any(message => message.Author == "Codex" && !string.IsNullOrWhiteSpace(message.Text))
+                    => UiText.Get("CodexFinishedWithoutATextReplyOpenThe"),
+                _ => ""
+            };
+        }
+    }
 
     internal int CachedChatCount => _access.Count;
     internal int OriginalTextCount => _originalText.Count;
@@ -33,6 +52,7 @@ internal sealed class CodexChatSession(int maxCachedChats = 32)
         if (submission.Result != Services.CodexDeliveryResult.Sent || submission.Target is not { } target) return;
         _pending = new(target, submission.PreviousTurnId, text);
         _issues.Remove(target.Id);
+        _finishedTurns.Remove(target.Id);
         if (Selected is null) Selected = target;
         Touch(target);
     }
@@ -55,12 +75,8 @@ internal sealed class CodexChatSession(int maxCachedChats = 32)
         _originalText[(history.Target.Id, turn.Id)] = pending.Text;
         _pending = pending with { TurnId = turn.Id };
         if (turn.IsRunning) return;
-        if (turn.Status == "completed")
-            SetIssue(history.Target, turn.Messages.Any(message => message.Author == "Codex" && message.Text.Length > 0)
-                ? "" : UiText.Get("CodexFinishedWithoutATextReplyOpenThe"));
-        else if (turn.Status is "failed" or "interrupted")
-            SetIssue(history.Target, UiText.Get("TheCodexTurnDidNotCompleteOpenThe"));
-        else return;
+        if (turn.Status is not ("completed" or "failed" or "interrupted")) return;
+        _finishedTurns[history.Target.Id] = turn.Id;
         _pending = null;
     }
 
@@ -110,6 +126,7 @@ internal sealed class CodexChatSession(int maxCachedChats = 32)
             _access.Remove(oldest);
             _history.Remove(oldest);
             _issues.Remove(oldest);
+            _finishedTurns.Remove(oldest);
             foreach (var key in _originalText.Keys.Where(key => key.Chat == oldest).ToArray()) _originalText.Remove(key);
         }
     }

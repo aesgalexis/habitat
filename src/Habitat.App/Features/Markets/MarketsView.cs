@@ -30,8 +30,8 @@ internal sealed class MarketsView : Grid
     public MarketsView(MarketsSettings settings, string? selected)
     {
         var body = new StackPanel { Spacing = 12, Padding = new Thickness(0, 0, 12, 8) };
-        Children.Add(new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
+        Children.Add(ScrollEdgeFade.Enable(new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled }));
         SelectedSymbol = settings.Symbols.Contains(selected) ? selected : settings.Symbols.FirstOrDefault();
         body.Children.Add(_favorites);
         foreach (var symbol in settings.Symbols)

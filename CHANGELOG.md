@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.16.0 — 2026-10-23
+
+- Desvanecido suave de 20 píxeles en los bordes con contenido oculto de las áreas de lectura. Respeta el fondo real, las barras de scroll, la selección y los controles nativos; se desactiva cuando el contenido cabe y se recupera al cambiar de vista.
+- El chat de Codex muestra el modelo y la intensidad de razonamiento debajo del título como última configuración conocida, con valores ausentes explícitos y etiquetas en inglés y español.
+- Las etiquetas de autor de Codex comparten los colores de OpenAI y se actualizan al cambiar de tema. Se elimina el aviso de turno incompleto cuando una lectura posterior confirma su finalización correcta.
+- Preferencias permite añadir, retirar y ordenar Gmail, Tareas y Mercados en la barra lateral. Tiempo mantiene su posición; los perfiles existentes conservan sus widgets y los nuevos comienzan con Mercados desactivado.
+- La programación de Codex permite seleccionar uno o varios chats detenidos por límite de uso, incluidos chats creados directamente en Codex. Cada reanudación queda vinculada a su turno interrumpido para evitar duplicados si el chat ya ha continuado.
+- Pruebas de renderizado y ciclo de vida del scroll, configuración de Codex, reanudaciones programadas y personalización de la barra lateral, con datos aislados y ambos idiomas y temas.
+
 ## 0.15.6 — 2026-10-22
 
 - Un envío confirmado por Codex se mantiene como enviado aunque falle la identificación posterior del chat, su registro local o el acceso al historial. Estas comprobaciones ya no generan avisos falsos de revisión ni reintentos de un mensaje entregado.

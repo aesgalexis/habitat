@@ -34,7 +34,7 @@ internal sealed class CodexReadClient(string executable) : ICodexHistoryReader, 
                 var id = String(thread, "id");
                 var title = String(thread, "name") ?? String(thread, "preview");
                 if (ValidId(id) && !string.IsNullOrWhiteSpace(title))
-                    targets[id!] = new(id!, title, thread.TryGetProperty("createdAt", out var created) && created.TryGetInt64(out var timestamp) ? timestamp : null);
+                    targets[id!] = ParseTarget(thread, id!, title);
             }
             cursor = String(result, "nextCursor");
             if (cursor is not null && (!seen.Add(cursor) || targets.Count >= 1000))
@@ -87,9 +87,7 @@ internal sealed class CodexReadClient(string executable) : ICodexHistoryReader, 
             {
                 if (String(thread, "name") != title) continue;
                 var id = String(thread, "id");
-                if (ValidId(id)) matches[id!] = new(id!, title,
-                    thread.TryGetProperty("createdAt", out var created) && created.ValueKind == JsonValueKind.Number &&
-                    created.TryGetInt64(out var timestamp) ? timestamp : null);
+                if (ValidId(id)) matches[id!] = ParseTarget(thread, id!, title);
             }
         }
         if (matches.Count > 1) throw new InvalidDataException(UiText.Get("MoreThanOneCodexChatHasThisTitle"));
@@ -131,6 +129,22 @@ internal sealed class CodexReadClient(string executable) : ICodexHistoryReader, 
                 error.ValueKind == JsonValueKind.Object ? String(error, "message") : null, code));
         }
         return new(target, turns);
+    }
+
+    private static CodexChatTarget ParseTarget(JsonElement thread, string id, string title) => new(id, title,
+        thread.TryGetProperty("createdAt", out var created) && created.ValueKind == JsonValueKind.Number &&
+        created.TryGetInt64(out var timestamp) ? timestamp : null)
+    {
+        Settings = ParseSettings(thread)
+    };
+
+    internal static CodexChatSettings? ParseSettings(JsonElement thread)
+    {
+        // This private reader does not load/resume chats. Treat returned metadata
+        // as the latest persisted configuration, not live per-turn telemetry.
+        var model = String(thread, "model");
+        var effort = String(thread, "reasoningEffort");
+        return string.IsNullOrWhiteSpace(model) && string.IsNullOrWhiteSpace(effort) ? null : new(model, effort);
     }
 
     internal static bool ValidId(string? value) => Guid.TryParseExact(value, "D", out _);

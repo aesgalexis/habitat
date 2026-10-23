@@ -14,6 +14,7 @@ internal sealed record Preferences(string Theme, double Opacity)
     public string InterfaceLanguage { get; init; } = "en";
     public WallpaperSettings Wallpaper { get; init; } = new();
     public MarketsSettings Markets { get; init; } = new();
+    public string[]? SidebarWidgets { get; init; } = SidebarCatalog.Defaults;
     public bool TextOnly { get; init; } = true;
     public bool GlobalHotkeyEnabled { get; init; } = true;
     public bool SetupGuideSeen { get; init; }
@@ -32,7 +33,8 @@ internal sealed record Preferences(string Theme, double Opacity)
     {
         try
         {
-            var saved = JsonSerializer.Deserialize<Preferences>(File.ReadAllText(storagePath ?? FilePath));
+            using var document = JsonDocument.Parse(File.ReadAllText(storagePath ?? FilePath));
+            var saved = document.Deserialize<Preferences>();
             if (saved is not null && saved.Theme is "day" or "night" or "hybrid")
             {
                 var catalog = new DestinationCatalog(saved.EnabledDestinations, saved.WindowsApps);
@@ -41,6 +43,9 @@ internal sealed record Preferences(string Theme, double Opacity)
                     InterfaceLanguage = UiText.NormalizeLanguage(saved.InterfaceLanguage),
                     Wallpaper = (saved.Wallpaper ?? new()).Normalize(),
                     Markets = (saved.Markets ?? new()).Normalize(),
+                    // Existing profiles keep their four widgets; fresh profiles omit Markets.
+                    SidebarWidgets = new SidebarCatalog(document.RootElement.TryGetProperty(nameof(SidebarWidgets), out _)
+                        ? saved.SidebarWidgets : SidebarCatalog.Available).Enabled.ToArray(),
                     Opacity = Math.Clamp(saved.Opacity, 0, 100), Destination = ComposerDestinations.Normalize(saved.Destination),
                     EnabledDestinations = catalog.Enabled.ToArray(), WindowsApps = catalog.WindowsApps.ToArray()
                 };

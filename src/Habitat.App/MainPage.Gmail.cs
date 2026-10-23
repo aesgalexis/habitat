@@ -153,6 +153,7 @@ public sealed partial class MainPage
         panel.Children.Add(GmailCancel);
         panel.Children.Add(actions);
         var scroll = new ScrollViewer { Content = GmailContent, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MaxHeight = 420 };
+        ScrollEdgeFade.Enable(scroll);
         panel.Children.Add(scroll);
         panel.Children.Add(GmailMore);
         panel.Children.Add(UiLanguage.Watch(new TextBlock
