@@ -38,6 +38,8 @@ internal sealed class CodexLauncher(Action<string>? trace = null, AppDataPaths? 
     }
 
     public async Task<CodexChatSelection> GetVisibleAsync(CancellationToken token) => await (await GetChatAsync(token)).GetVisibleAsync(token);
+    public async Task<CodexChatSelection> GetLinkedAsync(CancellationToken token) => await (await GetChatAsync(token)).GetLinkedAsync(token);
+    public async Task ClearLinkedAsync(CancellationToken token) => await (await GetChatAsync(token)).ClearLinkedAsync(token);
     public async Task<IReadOnlyList<CodexScheduleTarget>> ListScheduleTargetsAsync(CancellationToken token) =>
         await (await GetChatAsync(token)).ListScheduleTargetsAsync(token);
     public async Task<CodexScheduledAttempt> SendScheduledAsync(CodexChatTarget? target, string text, CancellationToken token, string? interruptedTurnId = null) =>

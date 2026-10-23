@@ -1,4 +1,6 @@
 {
+  "CodexNewChat": "New chat",
+  "CodexNewChatFailed": "Could not start a new chat. Your linked chat and draft are unchanged. Try again.",
   "CodexChatSettings": "Model: {0} · Reasoning: {1}",
   "CodexChatLastKnownSettings": "Last known configuration · Model: {0} · Reasoning: {1}",
   "CodexSettingUnavailable": "Not available",

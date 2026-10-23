@@ -72,6 +72,11 @@ public sealed partial class MainPage
         youtube.ClearRequested += () => ResetSearch(Services.ComposerDestination.YouTube);
         _destinationSections.Add(youtube.Destination, youtube);
         var codex = new CodexSection(() => _services.Codex, exception => _services.ReportError("Codex chat", exception), ToneBrush);
+        codex.NewChatStarted += () =>
+        {
+            _composerDrafts.Edit(Services.ComposerDestination.Codex, "");
+            if (_destination == Services.ComposerDestination.Codex) { RestoreComposerDraft(); FocusComposer(); }
+        };
         codex.StateChanged += () =>
         {
             PresentDestinationSection(); UpdateWritingLayout(); UpdateSendState();

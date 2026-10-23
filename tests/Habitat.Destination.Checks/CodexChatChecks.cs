@@ -101,6 +101,7 @@ internal static class CodexChatChecks
         await CheckOriginsAsync(check);
         await CheckForeignStartAsync(check);
         await CheckReaderAsync(check);
+        await CodexLinkedChatChecks.RunAsync(check);
     }
 
     private static void CheckOutcomeRefresh(Action<bool, string> check)
@@ -325,7 +326,7 @@ internal static class CodexChatChecks
         public CodexDeliveryResult Result = CodexDeliveryResult.Sent;
         public Task<CodexVisibleChat?> ReadVisibleAsync(CancellationToken token) => Task.FromResult(Visible);
         public Task<CodexDeliveryResult> SubmitVisibleAsync(CodexVisibleChat expected, string text, CancellationToken token) { Sends++; return Task.FromResult(Result); }
-        public Task<bool> OpenChatAsync(CodexChatTarget? target, CancellationToken token) => Task.FromResult(true);
+        public Task<bool> OpenChatAsync(CodexChatTarget? target, CancellationToken token) => Task.FromResult(false);
         public void ReturnFocus(nint ownerWindow) { }
     }
     private sealed class Reader : ICodexHistoryReader

@@ -40,6 +40,11 @@ internal sealed class CodexChatSession(int maxCachedChats = 32)
     internal int CachedChatCount => _access.Count;
     internal int OriginalTextCount => _originalText.Count;
     public void Select(CodexChatTarget? target) { Selected = target; Touch(target); }
+    public void Reset()
+    {
+        Selected = null; _pending = null;
+        _history.Clear(); _originalText.Clear(); _issues.Clear(); _finishedTurns.Clear(); _access.Clear();
+    }
     public void SetIssue(CodexChatTarget? target, string message)
     {
         if (message.Length == 0) _issues.Remove(target?.Id ?? "");

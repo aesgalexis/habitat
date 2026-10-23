@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.16.1 — 2026-10-23
+
+- Corregida la pérdida del chat de HABITAT al abrir otro chat en Codex: la conversación queda vinculada por su identificador y se recupera tras reiniciar, independientemente de la selección visible en Codex.
+- Los mensajes vuelven a abrir y verifican el chat vinculado antes de enviarse, con protección de borradores, turnos en ejecución y cambios de destino durante la entrega.
+- «Nuevo chat» permite empezar otra conversación sin borrar la anterior en Codex; limpia el vínculo y el borrador y devuelve el foco al editor inicial centrado. La selección vacía también se conserva tras reiniciar.
+- La actualización recupera el chat registrado disponible de las versiones anteriores. Las entregas programadas mantienen el vínculo de la conversación actual.
+- Comprobaciones de persistencia, navegación, reinicio y envío al destino correcto, junto con pruebas WinUI en inglés y español y documentación actualizada.
+
 ## 0.16.0 — 2026-10-23
 
 - Desvanecido suave de 20 píxeles en los bordes con contenido oculto de las áreas de lectura. Respeta el fondo real, las barras de scroll, la selección y los controles nativos; se desactiva cuando el contenido cabe y se recupera al cambiar de vista.

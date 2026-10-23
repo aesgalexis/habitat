@@ -1,4 +1,6 @@
 {
+  "CodexNewChat": "Nuevo chat",
+  "CodexNewChatFailed": "No se ha podido iniciar un chat nuevo. Se conservan tu chat vinculado y tu borrador. Inténtalo de nuevo.",
   "CodexChatSettings": "Modelo: {0} · Razonamiento: {1}",
   "CodexChatLastKnownSettings": "Última configuración conocida · Modelo: {0} · Razonamiento: {1}",
   "CodexSettingUnavailable": "No disponible",

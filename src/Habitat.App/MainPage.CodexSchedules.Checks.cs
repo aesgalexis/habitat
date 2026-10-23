@@ -243,6 +243,7 @@ public sealed partial class MainPage
                 Multiple ? "other-interrupted-turn" : null), new(Limited, true, Reset, "interrupted-turn")];
         }
         public Task<CodexChatSelection> GetVisibleAsync(CancellationToken token) => Task.FromResult(new CodexChatSelection(null, true));
+        public Task<CodexChatSelection> GetLinkedAsync(CancellationToken token) => GetVisibleAsync(token);
         public Task<CodexChatHistory> ReadAsync(CodexChatTarget target, CancellationToken token) => Task.FromResult(new CodexChatHistory(target, []));
         public Task<CodexChatSubmission> SendAsync(CodexChatTarget? expected, string text, CancellationToken token) { Sends++; return Task.FromResult(new CodexChatSubmission(CodexDeliveryResult.NotSent)); }
         public Task<bool> OpenChatAsync(CodexChatTarget? target, CancellationToken token) => Task.FromResult(false);

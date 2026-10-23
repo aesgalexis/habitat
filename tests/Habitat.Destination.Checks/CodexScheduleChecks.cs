@@ -113,6 +113,7 @@ internal static class CodexScheduleChecks
         }, origins);
         check((await service.ListScheduleTargetsAsync(default)).Single() is { Target: var limited, InterruptedTurnId: "last" } && limited == B,
             "An empty registry still offers external chats stopped by a usage limit for explicit resumption");
+        origins.Register(A, link: true);
         reader.Reads.Clear();
         await queue.RunDueAsync(now, (item, token) => service.SendScheduledAsync(item.Target, item.Text, token), default);
         check(starts == 0, "Saving a first-message schedule does not create a Codex chat or send early");
@@ -135,8 +136,8 @@ internal static class CodexScheduleChecks
         desktop.NoEditor = true;
         await queue.RunDueAsync(queue.Messages.Single().RetryAt!.Value, (item, token) => service.SendScheduledAsync(item.Target, item.Text, token), default);
         check(starts == 1 && queue.Messages.Single().State == CodexScheduleState.Sent && origins.Contains(reader.Created!) &&
-            (await service.ListScheduleTargetsAsync(default)).Any(item => item.Target == reader.Created) && !origins.Contains(B),
-            "At the scheduled time a confirmed first message creates and registers only its own chat for future destinations");
+            (await service.ListScheduleTargetsAsync(default)).Any(item => item.Target == reader.Created) && !origins.Contains(B) && origins.Linked == A,
+            "A scheduled first message registers its own chat while preserving HABITAT's current conversation link");
         queue = new CodexScheduleQueue(file);
         await queue.RunDueAsync(now.AddYears(1), (_, _) => throw new Exception("Must not create another chat"), default);
         check(starts == 1, "Restarting after a confirmed new-chat send never creates a second chat");

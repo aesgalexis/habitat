@@ -90,6 +90,7 @@ public sealed partial class MainPage
         internal bool DelayRead, DelayOpen;
         internal int Sends;
         public Task<CodexChatSelection> GetVisibleAsync(CancellationToken token) => Task.FromResult(new CodexChatSelection(Target, false));
+        public Task<CodexChatSelection> GetLinkedAsync(CancellationToken token) => GetVisibleAsync(token);
         public Task<CodexChatHistory> ReadAsync(CodexChatTarget target, CancellationToken token) =>
             DelayRead ? ReadReply.Task : Task.FromResult(new CodexChatHistory(target, []));
         public Task<CodexChatSubmission> SendAsync(CodexChatTarget? target, string text, CancellationToken token)

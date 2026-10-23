@@ -17,6 +17,7 @@ internal sealed class CodexSection : IDestinationSection
     private readonly StackPanel _messages = new() { Spacing = 22 };
     private readonly ScrollViewer _scroll;
     private readonly Button _stop = UiLanguage.Watch(new Button() { Content = UiText.Get("StopWaiting"), Visibility = Visibility.Collapsed }, ("Content", () => (object?)(UiText.Get("StopWaiting"))));
+    private readonly Button _newChat = UiLanguage.Watch(new Button { Content = UiText.Get("CodexNewChat") }, ("Content", () => (object?)UiText.Get("CodexNewChat")));
     private readonly Func<ICodexChatService> _service;
     private readonly Action<Exception> _report;
     private readonly Func<MessageTone, Brush> _toneBrush;
@@ -24,16 +25,17 @@ internal sealed class CodexSection : IDestinationSection
     private readonly DispatcherQueueTimer _timer;
     private readonly CodexChatSession _session = new();
     private TaskCompletionSource? _refresh;
-    private bool _active, _disposed, _canStartNew;
+    private bool _active, _disposed, _canStartNew, _resetting;
     private int _sendRevision;
     private string _rendered = "";
     public string Destination => ComposerDestination.Codex;
     public FrameworkElement View => _view;
     public bool IsSubmitting { get; private set; }
-    public bool IsBusy => IsSubmitting || _session.IsWaiting || _session.Current?.IsRunning is true;
+    public bool IsBusy => IsSubmitting || _resetting || _session.IsWaiting || _session.Current?.IsRunning is true;
     public bool HasContent => HasMessages || IsBusy || _session.Issue.Length > 0;
     public bool HasMessages => _session.Messages.Count > 0;
     public event Action? StateChanged;
+    public event Action? NewChatStarted;
     internal CodexChatTarget? Target => _session.Selected;
     internal IReadOnlyList<CodexChatMessage> Messages => _session.Messages;
     internal string StatusText => _status.Text;
@@ -58,8 +60,9 @@ internal sealed class CodexSection : IDestinationSection
         var reload = UiLanguage.Watch(new Button { Content = UiText.Get("ReloadChat") }, ("Content", () => (object?)(UiText.Get("ReloadChat"))));
         open.Click += async (_, _) => await OpenAsync();
         reload.Click += async (_, _) => await RefreshAsync();
+        _newChat.Click += async (_, _) => await NewChatAsync();
         _stop.Click += (_, _) => { _session.StopWaiting(); UpdateTimer(); Render(); };
-        actions.Children.Add(open); actions.Children.Add(reload); actions.Children.Add(_stop);
+        actions.Children.Add(_newChat); actions.Children.Add(open); actions.Children.Add(reload); actions.Children.Add(_stop);
         Grid.SetColumn(actions, 1); header.Children.Add(actions); _view.Children.Add(header);
         Grid.SetRow(_status, 1); _view.Children.Add(_status);
         _scroll = new ScrollViewer { Content = _messages, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -86,13 +89,13 @@ internal sealed class CodexSection : IDestinationSection
 
     private void UpdateTimer()
     {
-        if (!_disposed && (_active || _session.IsWaiting)) _timer.Start();
+        if (!_disposed && !_resetting && (_active || _session.IsWaiting)) _timer.Start();
         else _timer.Stop();
     }
 
     internal Task RefreshAsync()
     {
-        if (_disposed || IsSubmitting) return Task.CompletedTask;
+        if (_disposed || IsSubmitting || _resetting) return Task.CompletedTask;
         if (_refresh is not null) return _refresh.Task;
         _refresh = new(TaskCreationOptions.RunContinuationsAsynchronously);
         var completion = _refresh;
@@ -110,7 +113,7 @@ internal sealed class CodexSection : IDestinationSection
             if (_disposed) return;
             if (_active)
             {
-                var provider = _operations.RunAsync(() => _service().GetVisibleAsync(timeout.Token), default(CodexChatSelection)!);
+                var provider = _operations.RunAsync(() => _service().GetLinkedAsync(timeout.Token), default(CodexChatSelection)!);
                 var selection = await provider.WaitAsync(timeout.Token);
                 if (_disposed) return;
                 _canStartNew = selection.CanStartNew;
@@ -129,8 +132,9 @@ internal sealed class CodexSection : IDestinationSection
             if (pending is not null) _session.SetIssue(pending, UiText.Get("CouldNotReadTheCodexResponseRetrying"));
             else
             {
-                _session.Select(null); _canStartNew = false;
-                _session.SetIssue(null, exception is InvalidDataException ? exception.Message : UiText.Get("CouldNotConnectToCodexOpenItsChat"));
+                _canStartNew = false;
+                _session.SetIssue(Target, exception is InvalidDataException ? exception.Message :
+                    UiText.Get(Target is null ? "CouldNotConnectToCodexOpenItsChat" : "CouldNotReadTheCodexResponseRetrying"));
             }
         }
         finally
@@ -147,7 +151,7 @@ internal sealed class CodexSection : IDestinationSection
         {
             var provider = _operations.RunAsync(() => _service().ReadAsync(target, token), default(CodexChatHistory)!);
             var history = await provider.WaitAsync(token);
-            if (!_disposed) _session.Observe(history);
+            if (!_disposed && history.Target.Id == target.Id) _session.Observe(history);
         }
         catch (OperationCanceledException) when (_operations.Token.IsCancellationRequested) { }
         catch (Exception exception)
@@ -208,6 +212,34 @@ internal sealed class CodexSection : IDestinationSection
         if (!_disposed) Render();
     }
 
+    internal Task NewChatAsync() => _operations.RunAsync(async () =>
+    {
+        if (_disposed || IsSubmitting || _resetting) return;
+        _resetting = true; UpdateTimer(); Render();
+        try
+        {
+            // Drain reads before clearing so a late snapshot cannot restore the old chat.
+            if (_refresh is not null) await _refresh.Task;
+            await _service().ClearLinkedAsync(_operations.Token);
+            if (_disposed) return;
+            _session.Reset(); _canStartNew = true;
+            _resetting = false; Render();
+            NewChatStarted?.Invoke();
+        }
+        catch (OperationCanceledException) when (_disposed) { }
+        catch (Exception exception)
+        {
+            if (_disposed) return;
+            _report(exception);
+            _session.SetIssue(Target, UiText.Get("CodexNewChatFailed"));
+        }
+        finally
+        {
+            _resetting = false;
+            if (!_disposed) { UpdateTimer(); Render(); }
+        }
+    });
+
     internal void ReturnFocus(nint ownerWindow) => _service().ReturnFocus(ownerWindow);
 
     internal Task OpenAsync() => _operations.RunAsync(OpenCoreAsync);
@@ -242,6 +274,7 @@ internal sealed class CodexSection : IDestinationSection
             _session.Current?.IsRunning is true ? UiText.Get("CodexIsWorkingOpenInCodexIfIt") :
             Target is null ? "" : UiText.Get("FollowingACodexChatStartedFromHABITAT"));
         _stop.Visibility = _session.IsWaiting ? Visibility.Visible : Visibility.Collapsed;
+        _newChat.IsEnabled = !IsSubmitting && !_resetting;
         var rendered = System.Text.Json.JsonSerializer.Serialize(new { Id = Target?.Id, Messages = messages });
         if (rendered != _rendered)
         {
@@ -274,7 +307,7 @@ internal sealed class CodexSection : IDestinationSection
     public void Dispose()
     {
         if (_disposed) return;
-        _disposed = true; _timer.Stop(); StateChanged = null;
+        _disposed = true; _timer.Stop(); StateChanged = null; NewChatStarted = null;
         _ = _operations.StopAsync();
     }
 

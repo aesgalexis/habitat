@@ -31,6 +31,8 @@ La versión **0.15.2** limita el selector y la entrega de mensajes programados a
 
 La versión **0.16.0** incorpora la personalización de la barra lateral, la reanudación programada de varios chats de Codex detenidos por límite, la lectura del modelo y razonamiento del chat y el desvanecido de los bordes de lectura. También corrige avisos de finalización obsoletos y unifica los colores de los autores.
 
+La versión **0.16.1** corrige la pérdida del chat vinculado al navegar por Codex. Conserva la conversación tras reiniciar, verifica su destino al enviar e incorpora «Nuevo chat» para volver al editor inicial sin borrar la conversación anterior.
+
 La publicación incluye dos alternativas: el instalador `HABITAT-<version>-x64-setup.exe`, con desinstalación registrada en Windows, y el ZIP con su instalador PowerShell. Ambos son autocontenidos, se instalan por usuario y tienen un SHA-256 adjunto. El EXE necesita Windows 10 2004 o posterior y admite instalación silenciosa. Consulta [la preparación para WinGet](WINGET.md).
 
 Usa siempre el mismo formato para actualizar una instalación. Los instaladores rechazan mezclar las disposiciones del EXE y el ZIP en una misma carpeta. Para cambiar de formato, cierra HABITAT y el residente, retira la instalación anterior conservando los datos de usuario y después instala el otro formato.

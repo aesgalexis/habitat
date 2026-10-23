@@ -54,6 +54,8 @@ internal interface ICodexChatService : IAsyncDisposable
     Task<CodexScheduledAttempt> SendScheduledAsync(CodexChatTarget? target, string text, CancellationToken token, string? interruptedTurnId = null) =>
         Task.FromResult(new CodexScheduledAttempt(CodexDeliveryResult.NotSent));
     Task<CodexChatSelection> GetVisibleAsync(CancellationToken token);
+    Task<CodexChatSelection> GetLinkedAsync(CancellationToken token);
+    Task ClearLinkedAsync(CancellationToken token) => Task.CompletedTask;
     Task<CodexChatHistory> ReadAsync(CodexChatTarget target, CancellationToken token);
     Task<CodexChatSubmission> SendAsync(CodexChatTarget? expected, string text, CancellationToken token);
     Task<bool> OpenChatAsync(CodexChatTarget? target, CancellationToken token);
@@ -80,6 +82,7 @@ internal interface ICodexChatDesktop
 internal sealed class DisabledCodexChatService : ICodexChatService
 {
     public Task<CodexChatSelection> GetVisibleAsync(CancellationToken token) => Task.FromResult(new CodexChatSelection(null, false));
+    public Task<CodexChatSelection> GetLinkedAsync(CancellationToken token) => GetVisibleAsync(token);
     public Task<CodexChatHistory> ReadAsync(CodexChatTarget target, CancellationToken token) => Task.FromResult(new CodexChatHistory(target, []));
     public Task<CodexChatSubmission> SendAsync(CodexChatTarget? expected, string text, CancellationToken token) =>
         Task.FromResult(new CodexChatSubmission(CodexDeliveryResult.NotSent));

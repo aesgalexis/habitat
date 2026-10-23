@@ -79,6 +79,7 @@ public sealed partial class MainPage
     {
         public CodexChatTarget? Visible;
         public Task<CodexChatSelection> GetVisibleAsync(CancellationToken token) => Task.FromResult(new CodexChatSelection(Visible, Visible is null));
+        public Task<CodexChatSelection> GetLinkedAsync(CancellationToken token) => GetVisibleAsync(token);
         public Task<CodexChatHistory> ReadAsync(CodexChatTarget target, CancellationToken token) =>
             Task.FromResult(new CodexChatHistory(target, [new("turn", "completed", [new("reply", "Codex", "Unchanged reply")])]));
         public Task<CodexChatSubmission> SendAsync(CodexChatTarget? expected, string text, CancellationToken token) =>
