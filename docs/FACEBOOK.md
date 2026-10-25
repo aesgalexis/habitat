@@ -1,0 +1,32 @@
+# Facebook contacts
+
+El widget **Facebook** utiliza un icono vectorial monocromo con el mismo color del tema que los demás widgets. El dibujo está normalizado y centrado en un slot de 24 píxeles, con la misma línea de espacio reservada bajo el icono que Gmail y Tasks, para mantener alineados sus centros horizontal y verticalmente dentro de cada fila. Abre una segunda barra compacta de **40 píxeles**, separada por 12 píxeles del sidebar principal, con avatares circulares y scroll vertical. La barra tiene una superficie propia que permanece visible durante la carga y los errores; no se expande al desplegar el sidebar principal. Los nombres se conservan en su idioma original y aparecen en tooltips y etiquetas de accesibilidad. Cuando la página proporciona un enlace de perfil o conversación, pulsar la foto abre ese enlace en Chrome. Si no existe un enlace, se muestra únicamente el avatar. Una foto que no carga se sustituye por la inicial del nombre sobre un fondo neutro.
+
+## Activación
+
+1. Actualiza la extensión HABITAT Browser Bridge a la versión 0.10.2 o posterior. Para la copia local, recarga la extensión desde `chrome://extensions`; el código actualizado está en `extension/` y se incluye en el paquete de Chrome.
+2. Abre su popup y pulsa **Enable Facebook contacts**. Chrome solicita acceso opcional a `facebook.com` y `www.facebook.com`. La conexión general de HABITAT también debe estar habilitada.
+3. Inicia sesión en Facebook en Chrome y abre Home con el panel Contacts visible. Una ventana ancha puede ser necesaria para que Facebook lo muestre.
+4. Pulsa el widget **Facebook** de HABITAT. La misma acción cierra la barra. **Disable Facebook contacts** en el popup revoca el acceso.
+
+No se necesita instalar Facebook como aplicación ni crear una aplicación de Meta. Se utiliza la sesión de Chrome a través de la extensión, sin Graph API. Si no hay una pestaña Home, una petición explícita del widget puede abrir una pestaña en segundo plano. Las pestañas personales no se navegan ni se cierran. Una pestaña de inicio de sesión se reutiliza para evitar aperturas repetidas.
+
+**Disable Facebook contacts** indica que el permiso está concedido; no garantiza que exista conexión con HABITAT. El popup muestra ese estado por separado y conecta el lector al abrirse si Facebook está habilitado. **Reconnect Facebook** reinicia solo su canal. Si el proceso de la extensión todavía utiliza código anterior, el popup ofrece **Reload extension for Facebook**, que recarga la extensión conservando los permisos. Al conceder acceso se inicia la conexión inmediatamente. Un socket que no recibe ticks del escritorio deja de considerarse válido y se reconecta.
+
+## Alcance y privacidad
+
+Se refleja el panel Contacts que Facebook tiene cargado: **no representa necesariamente todos los amigos**. El lector reconoce las secciones Contacts y Contactos, entre otros idiomas, y se limita a las imágenes dentro de esa sección. No pulsa contactos, desplaza listas, abre mensajes, lee cookies, inspecciona el estado interno de la página ni usa endpoints privados. Una estructura desconocida muestra un estado de recuperación; no se reemplaza por personas del feed ni datos ficticios.
+
+El canal local `/facebook-bridge` tiene autenticación y solicitudes independientes de ChatGPT, búsquedas y traducción. Solo se lee la página cuando hay una solicitud del widget abierto. La barra actualiza cada treinta segundos, cancela la lectura al cerrarse y descarta respuestas tardías. Los errores se reintentan a los quince segundos. La conexión general y el permiso opcional se comprueban antes de leer.
+
+El diagnóstico autenticado `/status` separa `facebookConnected` de `facebook.stage` y muestra la versión de la extensión que se autenticó, edad del heartbeat, lectura pendiente, código de error y cantidad de contactos recibidos. La extensión comunica las fases de permiso, selección de pestaña, carga de página y búsqueda/lectura de la sección, con contadores estructurales acotados. No incluye nombres, URLs ni texto de la página; se conserva solo en memoria. Un permiso concedido, un canal conectado, un panel vacío y una sección no reconocida son estados diferentes. El popup muestra el último resultado de lectura cuando existe.
+
+Los snapshots de contactos permanecen en memoria. Solo se conserva el identificador de la pestaña en el almacenamiento de sesión de la extensión. Las fotos se cargan desde direcciones HTTPS de `fbcdn.net`; se rechazan otros servidores, credenciales en URLs y enlaces externos o de redirección. Cargar una foto realiza la petición normal a los servidores de imágenes de Facebook. No se envían contactos a Codex, ChatGPT ni al desarrollador de HABITAT.
+
+La barra contiene únicamente avatares: no incluye iconos de error ni controles de configuración. Si al abrirla falta permiso, conexión, inicio de sesión o el panel Contacts, se muestra un flyout de recuperación anclado al widget con el motivo visible y acciones **Open Chrome extensions**, **Open Facebook** y **Retry**, según corresponda. La autorización se realiza expresamente desde el popup de la extensión. Una conexión activa de ChatGPT o búsquedas no confirma que Facebook esté conectado: su canal es independiente y una extensión anterior necesita recargarse para incorporar el lector.
+
+## Verificación y límite actual
+
+`node tests/extension-facebook.checks.cjs` comprueba el lector con DOM sintético, límites de sección, nombres, avatares sin enlaces, permisos, pestañas personales, inicio de sesión, cancelación, desconexión, sockets estancados y recuperación desde el popup. `Habitat.Bridge.Checks` prueba el canal en un puerto aleatorio, autenticación, respuestas obsoletas, validación de URLs, cancelación y errores; además ejecuta el worker JavaScript real contra el puente C# mediante HTTP/WebSocket reales con APIs de pestañas y contactos sintéticos. `scripts/check-tasks-ui.ps1 -FacebookOnly` comprueba los controles nativos con servicios, fotos y enlaces aislados bajo `artifacts`.
+
+La comprobación con una sesión real de Facebook está pendiente. La barra se abre en la sesión del usuario, pero aún no se ha confirmado la recepción de sus contactos. Los selectores del sitio deben contrastarse con esa sesión antes de considerar verificada la compatibilidad con el diseño actual de Facebook. Las pruebas sintéticas no sustituyen esa comprobación.

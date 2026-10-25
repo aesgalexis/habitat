@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- LOCAL DRAFT. This signs the outer EXE only. The Inno uninstaller needs its own integration. -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <pe-file path="HABITAT-*-x64-setup.exe" min-matches="1" max-matches="1"
+             product-name="HABITAT" company-name="aesgalexis" file-version="${version}">
+      <authenticode-sign hash-algorithm="sha256" />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

@@ -22,6 +22,7 @@ internal sealed class AppServices : IAsyncDisposable
     public TaskStore Tasks { get; }
     public TaskSession TaskSession { get; }
     public WeatherService Weather { get; }
+    internal IAppUpdateService Updates { get; set; }
     public Func<Uri, Task<bool>> LaunchBrowser { get; }
     internal bool OpenSetupFolder(string? path) => !Paths.IsIsolated && path is not null && Directory.Exists(path) &&
         StartSetupProcess(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
@@ -44,6 +45,8 @@ internal sealed class AppServices : IAsyncDisposable
     internal ITranslationService Translation { get; set; }
     internal ISearchService Search { get; set; }
     internal ISearchService YouTubeSearch { get; set; }
+    internal Habitat.Features.Facebook.IFacebookContactsService Facebook { get; set; }
+    internal Func<Uri, ImageSource?> FacebookPhoto { get; set; }
     internal Func<Uri, ImageSource?> SearchThumbnail { get; set; }
     internal bool CopyText(string text)
     {
@@ -82,6 +85,7 @@ internal sealed class AppServices : IAsyncDisposable
         if (!paths.IsIsolated) throw new InvalidOperationException("UI checks require isolated infrastructure.");
 #endif
         Paths = paths;
+        Updates = new DesktopUpdateService(paths);
         GlobalHotkey = new GlobalHotkeyService(paths);
         Bridge = new BridgeService(paths.IsIsolated ? 0 : 8765);
         Tasks = paths.IsIsolated ? new TaskStore(paths.TasksPath) : new TaskStore();
@@ -91,6 +95,8 @@ internal sealed class AppServices : IAsyncDisposable
         Translation = Bridge.Translation;
         Search = Bridge.Search;
         YouTubeSearch = Bridge.YouTubeSearch;
+        Facebook = Bridge.Facebook;
+        FacebookPhoto = paths.IsIsolated ? _ => null : uri => new BitmapImage { DecodePixelWidth = 80, DecodePixelHeight = 80, AutoPlay = false, UriSource = uri };
         SearchThumbnail = paths.IsIsolated ? _ => null : CreateSearchThumbnail;
         var browser = paths.IsIsolated ? new BrowserLauncher(() => null, _ => false)
             : new BrowserLauncher(WindowsChrome.FindExecutable);
@@ -144,7 +150,7 @@ internal sealed class AppServices : IAsyncDisposable
             try { await _bridgeStart; }
             finally { await Bridge.DisposeAsync(); }
         }
-        finally { Weather.Dispose(); VSCode.Dispose(); _isolatedHttp?.Dispose(); await Codex.DisposeAsync(); }
+        finally { Updates.Dispose(); Weather.Dispose(); VSCode.Dispose(); _isolatedHttp?.Dispose(); await Codex.DisposeAsync(); }
     }
 
     private sealed class MemoryCredentials : IGmailCredentialStore

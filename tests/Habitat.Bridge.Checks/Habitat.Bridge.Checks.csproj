@@ -8,5 +8,7 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../../src/Habitat.Core/Habitat.Core.csproj" />
+    <Content Include="../facebook-bridge.worker.cjs" Link="fixtures/facebook-bridge.worker.cjs" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../extension/facebook.js" Link="fixtures/facebook.js" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

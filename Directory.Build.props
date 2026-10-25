@@ -1,5 +1,7 @@
 <Project>
   <PropertyGroup>
     <Version>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)VERSION').Trim())</Version>
+    <Product>HABITAT</Product>
+    <Company>aesgalexis</Company>
   </PropertyGroup>
 </Project>

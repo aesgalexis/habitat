@@ -15,12 +15,12 @@ async function settle() { for (let i=0;i<12;i++) await new Promise(resolve=>setI
     vm.runInContext(source('connection.js'), context);
     check(!await vm.runInContext('habitatConnectionEnabled()', context), 'A missing, stale or malformed consent cannot enable the bridge.');
   }
-  for (const provider of ['translation.js', 'search.js', 'youtube.js']) {
+  for (const provider of ['translation.js', 'search.js', 'youtube.js', 'facebook.js']) {
     let pairings=0, sockets=0, reads=0;
     const local={};
     const chrome={alarms:{onAlarm:signal(),create:async()=>{}},storage:{onChanged:signal(),local:{get:async()=>local}},
       tabs:{get:async()=>{reads++;},query:async()=>{reads++;}},runtime:{getManifest:()=>({version:'0.9.0'})}};
-    const context=vm.createContext({chrome,URL,console,Promise,
+    const context=vm.createContext({chrome,URL,console,Promise,AbortSignal,
       fetch:async()=>{pairings++;return {ok:true,json:async()=>({key:'synthetic'})};},
       WebSocket:class {constructor(){sockets++;}},setTimeout:()=>0,clearTimeout(){}});
     vm.runInContext(source('connection.js'), context);

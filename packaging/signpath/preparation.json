@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "provider": "SignPath Foundation",
+  "decisionDate": "2026-10-19",
+  "status": "deferred-by-owner",
+  "submissionAllowed": false,
+  "signingEnabled": false,
+  "repository": "https://github.com/aesgalexis/habitat",
+  "product": "HABITAT",
+  "company": "aesgalexis",
+  "ownBinaries": [
+    "HABITAT.exe",
+    "HABITAT.dll",
+    "HABITAT.Hotkey.exe",
+    "HABITAT.Hotkey.dll",
+    "Habitat.Core.dll",
+    "Habitat.Activation.dll"
+  ],
+  "installerPattern": "HABITAT-*-x64-setup.exe",
+  "applicationDraft": "packaging/signpath/application-draft.md",
+  "codeSigningPolicy": "docs/CODE_SIGNING_POLICY.md",
+  "privacyNotes": "docs/PRIVACY.md",
+  "organizationId": null,
+  "projectSlug": null,
+  "signingPolicySlug": null,
+  "apiTokenSecretName": "SIGNPATH_API_TOKEN",
+  "packagingPrerequisites": [
+    "one-verified-payload-for-exe-and-zip",
+    "third-party-inventory-and-license-review",
+    "installer-privacy-and-network-choices",
+    "inno-signed-uninstaller-design",
+    "zip-installer-script-signing-scope",
+    "post-signature-manifests-hashes-and-tests",
+    "trusted-build-provenance-and-protected-approval",
+    "fresh-pc-first-run-and-upgrade-verification"
+  ]
+}

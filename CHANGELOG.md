@@ -1,5 +1,125 @@
 # Changelog
 
+## Unreleased
+
+- Facebook: diagnóstico local por fases de conexión y lectura, con versión del worker y contadores estructurales sin datos personales; el popup distingue contactos recibidos, panel vacío y error de lectura.
+
+- Facebook: el popup distingue permiso concedido y conexión al escritorio, conecta al habilitar el acceso y ofrece Reconnect Facebook o recarga de la extensión si el worker en ejecución es anterior. Se recuperan sockets abiertos sin ticks y se comprueba el worker JavaScript contra el puente C# con HTTP/WebSocket reales en un puerto aislado.
+
+- Corregidos el icono de Facebook (vectorial monocromo, sin fondo azul) y la barra contigua de contactos: ancho fijo de 40 píxeles, solo avatares y scroll vertical, independiente del sidebar principal. La falta de conexión ofrece recuperación visible en lugar de quedar oculta en un icono con tooltip.
+
+- Widget Facebook: segunda barra de avatares a partir del panel Contacts cargado en Chrome, con nombres originales en tooltips, enlaces cuando existen y lectura mediante la extensión, sin Graph API. Acceso opcional y revocable, canal local independiente, cancelación y datos en memoria. Verificación con Facebook real pendiente.
+- Aviso de actualización modal con el botón Update centrado, bloqueo de navegación y captura global, aplazamiento con Later y recuperación desde el menú. Progreso accesible como porcentaje para evitar el fallo del control ProgressBar en el runtime WinUI incluido.
+
+## 0.16.1 — 2026-10-23
+
+- Corregida la pérdida del chat de HABITAT al abrir otro chat en Codex: la conversación queda vinculada por su identificador y se recupera tras reiniciar, independientemente de la selección visible en Codex.
+- Los mensajes vuelven a abrir y verifican el chat vinculado antes de enviarse, con protección de borradores, turnos en ejecución y cambios de destino durante la entrega.
+- «Nuevo chat» permite empezar otra conversación sin borrar la anterior en Codex; limpia el vínculo y el borrador y devuelve el foco al editor inicial centrado. La selección vacía también se conserva tras reiniciar.
+- La actualización recupera el chat registrado disponible de las versiones anteriores. Las entregas programadas mantienen el vínculo de la conversación actual.
+- Comprobaciones de persistencia, navegación, reinicio y envío al destino correcto, junto con pruebas WinUI en inglés y español y documentación actualizada.
+
+## 0.16.0 — 2026-10-23
+
+- Desvanecido suave de 20 píxeles en los bordes con contenido oculto de las áreas de lectura. Respeta el fondo real, las barras de scroll, la selección y los controles nativos; se desactiva cuando el contenido cabe y se recupera al cambiar de vista.
+- El chat de Codex muestra el modelo y la intensidad de razonamiento debajo del título como última configuración conocida, con valores ausentes explícitos y etiquetas en inglés y español.
+- Las etiquetas de autor de Codex comparten los colores de OpenAI y se actualizan al cambiar de tema. Se elimina el aviso de turno incompleto cuando una lectura posterior confirma su finalización correcta.
+- Preferencias permite añadir, retirar y ordenar Gmail, Tareas y Mercados en la barra lateral. Tiempo mantiene su posición; los perfiles existentes conservan sus widgets y los nuevos comienzan con Mercados desactivado.
+- La programación de Codex permite seleccionar uno o varios chats detenidos por límite de uso, incluidos chats creados directamente en Codex. Cada reanudación queda vinculada a su turno interrumpido para evitar duplicados si el chat ya ha continuado.
+- Pruebas de renderizado y ciclo de vida del scroll, configuración de Codex, reanudaciones programadas y personalización de la barra lateral, con datos aislados y ambos idiomas y temas.
+
+## 0.15.6 — 2026-10-22
+
+- Un envío confirmado por Codex se mantiene como enviado aunque falle la identificación posterior del chat, su registro local o el acceso al historial. Estas comprobaciones ya no generan avisos falsos de revisión ni reintentos de un mensaje entregado.
+- Se reconoce el salto de línea final que Codex añade al guardar un mensaje, sin modificar el texto enviado ni relajar la comprobación del editor.
+- Los mensajes enviados y cancelados quedan en un historial cerrado por defecto. La lista principal y los avisos se reservan para envíos pendientes o que requieren atención real.
+- Pruebas de regresión para confirmación, fallos posteriores al envío, conservación de espacios, reinicios y ausencia de avisos para mensajes entregados.
+
+## 0.15.5 — 2026-10-22
+
+- El calendario de Codex muestra el número de mensajes pendientes y la hora del próximo envío en su tooltip y etiqueta accesible. El contador se recupera tras reiniciar y se actualiza al enviar, reprogramar o cancelar.
+- Guardar muestra una confirmación temporal junto al calendario sin quitar el foco al editor. Con el editor vacío, abrir el calendario muestra primero la lista de programaciones existentes.
+- Los envíos que requieren revisión y los errores de almacenamiento muestran una señal ámbar persistente. Los estados enviados o cancelados no cuentan como pendientes.
+- Textos y comprobaciones en español e inglés, con ambos temas y datos de prueba aislados.
+
+## 0.15.4 — 2026-10-22
+
+- La programación permite elegir **Nuevo chat de Codex**, incluso antes de haber enviado el primer mensaje desde HABITAT. El chat se crea a la hora programada; guardar no envía nada.
+- Los chats existentes creados desde HABITAT mantienen la prioridad por límite de uso. Si su listado falla, sigue siendo posible programar un chat nuevo sin cambiar el destino de una programación existente.
+- La cola distingue de forma explícita un chat nuevo de un destino existente, conserva las programaciones anteriores y evita repetir un envío dudoso tras un reinicio.
+- Un borrador en el editor de nuevo chat de Codex bloquea la entrega programada para conservarlo. Las vistas de Codex sin editor dejan de producir errores repetidos al consultar el chat visible.
+
+## 0.15.2 — 2026-10-21
+
+- Los mensajes programados para Codex solo permiten elegir chats creados desde HABITAT. Se elimina la opción de incluir otros chats locales.
+- La entrega vuelve a comprobar el origen antes de leer o abrir el destino. Las programaciones externas guardadas por versiones anteriores quedan sin enviar y requieren revisión.
+- Pruebas del filtro de origen, rechazo de destinos externos persistidos y diálogo en inglés y español.
+
+## 0.15.1 — 2026-10-21
+
+- Icono junto a «Enviar a Codex» para programar mensajes con chat de destino, fecha y hora locales; permite editar o cancelar los mensajes guardados.
+- Prioridad para los chats cuyo último turno terminó por límite de uso y sugerencia de la hora de recuperación cuando Codex la expone. El selector permite incluir otros chats locales mediante una elección explícita.
+- Cola persistente, espera de chats ocupados, protección de borradores y revisión manual de envíos dudosos o con más de cinco minutos de retraso. HABITAT debe permanecer abierto y Windows con la sesión iniciada.
+- Conserva la actualización directa de 0.15.0 para comprobar desde otro PC la detección, descarga e instalación de esta versión.
+
+## 0.15.0 — 2026-10-21
+
+- El icono de actualización descarga el paquete oficial, verifica su SHA-256, instala y vuelve a abrir HABITAT. Conserva el formato EXE o ZIP de la instalación y los datos de usuario.
+- Progreso y cancelación en inglés y español, espera a las acciones en curso, conservación de borradores al reiniciar y reintento ante errores de descarga o instalación.
+- Las versiones anteriores necesitan instalar esta versión una vez; la actualización directa queda disponible para las siguientes versiones.
+
+## 0.14.3 — 2026-10-21
+
+- Cambio únicamente de versión para comprobar la detección automática de actualizaciones desde otro PC. Mismo comportamiento que 0.14.2.
+
+## 0.14.2 — 2026-10-21
+
+- Eliminado el paso automático de clics al escritorio. HABITAT mantiene el comportamiento de una ventana normal al perder el foco: hacer clic en la aplicación vuelve a activarla, sin necesitar Alt+Tab ni la barra de tareas.
+- Prueba con la ventana WinUI real que verifica que 30 ciclos de desactivación y activación nunca habilitan `WS_EX_TRANSPARENT`, además de minimizar/restaurar, menú en ambos idiomas y actualización en reposo.
+
+## 0.14.1 — 2026-10-21
+
+- Refuerzo de la recuperación de entrada al activar HABITAT, recibir el foco o usar su canal de activación: se retira el modo de paso al escritorio sin depender exclusivamente de `WM_ACTIVATEAPP`.
+- Pruebas nativas para el foco sin otra notificación de aplicación, activaciones repetidas y conservación de los estilos originales. Documentado el diagnóstico de la ventana que parecía congelada, con captura del proceso real y recuperación sin reinicio.
+
+## 0.14.0 — 2026-10-21
+
+- Esta publicación reúne también la interfaz en inglés/español, los fondos personalizables y las cinco ilustraciones incorporados desde la última versión publicada, 0.11.0.
+- Corregido el cierre al minimizar/restaurar: Windows puede devolver un margen negativo para los botones de ventana; se normaliza antes de ajustar el título y se agrupan los cambios fuera de la notificación nativa. Se evitan también las actualizaciones repetidas del mismo título durante el reposo.
+- Widget Mercados debajo de Tareas: favoritos, cotización y variación diaria, selección fija o rotación y panel con gráfica mensual y titulares enlazados a su fuente.
+- Preferencias de Mercados en inglés y español; actualización periódica, conservación del último dato ante errores y pregunta preparada en el editor sin sustituir el borrador ni enviarlo.
+- Pruebas con datos sintéticos y almacenamiento aislado para cálculos, persistencia, fallos de red, cancelación y controles WinUI.
+
+## 0.13.1 — 2026-10-20
+
+- Corregido el menú junto a minimizar: zona interactiva nativa ajustada al tamaño y escala de la ventana, y foco conservado mientras está abierto. Pruebas de apertura de Preferencias y retorno al editor en inglés y español.
+- Cinco fondos ilustrados incluidos: Grafito (paisaje a lápiz), Dunas, Marea, Olivo y Órbita.
+- Selección localizada, encuadre y atenuación para las ilustraciones, disponibles sin conexión. Se mantiene el fondo predeterminado transparente Híbrido al 15 %.
+
+## 0.13.0 — 2026-10-20
+
+- Fondos globales desde Preferencias → Apariencia: tres fondos de color, biblioteca de JPG/PNG propios, vista previa, encuadre y atenuación.
+- Importación local con copia independiente, orientación EXIF y tamaño limitado. Híbrido adapta el contraste a la imagen elegida.
+- El valor inicial sigue siendo el fondo transparente Híbrido al 15 %. Un botón restaura ese aspecto y conserva las imágenes guardadas.
+- Comprobaciones de persistencia, errores de importación, recuperación y controles en inglés/español con almacenamiento aislado.
+
+## 0.12.0 — 2026-10-20
+
+- Al perder el foco, HABITAT deja pasar clics y arrastres al escritorio y a las ventanas inferiores. La barra de tareas, Alt+Tab y Ctrl+H permiten recuperar la interacción; los menús y diálogos propios siguen funcionando.
+- Interfaz de escritorio en inglés y español, con selector en Preferences → Appearance. El idioma se guarda y se aplica al cerrar el diálogo; los perfiles anteriores conservan inglés.
+- Catálogos compartidos para textos visibles, accesibilidad, carga, errores y recuperación. Las etiquetas traducidas se separan de los IDs de categorías, destinos y protocolos.
+- El cambio conserva borradores, tareas, resultados y traducciones pendientes. Fechas y cantidades visibles siguen la cultura de interfaz sin modificar formatos de intercambio ni el contenido del usuario.
+- Comprobaciones automáticas de catálogos, persistencia y cambio de idioma con controles WinUI y almacenamiento aislado.
+
+## 0.11.0 — 2026-10-20
+
+- Aviso automático de nuevas versiones: consulta GitHub al abrir HABITAT y cada seis horas mientras está abierto. El icono **Update HABITAT**, al final del sidebar, muestra la versión disponible y abre su página oficial para descargar el EXE o ZIP correspondiente. La descarga y la instalación siguen siendo manuales.
+- La comprobación ignora versiones anteriores, borradores, betas y publicaciones sin instalador Windows terminado. Los fallos de conexión conservan el aviso conocido y se reintentan tras una hora; las consultas pendientes se cancelan al cerrar.
+- **Preferences… → Destinations** permite añadir, quitar y ordenar los destinos, elegir uno al arrancar o recordar el último. Quitar un destino conserva su configuración y el contenido de la sesión; los antiguos perfiles migran a identificadores estables.
+- Destinos para aplicaciones de Windows, incluidas las de Microsoft Store, con selección de ejecutables y accesos directos. Por defecto abren la aplicación y conservan el borrador; los ejecutables compatibles pueden recibir el texto como un único argumento literal.
+- Los destinos en reposo muestran **Ready** desde el arranque. La conexión, el progreso y los errores de ChatGPT permanecen en OpenAI y sus respuestas en segundo plano no sustituyen el estado de otro destino.
+- Pruebas con versiones sintéticas y almacenamiento aislado para comprobar intervalos, fallos de red, cancelación, accesibilidad, ambos temas, posición del icono y espacio reservado para Tasks. Las extensiones mantienen sus versiones: Chrome **0.9.0** y VS Code **0.2.0**.
+
 ## 0.10.0 — 2026-10-19
 
 - Todos los destinos web se abren en Google Chrome. Eliminado el selector de navegador y corregida la desconexión al usar el navegador predeterminado de Windows; las preferencias anteriores conservan los demás ajustes.

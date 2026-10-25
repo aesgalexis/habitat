@@ -6,6 +6,10 @@ $env:NUGET_PACKAGES = Join-Path $verifyRoot '.nuget\packages'
 $verifyOutput = Join-Path $verifyRoot 'artifacts\verification'
 Push-Location $verifyRoot
 try {
+    node tests/docs.checks.cjs
+    if ($LASTEXITCODE -ne 0) { throw 'Documentation checker regression cases failed.' }
+    node scripts/check-docs.cjs
+    if ($LASTEXITCODE -ne 0) { throw 'Documentation links failed.' }
     if (-not $NoRestore) {
         dotnet restore Habitat.sln -p:Platform=x64
         if ($LASTEXITCODE -ne 0) { throw 'Dependency restore failed.' }
@@ -32,13 +36,17 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Search extension checks failed.' }
     node tests/extension-youtube.checks.cjs
     if ($LASTEXITCODE -ne 0) { throw 'YouTube extension checks failed.' }
+    node tests/extension-facebook.checks.cjs
+    if ($LASTEXITCODE -ne 0) { throw 'Facebook extension checks failed.' }
     foreach ($suite in 'Appearance', 'Bridge', 'Core', 'Destination', 'Gmail', 'Tasks', 'Weather', 'Hotkey') {
         dotnet run --project "tests/Habitat.$suite.Checks" --configuration Release --no-restore `
             "-p:BaseOutputPath=$verifyOutput/$suite/"
         if ($LASTEXITCODE -ne 0) { throw "$suite checks failed." }
     }
     & (Join-Path $verifyRoot 'tests\release.checks.ps1')
+    & (Join-Path $verifyRoot 'tests\update.checks.ps1')
     & (Join-Path $verifyRoot 'tests\packaging.checks.ps1')
+    & (Join-Path $verifyRoot 'tests\signing-preparation.checks.ps1')
     $chromeOutput = Join-Path $verifyOutput ('chrome-' + [guid]::NewGuid().ToString('N'))
     & (Join-Path $verifyRoot 'scripts\package-chrome-extension.ps1') -OutputDirectory $chromeOutput
     $chromeZip = Get-ChildItem -LiteralPath $chromeOutput -Filter '*.zip' | Select-Object -First 1

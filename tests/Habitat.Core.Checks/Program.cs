@@ -11,6 +11,7 @@ var root = Path.Combine(AppContext.BaseDirectory, "isolated-core", Guid.NewGuid(
 Directory.CreateDirectory(root);
 BrowserChecks.Run(root, Check);
 InstallationChecks.Run(root, Check);
+await UpdateChecks.RunAsync(root, Check);
 var paths = AppDataPaths.Isolated(root);
 Check(paths.IsIsolated && paths.LocalDirectory == root && paths.DesktopDirectory == root && paths.TasksPath.StartsWith(root), "Isolated paths never resolve desktop data.");
 

@@ -5,13 +5,13 @@ HABITAT runs on Windows 10 2004 or later and Windows 11, on an x64 PC. The deskt
 ## Install the desktop app
 
 1. Open [GitHub Releases](https://github.com/aesgalexis/habitat/releases/latest) and download the Windows x64 setup EXE and its `.sha256` file. Use the release assets, rather than GitHub's Source code ZIP.
-2. Check the download with `Get-FileHash .\HABITAT-0.10.0-x64-setup.exe -Algorithm SHA256` and compare it with the hash file.
+2. Run `Get-FileHash` on the downloaded EXE with `-Algorithm SHA256` and compare the result with its `.sha256` file. Use the actual downloaded filename; `<version>` in this guide is a placeholder.
 3. Run the setup EXE from your normal Windows account. It installs in `%LOCALAPPDATA%\Programs\HABITAT`, adds a Start menu entry and registers an uninstaller. The optional desktop shortcut is off by default.
 4. Open HABITAT. The setup guide appears once and is always available from **HABITAT menu > Set up HABITAT…**.
 
 The desktop app currently has no code-signing certificate. Windows may display an unknown publisher warning. Only use the release downloaded from this repository and verify its hash.
 
-For the ZIP alternative, download `HABITAT-0.10.0-win-x64.zip`, extract **all** its files to a separate folder and run `Install-HABITAT.cmd`. It uses the same default installation directory. Use the same package format for updates: EXE and ZIP installations cannot overwrite each other. To switch formats, close HABITAT, uninstall or remove its program files, then install the other format; user data is separate.
+For the ZIP alternative, download `HABITAT-<version>-win-x64.zip`, extract **all** its files to a separate folder and run `Install-HABITAT.cmd`. It uses the same default installation directory. Use the same package format for updates: EXE and ZIP installations cannot overwrite each other. To switch formats, close HABITAT, uninstall or remove its program files, then install the other format; user data is separate.
 
 ## Connect Chrome
 
@@ -21,7 +21,7 @@ For the ZIP alternative, download `HABITAT-0.10.0-win-x64.zip`, extract **all** 
 4. Return to **Set up HABITAT…**. Google, YouTube and Translate each show **Connected** when their channel is ready. They do not need a ChatGPT account.
 5. For ChatGPT, sign in at [chatgpt.com](https://chatgpt.com/) in Chrome and open the conversation you want HABITAT to use. The guide then shows **ChatGPT connected**. Your ChatGPT account and plan remain separate from HABITAT.
 
-The store submission is pending Google's review as of 19 October 2026. The unlisted link becomes available after approval. Chrome requires the user's approval; installing the desktop app does not silently install its extension.
+The last recorded store status was pending review on 19 October 2026; this guide does not establish its current availability. The unlisted link requires approval before it is available. Chrome requires the user's approval; installing the desktop app does not silently install its extension.
 
 If the listing is unavailable, use the bundled extension:
 
@@ -44,8 +44,13 @@ If a provider requests consent or verification, complete it in its Chrome tab an
 
 ## Update and uninstall
 
+When HABITAT offers a newer release, use **Update** to confirm or **Later** to postpone; reopen it from **HABITAT menu → Update…**. Save important text before updating: window text and results are cleared on restart, while saved tasks, preferences and credentials remain. [UPDATES.md](UPDATES.md) defines the detection intervals, supported formats, cancellation and recovery behavior.
+
 Install a newer EXE over the EXE installation, or run the newer ZIP installer over the ZIP installation. Local tasks, preferences and Gmail credentials stay in your Windows account. Reload an unpacked Chrome extension after updating it; the store edition receives Chrome's normal extension updates. Update the VSIX if its version changes.
 
 Uninstall the EXE through **Windows Settings > Apps > Installed apps > HABITAT**. For the ZIP, first disable the global shortcut in Preferences, close HABITAT, then remove its program folder and Start menu shortcut. Remove the Chrome and VS Code extensions separately if you no longer want them. Uninstalling the desktop app retains your user data.
 
 For help, [open an issue](https://github.com/aesgalexis/habitat/issues) with the app version and the connection states in the setup guide. Do not attach credentials, pairing codes, private conversations or your task files.
+
+
+For recovery steps and what to include in an issue, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).

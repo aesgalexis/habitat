@@ -33,6 +33,7 @@ public sealed partial class BridgeService : IAsyncDisposable
         Translation = new Features.Translation.BrowserTranslationService(_time);
         Search = new Features.Search.BrowserSearchService(_time);
         YouTubeSearch = new Features.Search.BrowserSearchService(_time, ComposerDestination.YouTube);
+        Facebook = new Features.Facebook.FacebookContactsService(_time);
         PairKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24))
             .TrimEnd('=').Replace('+', '-').Replace('/', '_');
     }
@@ -69,6 +70,7 @@ public sealed partial class BridgeService : IAsyncDisposable
             server.Map("/translate-bridge", HandleTranslationSocketAsync);
             server.Map("/search-bridge", HandleSearchSocketAsync);
             server.Map("/youtube-bridge", context => HandleSearchSocketAsync(context, YouTubeSearch));
+            server.Map("/facebook-bridge", HandleFacebookSocketAsync);
             server.MapGet("/status", (HttpRequest request) =>
             {
                 if (!IsAuthorized(request)) return Results.Json(new { error = "Unauthorized" }, statusCode: 403);
@@ -80,6 +82,8 @@ public sealed partial class BridgeService : IAsyncDisposable
                         hasMessageInFlight = _session.Message is not null, translationConnected = Translation.IsConnected,
                         searchConnected = Search.IsConnected,
                         youtubeConnected = YouTubeSearch.IsConnected,
+                        facebookConnected = Facebook.IsConnected,
+                        facebook = Facebook.Status,
                         protocolVersion = BridgeProtocol.Version, processId = Environment.ProcessId,
                         deliveryPhase = _session.Phase.ToString(),
                         transport = _connectionOwner is null ? "page-http" : "worker-websocket",

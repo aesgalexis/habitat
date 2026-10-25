@@ -11,11 +11,29 @@ HABITAT usa **SemVer: MAJOR.MINOR.PATCH**. `VERSION` es la fuente de la versión
 
 La primera distribución instalable del escritorio es **0.9.1**: recoge el estado funcional de 0.9.0 y corrige su comprobación del changelog en clones Windows con CRLF. `v0.9.0` se conserva como etiqueta histórica sin paquetes publicados. La versión 1.0.0 queda para un estado con compatibilidad y distribución consideradas estables. Una etiqueta publicada es inmutable: si una publicación requiere cambios, se incrementa la versión. Las etiquetas siguen el formato `vMAJOR.MINOR.PATCH` y apuntan a un commit de `main` ya verificado.
 
-La extensión de Chrome (`extension/manifest.json`, actualmente 0.9.0) y la de VS Code (`vscode-extension/package.json`, actualmente 0.2.0) tienen versiones independientes porque se instalan y actualizan por separado. Cada paquete registra las versiones incluidas en `release.json`. La versión del protocolo del puente es un contrato independiente de la versión de producto.
+La extensión de Chrome (`extension/manifest.json`) y la de VS Code (`vscode-extension/package.json`) tienen versiones independientes porque se instalan y actualizan por separado. Cada paquete registra las versiones incluidas en `release.json`; el manifiesto fuente puede avanzar durante el desarrollo. Consulta [PROJECT_STATUS.md](PROJECT_STATUS.md) para los valores observados y desajustes pendientes. La versión del protocolo del puente es un contrato independiente de la versión de producto.
 
-La versión 0.10.0 añade la guía de primera puesta en marcha y utiliza exclusivamente Chrome para los destinos web. La extensión 0.9.0 está enviada a Chrome Web Store como Unlisted; el enlace estará disponible tras la aprobación de Google. Se mantiene la carga manual incluida mientras tanto. Consulta [la guía para otro PC](GETTING_STARTED.md).
+La versión 0.10.0 añade la guía de primera puesta en marcha y utiliza exclusivamente Chrome para los destinos web. El envío de la extensión 0.9.0 a Chrome Web Store como Unlisted se registró el 19 de octubre de 2026; ese registro no establece el estado actual de aprobación. Se mantiene la carga manual incluida mientras tanto. Consulta [la guía para otro PC](GETTING_STARTED.md).
 
 ## Instalar una publicación
+
+Las notas de versiones siguientes son referencias del historial documentado; no certifican que cada función esté en esta copia. Consulta los desajustes de [PROJECT_STATUS.md](PROJECT_STATUS.md) y el [changelog](../CHANGELOG.md). Las instrucciones de actualización vigentes están en [UPDATES.md](UPDATES.md).
+
+La versión **0.11.0** incorpora el aviso automático de versiones nuevas mediante **Update HABITAT**, los destinos personalizados y la gestión de aplicaciones de Windows.
+
+La versión **0.14.0** añade Mercados, la interfaz en inglés/español, fondos personalizables y cinco ilustraciones. También corrige el cierre causado por márgenes negativos de la barra de ventana al minimizar/restaurar. Incluye los cambios de 0.12.0 a 0.13.1 que aún no tenían paquetes publicados en GitHub.
+
+La versión **0.14.2** restaura el comportamiento normal del ratón: hacer clic en HABITAT vuelve a activarlo después de usar el escritorio u otra aplicación. Se elimina el paso automático de clics que obligaba a recuperar la ventana mediante Alt+Tab.
+
+La versión **0.15.0** incorpora descarga, verificación SHA-256, instalación y reapertura desde el icono de actualización. La conservación y el reinicio se describen en [UPDATES.md](UPDATES.md). Las versiones anteriores necesitan una instalación manual de 0.15.0 para disponer de este flujo. Consulta [actualizaciones desde la app](AUTO_UPDATES.md).
+
+La versión **0.15.1** añade [mensajes programados para Codex](CODEX_SCHEDULING.md): selección explícita del chat, fecha y hora, prioridad para chats detenidos por límite, cola persistente y gestión de resultados sin duplicar envíos. También permite probar la actualización directa desde 0.15.0.
+
+La versión **0.15.2** limita el selector y la entrega de mensajes programados a chats creados desde HABITAT. También rechaza las programaciones externas guardadas por versiones anteriores antes de leer o abrir su destino.
+
+La versión **0.16.0** incorpora la personalización de la barra lateral, la reanudación programada de varios chats de Codex detenidos por límite, la lectura del modelo y razonamiento del chat y el desvanecido de los bordes de lectura. También corrige avisos de finalización obsoletos y unifica los colores de los autores.
+
+La versión **0.16.1** corrige la pérdida del chat vinculado al navegar por Codex. Conserva la conversación tras reiniciar, verifica su destino al enviar e incorpora «Nuevo chat» para volver al editor inicial sin borrar la conversación anterior.
 
 La publicación incluye dos alternativas: el instalador `HABITAT-<version>-x64-setup.exe`, con desinstalación registrada en Windows, y el ZIP con su instalador PowerShell. Ambos son autocontenidos, se instalan por usuario y tienen un SHA-256 adjunto. El EXE necesita Windows 10 2004 o posterior y admite instalación silenciosa. Consulta [la preparación para WinGet](WINGET.md).
 
@@ -42,6 +60,8 @@ Para actualizar el ZIP, repite su instalación sobre la misma ruta. Se conserva 
 Para retirar una instalación ZIP, desactiva primero **Preferences… → Global shortcut (Ctrl+H)**, cierra HABITAT y elimina su carpeta y la entrada del menú Inicio. Para retirar el EXE, utiliza la desinstalación registrada en Windows. Los datos de usuario se conservan.
 
 ## Preparar y publicar
+
+La detección, confirmación, descarga y reinicio se definen en [UPDATES.md](UPDATES.md). Antes de publicar, verifica el recorrido descrito allí para ambos formatos y la correspondencia entre los manifiestos fuente y los metadatos de los paquetes.
 
 1. Trabaja en una rama y revisa todos los cambios, incluidos archivos nuevos. No incluyas credenciales, datos de usuario ni salidas de `artifacts` en Git.
 2. Actualiza `VERSION`, `CHANGELOG.md`, las instrucciones de instalación del README y, si corresponde, las versiones de las extensiones.

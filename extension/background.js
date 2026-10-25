@@ -2,9 +2,14 @@
 importScripts("connection.js", "transport.js");
 importScripts("translation.js");
 importScripts("search-transport.js", "search.js", "youtube.js");
+importScripts("facebook.js");
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   (async () => {
     if (!await habitatConnectionEnabled()) return {error:"Open the HABITAT extension and enable the connection first"};
+    if (request.kind === "facebook-connect" && sender.id === chrome.runtime.id &&
+        sender.url?.startsWith(chrome.runtime.getURL(""))) {
+      return await facebookTransport.connect(request.restart === true);
+    }
     if (request.kind === "connect" && sender.id === chrome.runtime.id &&
         sender.url?.startsWith(chrome.runtime.getURL(""))) {
       return await startTransport();

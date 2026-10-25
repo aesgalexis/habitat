@@ -36,6 +36,8 @@ public sealed partial class MainPage
         CancelEmptyYouTubeReset();
         CancelPendingCodexSend();
         _activeDialog?.Hide();
+        _facebookCancellation?.Cancel();
+        FacebookRecovery.Hide();
         var sectionStops = _destinationSections.Values.Select(section => section.StopAsync()).ToArray();
         if (_bridge is not null)
         {

@@ -57,7 +57,7 @@ public sealed partial class MainPage : Page
     private bool _appearanceDialogOpen;
     private DateTimeOffset _nextHybridProbe = DateTimeOffset.MinValue;
 
-    internal bool HasAppearanceOverlay => _appearanceDialogOpen || _gmailSettingsOpen || _terminalConfirmationOpen || _setupDialogOpen;
+    internal bool HasAppearanceOverlay => _appearanceDialogOpen || _gmailSettingsOpen || _terminalConfirmationOpen || _setupDialogOpen || _aboutDialogOpen || _updateDialogOpen;
 
     internal MainPage(AppServices services, IWindowHost? windowHost = null)
     {
@@ -137,6 +137,10 @@ public sealed partial class MainPage : Page
         var copy = new MenuFlyoutItem { Text = "Copy code" };
         copy.Click += CopyPairingCode_Click;
         OptionsMenu.Items.Add(copy);
+        OptionsMenu.Items.Add(new MenuFlyoutSeparator());
+        var about = new MenuFlyoutItem { Text = "About…" };
+        about.Click += async (_, _) => await RunOperationAsync(ShowAboutAsync);
+        OptionsMenu.Items.Add(about);
         OptionsMenu.Closed += (_, _) => FocusComposer();
         OverflowButton.Flyout = OptionsMenu;
 
@@ -198,7 +202,9 @@ public sealed partial class MainPage : Page
         BuildGmailInterface(_widgets);
         surface.Children.Add(_widgets);
         BuildWeatherInterface(_widgets);
+        BuildFacebookInterface(surface);
         BuildDestinationInterface(surface);
+        BuildUpdateInterface();
         surface.SizeChanged += (_, _) => SizeTopWidgets(surface);
         Content = surface;
         PaintSurface();
@@ -206,7 +212,7 @@ public sealed partial class MainPage : Page
 
     private void Surface_Tapped(object sender, TappedRoutedEventArgs e)
     {
-        if (_appearanceDialogOpen || _gmailPanelOpen || _gmailSettingsOpen || _terminalConfirmationOpen) return;
+        if (HasAppearanceOverlay || _gmailPanelOpen) return;
 
         // Keep native editing, text selection and interactive controls intact.
         // Blank areas, message spacing and the weather display focus writing.
@@ -342,7 +348,7 @@ public sealed partial class MainPage : Page
 
     private void SendCurrentMessage(bool openExternally = false)
     {
-        if (_operations.IsStopping || _composer.IsExclusiveBusy) return;
+        if (_operations.IsStopping || _composer.IsExclusiveBusy || _updateDialogOpen || _updateHandoff) return;
         if (!_composer.CanSend(_destination, Composer.Text, openExternally) || string.IsNullOrWhiteSpace(Composer.Text))
         { FocusComposer(); return; }
         _ = LaunchDestinationAsync(_destination, Composer.Text, openExternally);
@@ -350,7 +356,9 @@ public sealed partial class MainPage : Page
 
     private void Timer_Tick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
     {
+        TickUpdates();
         TickGmail();
+        TickFacebook();
         TickTasks(DateTimeOffset.UtcNow);
         if (!_weatherRefreshing && !HasAppearanceOverlay && DateTimeOffset.UtcNow >= _nextWeatherRefresh)
         {
@@ -734,6 +742,8 @@ public sealed partial class MainPage : Page
         PaintWeather();
         PaintGmail();
         PaintTasks();
+        PaintFacebook();
+        PaintUpdateButton();
 
         var menuStyle = new Style(typeof(MenuFlyoutPresenter));
         menuStyle.Setters.Add(new Setter(Control.BackgroundProperty, menuBackground));

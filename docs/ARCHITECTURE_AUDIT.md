@@ -1,6 +1,6 @@
 # Auditoría de arquitectura de HABITAT
 
-Informe histórico previo a la implementación. Las correcciones y la arquitectura actual están descritas en [ARCHITECTURE.md](C:/proyectos/habitat/docs/ARCHITECTURE.md). Los números de línea citados corresponden al estado auditado.
+Informe histórico previo a la implementación. Las correcciones y la arquitectura actual están descritas en [ARCHITECTURE.md](ARCHITECTURE.md). Los números de línea citados corresponden al estado auditado.
 
 Fecha: 15 de octubre de 2026. Base de Git: `670c88a`, incluyendo los cambios locales existentes al iniciar la revisión.
 
@@ -49,7 +49,7 @@ Las prioridades expresan el orden preventivo recomendado. **Alta** significa abo
 
 ### A1. El modo de pruebas WinUI no aísla toda la infraestructura — Alta
 
-**Evidencia:** [App.xaml.cs:26](C:/proyectos/habitat/src/Habitat.App/App.xaml.cs:26) inyecta un `TaskStore` aislado y `Preferences` cambia su ruta con `HABITAT_UI_CHECKS`. Sin embargo, la construcción común de la página llama a [BuildGmailInterface:54](C:/proyectos/habitat/src/Habitat.App/MainPage.Gmail.cs:54), que crea `GmailCredentialStore` sin ruta ni destino de prueba. El constructor de `GmailAuthService` ejecuta `store.Load()`. Además, `RecordGmailStartup` escribe un diagnóstico en el directorio de datos de escritorio.
+**Evidencia:** `src/Habitat.App/App.xaml.cs:26` inyecta un `TaskStore` aislado y `Preferences` cambia su ruta con `HABITAT_UI_CHECKS`. Sin embargo, la construcción común de la página llama a `src/Habitat.App/MainPage.Gmail.cs:54`, que crea `GmailCredentialStore` sin ruta ni destino de prueba. El constructor de `GmailAuthService` ejecuta `store.Load()`. Además, `RecordGmailStartup` escribe un diagnóstico en el directorio de datos de escritorio.
 
 **Implicación:** aunque no se inicie la sincronización, las pruebas de interfaz pueden leer la autorización real y, si existe un archivo antiguo pendiente de migración, intentar guardarla en el vault real. También pueden escribir fuera de los artefactos de prueba. No ejecuté estas pruebas WinUI durante la auditoría.
 
@@ -57,7 +57,7 @@ Las prioridades expresan el orden preventivo recomendado. **Alta** significa abo
 
 ### A2. La actualización no es transaccional — Alta
 
-**Evidencia:** [apply-staged-update.ps1:52](C:/proyectos/habitat/scripts/apply-staged-update.ps1:52) deduce si hay una respuesta en curso mediante expresiones sobre `MainWindowTitle`. Tras cerrar la aplicación, [la copia:65](C:/proyectos/habitat/scripts/apply-staged-update.ps1:65) sobrescribe el directorio instalado archivo a archivo. Solo se compara el hash de `HABITAT.dll`. El script de compilación habitual publica directamente en el directorio usado por el lanzador.
+**Evidencia:** `scripts/apply-staged-update.ps1:52` deduce si hay una respuesta en curso mediante expresiones sobre `MainWindowTitle`. Tras cerrar la aplicación, `scripts/apply-staged-update.ps1:65` sobrescribe el directorio instalado archivo a archivo. Solo se compara el hash de `HABITAT.dll`. El script de compilación habitual publica directamente en el directorio usado por el lanzador.
 
 **Implicación:** un fallo de copia puede dejar una mezcla de versiones, sin restauración automática. La igualdad de una DLL no verifica los ejecutables, recursos y dependencias. La decisión de esperar una respuesta depende de textos de presentación.
 
@@ -65,7 +65,7 @@ Las prioridades expresan el orden preventivo recomendado. **Alta** significa abo
 
 ### A3. La puerta de verificación no ejecuta todas las suites — Media
 
-**Evidencia:** [.githooks/pre-push:10](C:/proyectos/habitat/.githooks/pre-push:10) compila la solución, comprueba JavaScript y ejecuta las suites de extensión y puente. Omite Gmail, tareas, destinos y apariencia. Los proyectos de comprobaciones y la utilidad de Gmail tampoco forman parte de `Habitat.sln`. No hay configuración de CI versionada ni un comando común que reúna todas las comprobaciones.
+**Evidencia:** `.githooks/pre-push:10` compila la solución, comprueba JavaScript y ejecuta las suites de extensión y puente. Omite Gmail, tareas, destinos y apariencia. Los proyectos de comprobaciones y la utilidad de Gmail tampoco forman parte de `Habitat.sln`. No hay configuración de CI versionada ni un comando común que reúna todas las comprobaciones.
 
 **Implicación:** una subida puede pasar la validación existente aunque una de esas áreas haya dejado de funcionar. Recompilar archivos enlazados verifica lógica útil, pero no verifica por sí solo cómo se compone la aplicación de producción.
 
@@ -73,7 +73,7 @@ Las prioridades expresan el orden preventivo recomendado. **Alta** significa abo
 
 ### A4. `MainPage` reúne presentación y coordinación de funcionalidades — Media
 
-**Evidencia:** [MainPage.xaml.cs:59](C:/proyectos/habitat/src/Habitat.App/MainPage.xaml.cs:59) mezcla construcción y suscripciones; [Timer_Tick:362](C:/proyectos/habitat/src/Habitat.App/MainPage.xaml.cs:362) coordina correo, tareas, tiempo, contraste y timeout del puente. La página consulta `Application.Current.MainWindow` repetidamente, y [HasActiveConversation:285](C:/proyectos/habitat/src/Habitat.App/MainPage.xaml.cs:285) deduce estado de aplicación inspeccionando controles del historial. El archivo de tareas también calcula la distribución de Gmail y chat.
+**Evidencia:** `src/Habitat.App/MainPage.xaml.cs:59` mezcla construcción y suscripciones; `src/Habitat.App/MainPage.xaml.cs:362` coordina correo, tareas, tiempo, contraste y timeout del puente. La página consulta `Application.Current.MainWindow` repetidamente, y `src/Habitat.App/MainPage.xaml.cs:285` deduce estado de aplicación inspeccionando controles del historial. El archivo de tareas también calcula la distribución de Gmail y chat.
 
 **Implicación:** modificar una función exige conocer estados de otras. La dependencia es circular en ejecución: la ventana construye la página y esta recupera la ventana globalmente. El estado funcional solo puede probarse en varios casos creando la UI.
 
@@ -81,7 +81,7 @@ Las prioridades expresan el orden preventivo recomendado. **Alta** significa abo
 
 ### A5. La propiedad y el cierre de operaciones asíncronas están dispersos — Media
 
-**Evidencia:** [MainPage_Unloaded:296](C:/proyectos/habitat/src/Habitat.App/MainPage.xaml.cs:296) detiene el temporizador, cancela tiempo y desuscribe el puente. [MainWindow.OnClosed:248](C:/proyectos/habitat/src/Habitat.App/MainWindow.xaml.cs:248) guarda posición, detiene Gmail y espera el puente desde un manejador `async void`. [StopGmail:590](C:/proyectos/habitat/src/Habitat.App/MainPage.Gmail.cs:590) cancela y libera clientes sin esperar las tareas que los usan. Las actualizaciones periódicas se lanzan sin conservar sus `Task` para el cierre. `BridgeService.DisposeAsync` llama a `StopAsync` con timeout y después a `DisposeAsync`, sin un `finally` que garantice este último si falla la parada.
+**Evidencia:** `src/Habitat.App/MainPage.xaml.cs:296` detiene el temporizador, cancela tiempo y desuscribe el puente. `src/Habitat.App/MainWindow.xaml.cs:248` guarda posición, detiene Gmail y espera el puente desde un manejador `async void`. `src/Habitat.App/MainPage.Gmail.cs:590` cancela y libera clientes sin esperar las tareas que los usan. Las actualizaciones periódicas se lanzan sin conservar sus `Task` para el cierre. `BridgeService.DisposeAsync` llama a `StopAsync` con timeout y después a `DisposeAsync`, sin un `finally` que garantice este último si falla la parada.
 
 **Implicación:** es difícil demostrar que todas las operaciones terminan antes de liberar recursos o de completar el cierre. Los callbacks pendientes pueden sobrevivir al punto donde se consideran cerrados sus servicios. Es un riesgo inferido por inspección; no he reproducido un fallo de cierre.
 
@@ -89,7 +89,7 @@ Las prioridades expresan el orden preventivo recomendado. **Alta** significa abo
 
 ### A6. Las preferencias y las rutas de datos siguen políticas distintas — Media
 
-**Evidencia:** [Preferences.Save:41](C:/proyectos/habitat/src/Habitat.Core/Services/Preferences.cs:41) escribe directamente con `File.WriteAllText` y descarta errores de acceso y E/S. `Load` vuelve a los valores predeterminados si el JSON no se puede leer. Las preferencias, tareas, credenciales y distintos logs resuelven sus directorios de forma independiente; tareas y Gmail incorporan protecciones específicas contra redirección de perfil.
+**Evidencia:** `src/Habitat.Core/Services/Preferences.cs:41` escribe directamente con `File.WriteAllText` y descarta errores de acceso y E/S. `Load` vuelve a los valores predeterminados si el JSON no se puede leer. Las preferencias, tareas, credenciales y distintos logs resuelven sus directorios de forma independiente; tareas y Gmail incorporan protecciones específicas contra redirección de perfil.
 
 **Implicación:** una interrupción durante el guardado puede perder preferencias y posición de ventana; un guardado fallido parece haber tenido éxito. Las diferencias al resolver rutas pueden volver a introducir problemas de perfil temporal en otra funcionalidad. Esto no implica que deban unificarse los mecanismos de protección de tareas y credenciales.
 
@@ -97,7 +97,7 @@ Las prioridades expresan el orden preventivo recomendado. **Alta** significa abo
 
 ### A7. El historial de tareas crece sin límite y se procesa en el hilo de UI — Media
 
-**Evidencia:** [TaskStore.Load:61](C:/proyectos/habitat/src/Habitat.Core/Services/TaskStore.cs:61) recorre las revisiones mediante `ReadHistory`; cada guardado prepara una copia completa y `WriteDurably` hace `Flush(true)`. No hay compactación ni límite de revisiones. [LoadTasks:227](C:/proyectos/habitat/src/Habitat.App/MainPage.Tasks.cs:227) y [SaveTasks:255](C:/proyectos/habitat/src/Habitat.App/MainPage.Tasks.cs:255) llaman al almacén sincrónicamente desde la página. El render reconstruye ambas listas completas.
+**Evidencia:** `src/Habitat.Core/Services/TaskStore.cs:61` recorre las revisiones mediante `ReadHistory`; cada guardado prepara una copia completa y `WriteDurably` hace `Flush(true)`. No hay compactación ni límite de revisiones. `src/Habitat.App/MainPage.Tasks.cs:227` y `src/Habitat.App/MainPage.Tasks.cs:255` llaman al almacén sincrónicamente desde la página. El render reconstruye ambas listas completas.
 
 **Implicación:** el trabajo de disco y reconstrucción crece con el historial y el número de tareas. Puede afectar al arranque y a la respuesta de la UI en listas grandes o discos lentos. No se ha medido una degradación en la lista del usuario, que no se ha leído.
 
@@ -105,7 +105,7 @@ Las prioridades expresan el orden preventivo recomendado. **Alta** significa abo
 
 ### A8. El contrato del puente está implícito y repartido — Media
 
-**Evidencia:** [BridgeModels.cs](C:/proyectos/habitat/src/Habitat.Core/Models/BridgeModels.cs:1) representa eventos con cadenas y campos opcionales; `BridgeService`, `background.js`, `transport.js` y `content.js` comparten reglas sin un contrato versionado entre escritorio y extensión. Sí existe `protocol: 6` entre worker y página. Los plazos de recepción, disponibilidad y respuesta viven en componentes distintos. El servidor mantiene estados mediante varios campos y el reloj real.
+**Evidencia:** `src/Habitat.Core/Models/BridgeModels.cs:1` representa eventos con cadenas y campos opcionales; `BridgeService`, `background.js`, `transport.js` y `content.js` comparten reglas sin un contrato versionado entre escritorio y extensión. Sí existe `protocol: 6` entre worker y página. Los plazos de recepción, disponibilidad y respuesta viven en componentes distintos. El servidor mantiene estados mediante varios campos y el reloj real.
 
 **Implicación:** una modificación parcial puede introducir discrepancias de estados o compatibilidad. Probar expiraciones requiere esperas reales. Cambiar esta frontera a la vez que se reorganiza la pantalla aumentaría el riesgo.
 

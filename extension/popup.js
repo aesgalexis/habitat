@@ -15,6 +15,64 @@ chrome.storage.local.get(["habitatKey","habitatTab","habitatConsentVersion","hab
 });
 
 document.getElementById("settings").onclick = () => chrome.tabs.create({url:chrome.runtime.getURL("welcome.html")});
+const facebook = document.getElementById("facebook");
+const facebookReconnect = document.getElementById("facebook-reconnect");
+const facebookStatus = document.getElementById("facebook-status");
+const facebookOrigins = {origins:["https://www.facebook.com/*", "https://facebook.com/*"]};
+let facebookEnabled = false;
+let facebookWorkerNeedsReload = false;
+async function connectFacebook(restart = false) {
+  facebookStatus.textContent = "Connecting Facebook to HABITAT…";
+  facebookReconnect.disabled = true;
+  try {
+    const result = await chrome.runtime.sendMessage({kind:"facebook-connect",restart});
+    facebookWorkerNeedsReload = !result || result.facebookProtocol !== 1 && !result.error?.includes("enable the connection");
+    facebookReconnect.textContent = facebookWorkerNeedsReload ? "Reload extension for Facebook" : "Reconnect Facebook";
+    const readError = {
+      permission:"Enable Facebook contacts to allow the reader.",
+      login:"Sign in to Facebook in Chrome, then retry its widget.",
+      blocked:"Complete Facebook's verification in Chrome, then retry its widget.",
+      "page-changed":"Open Facebook Home in Chrome, then retry its widget.",
+      "contacts-unavailable":"The reader cannot find Facebook's Contacts panel. Open Facebook Home in a wide Chrome window, then retry its widget.",
+      result:"The reader could not load Facebook contacts. Open Facebook Home, then retry its widget."
+    };
+    facebookStatus.textContent = facebookWorkerNeedsReload ? "The running extension needs reloading to start its Facebook reader." :
+      result.error || (!result.connected ? result.issue || "Facebook is not connected to HABITAT yet." :
+        result.lastRead?.error ? readError[result.lastRead.error] || readError.result :
+        result.lastRead?.contactCount > 0 ? `Facebook is connected to HABITAT. ${result.lastRead.contactCount} contacts received.` :
+        result.lastRead?.contactCount === 0 ? "Facebook is connected to HABITAT, but its Contacts panel returned no contacts." :
+        "Facebook is connected to HABITAT. Open its widget to load contacts.");
+  } catch (_) { facebookStatus.textContent = "Could not connect Facebook. Keep HABITAT open, then reconnect."; }
+  finally { facebookReconnect.disabled = false; }
+}
+chrome.permissions.contains(facebookOrigins).then(enabled => {
+  facebookEnabled = enabled;
+  facebook.textContent = enabled ? "Disable Facebook contacts" : "Enable Facebook contacts";
+  if (enabled) void connectFacebook();
+}).catch(() => { facebook.disabled = true; });
+facebookReconnect.onclick = () => {
+  if (facebookWorkerNeedsReload) { chrome.runtime.reload(); return; }
+  void connectFacebook(true);
+};
+facebook.onclick = async () => {
+  try {
+    // Chrome requires this permission request to originate in a user gesture.
+    if (facebookEnabled) {
+      if (await chrome.permissions.remove(facebookOrigins)) {
+        facebookEnabled = false;
+        facebook.textContent = "Enable Facebook contacts";
+        msg.textContent = "Facebook contacts disabled. Existing Facebook tabs remain open.";
+      }
+      return;
+    }
+    const granted = await chrome.permissions.request(facebookOrigins);
+    facebookEnabled = granted;
+    facebook.textContent = granted ? "Disable Facebook contacts" : "Enable Facebook contacts";
+    msg.textContent = granted ? "Facebook access enabled. Enable the connection, sign in to Facebook in Chrome, then open Facebook in HABITAT." :
+      "Facebook access was not enabled. You can try again here.";
+    if (granted) void connectFacebook(true);
+  } catch (_) { msg.textContent = "Could not enable Facebook access. Reload the HABITAT extension and try again."; }
+};
 document.getElementById("automatic").onclick = async () => {
   try {
     const result = await chrome.runtime.sendMessage({kind:"connect"});

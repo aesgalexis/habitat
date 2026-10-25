@@ -107,6 +107,7 @@ public sealed partial class MainPage
 
     private void Destination_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
     {
+        if (_updateDialogOpen || _updateHandoff) return;
         if (ReferenceEquals(e, _lastDestinationWheelEvent) ||
             (_windowHost is { IsActive: false })) return;
         var control = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control);
@@ -131,6 +132,7 @@ public sealed partial class MainPage
 
     private void SelectDestination(ComposerDestination destination)
     {
+        if (_updateDialogOpen || _updateHandoff) return;
         if (_destination == ComposerDestination.Codex && destination != _destination) CancelPendingCodexSend();
         _destination = ComposerDestinations.Normalize(destination);
         RestoreComposerDraft();

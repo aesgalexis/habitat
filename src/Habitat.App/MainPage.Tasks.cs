@@ -180,6 +180,8 @@ public sealed partial class MainPage
         }
         var layout = TopWidgetLayout.Calculate(contentWidth, _tasksPanelOpen, _sidebarManualExpanded);
         _sidebarExpanded = layout.Expanded;
+        SizeFacebook(layout, surface.ActualHeight);
+        var facebookInset = _facebookPanelOpen ? FacebookRailInset : 0;
         SizeWeatherWidget(layout);
         _widgets.Margin = new Thickness(0, 20, 0, 0);
         var expanded = layout.Expanded;
@@ -200,15 +202,15 @@ public sealed partial class MainPage
         var widgetRowsHeight = _widgets.RowDefinitions.Sum(row => row.Height.Value) +
             _widgets.RowSpacing * (_widgets.RowDefinitions.Count - 1);
         var tasksTop = _widgets.Margin.Top + widgetRowsHeight + 16;
-        _taskArea.Margin = new Thickness(layout.TaskLeft, tasksTop, 0, 0);
+        _taskArea.Margin = new Thickness(layout.TaskLeft + (_sidebarExpanded ? 0 : facebookInset), tasksTop, 0, 0);
         _taskArea.Width = layout.TaskWidth;
         _taskArea.MaxHeight = Math.Max(0, surface.ActualHeight - tasksTop - 24);
-        _sidebarDivider.Margin = new Thickness(layout.ContentInset - 12, 20, 0, 24);
+        _sidebarDivider.Margin = new Thickness(layout.ContentInset + facebookInset - 12, 20, 0, 24);
         // On narrow windows an open task drawer takes the content slot. Keep
         // the draft/history intact and restore them when the drawer closes.
-        var drawerOnly = (_tasksPanelOpen || expanded) && contentWidth - layout.ContentInset - DestinationRailInset < 200;
+        var drawerOnly = (_tasksPanelOpen || expanded || _facebookPanelOpen) && contentWidth - layout.ContentInset - facebookInset - DestinationRailInset < 200;
         _root.Visibility = drawerOnly ? Visibility.Collapsed : Visibility.Visible;
-        _root.Margin = new Thickness(layout.ContentInset, 0, DestinationRailInset, 0);
+        _root.Margin = new Thickness(layout.ContentInset + facebookInset, 0, DestinationRailInset, 0);
     }
 
     private void OpenTasks() => DispatcherQueue.TryEnqueue(

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- LOCAL DRAFT. Not registered with SignPath. The version parameter is VERSION + ".0". -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <pe-file-set product-name="HABITAT" company-name="aesgalexis" file-version="${version}">
+      <include path="HABITAT.exe" />
+      <include path="HABITAT.dll" />
+      <include path="HABITAT.Hotkey.exe" />
+      <include path="HABITAT.Hotkey.dll" />
+      <include path="Habitat.Core.dll" />
+      <include path="Habitat.Activation.dll" />
+      <for-each>
+        <authenticode-sign hash-algorithm="sha256" />
+      </for-each>
+    </pe-file-set>
+  </zip-file>
+</artifact-configuration>

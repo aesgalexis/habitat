@@ -35,7 +35,7 @@ async function workerChecks() {
     remove:async keys=>{for(const k of Array.isArray(keys)?keys:[keys])delete data[k];}};}
   chrome.storage.local=storage(local,'local');chrome.storage.session=storage(session,'session');
   class Socket{static OPEN=1;constructor(url){this.url=url;this.readyState=0;this.sent=[];sockets.push(this);queueMicrotask(()=>{this.readyState=1;this.onopen?.();});}send(s){this.sent.push(JSON.parse(s));}close(){this.readyState=3;this.onclose?.();}}
-  const context=vm.createContext({chrome,WebSocket:Socket,URL,console,Promise,queueMicrotask,
+  const context=vm.createContext({chrome,WebSocket:Socket,URL,console,Promise,queueMicrotask,AbortSignal,
     setTimeout:(fn,ms)=>{const timer=setTimeout(fn,ms);timers.add(timer);return timer;},clearTimeout:id=>{clearTimeout(id);timers.delete(id);},
     fetch:async url=>{check(url==='http://127.0.0.1:8765/pair','Pair only with the local desktop.');return {ok:true,json:async()=>({key:'key'})};}});
   context.importScripts=(...files)=>files.forEach(file=>vm.runInContext(fs.readFileSync(path.join(extension,file),'utf8'),context));
@@ -116,6 +116,20 @@ async function workerChecks() {
   local.habitatTab=999;
   check(await vm.runInContext('chooseBoundTab(savedBinding)',context)===null,'Do not substitute a random background chat when the linked tab is missing.');
   local.habitatTab=202;
+  const originalFacebookConnect=vm.runInContext('facebookTransport.connect',context);
+  let facebookReconnects=0;
+  context.checkedFacebookConnect=async restart=>{facebookReconnects++;return {facebookProtocol:1,connected:true,restart};};
+  vm.runInContext('facebookTransport.connect=checkedFacebookConnect',context);
+  const workerMessage=(request,sender)=>new Promise(resolve=>chrome.runtime.onMessage.listeners[0](request,sender,resolve));
+  const facebookReady=await workerMessage({kind:'facebook-connect',restart:true},
+    {id:'test-extension',url:'chrome-extension://test-extension/popup.html'});
+  check(facebookReady.facebookProtocol===1&&facebookReady.connected&&facebookReady.restart&&facebookReconnects===1,
+    'The trusted extension popup can reconnect Facebook independently of the selected ChatGPT tab.');
+  const foreignFacebook=await workerMessage({kind:'facebook-connect',restart:true},
+    {id:'test-extension',url:'https://www.facebook.com/',frameId:0,tab:{id:400,url:'https://www.facebook.com/'}});
+  check(foreignFacebook.error&&facebookReconnects===1,'A website cannot invoke the privileged Facebook reconnect action.');
+  context.checkedFacebookConnect=originalFacebookConnect;
+  vm.runInContext('facebookTransport.connect=checkedFacebookConnect',context);
   await chrome.storage.local.set({habitatDisabled:true});await settled();
   check((await vm.runInContext('startTransport()',context)).error.includes('disconnected'),'Respect Disconnect.');
   check(sockets.every(socket=>socket.readyState===3),'Disconnect closes ChatGPT, Google, YouTube and Translate channels.');

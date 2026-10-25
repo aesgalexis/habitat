@@ -38,3 +38,9 @@ Estas reglas se aplican a todo el repositorio.
 - Intenta primero el cierre normal de la instancia de HABITAT de este proyecto. Si no responde, puedes finalizar esa misma instancia para liberar los archivos del ejecutable.
 - Inicia y reinicia la aplicación real desde la sesión normal de Windows, fuera del sandbox de ejecución de Codex. El sandbox cambia LocalApplicationData y sus datos temporales pueden desaparecer: no lances allí la aplicación que usará el usuario.
 - La compilación y las pruebas pueden ejecutarse dentro del sandbox. Las pruebas de tareas deben usar una ruta de almacenamiento explícita y aislada dentro de artifacts, nunca la lista real del usuario.
+
+## Firma de código aplazada
+
+- El propietario ha elegido SignPath Foundation como vía futura, pero ha aplazado la solicitud hasta mejorar el empaquetado (decisión del 19 de octubre de 2026).
+- Limita este trabajo a preparación local. No envíes solicitudes de admisión o firma, crees cuentas, instales la GitHub App, aceptes condiciones, añadas credenciales ni actives workflows de SignPath hasta que el usuario retome expresamente el proceso.
+- Conserva el estado y los pendientes en `docs/SIGNING.md`. Los borradores no significan que el proyecto esté admitido, firmado o patrocinado.

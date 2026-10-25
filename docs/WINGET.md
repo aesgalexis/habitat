@@ -1,14 +1,16 @@
 # Distribución de HABITAT con WinGet
 
 El objetivo es `winget install --exact --id aesgalexis.HABITAT` y, después,
-`winget upgrade --exact --id aesgalexis.HABITAT`. **Estos comandos todavía no
-están disponibles en el catálogo público.** El identificador es la propuesta
-para la primera solicitud a `microsoft/winget-pkgs`.
+`winget upgrade --exact --id aesgalexis.HABITAT`. **Estos comandos expresan el
+objetivo de distribución; su disponibilidad actual no se ha verificado en esta
+revisión documental.** El identificador es la propuesta para la primera
+solicitud a `microsoft/winget-pkgs`.
 
 El repositorio y la [release 0.9.1](https://github.com/aesgalexis/habitat/releases/tag/v0.9.1)
-son públicos desde el 18 de octubre de 2026. La solicitud de alta está abierta
-en [microsoft/winget-pkgs#455544](https://github.com/microsoft/winget-pkgs/pull/455544),
-pendiente de la validación y aceptación de Microsoft.
+figuran como públicos en el registro del 18 de octubre de 2026. Ese registro
+recoge la solicitud [microsoft/winget-pkgs#455544](https://github.com/microsoft/winget-pkgs/pull/455544)
+pendiente de validación y aceptación. Comprueba su estado antes de recomendar la
+instalación desde el catálogo; mientras tanto, utiliza los assets de GitHub Releases.
 
 ## Preparación incluida
 

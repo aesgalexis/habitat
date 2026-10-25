@@ -16,6 +16,36 @@ public sealed partial class MainPage
                 throw new InvalidOperationException("UI checks did not receive isolated services.");
             File.AppendAllText(path, "PASS: isolated services, empty in-memory Gmail credentials and explicit data paths\n");
             await _initialTaskLoad;
+            if (Environment.GetCommandLineArgs().Contains("--facebook-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
+                await CheckFacebookUiAsync(path);
+            if (Environment.GetCommandLineArgs().Contains("--facebook-ui-only"))
+            {
+                await StopAsync();
+                await _services.DisposeAsync();
+                window.Close();
+                Application.Current.Exit();
+                return;
+            }
+            if (Environment.GetCommandLineArgs().Contains("--updates-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
+                await CheckUpdatesUiAsync(path);
+            if (Environment.GetCommandLineArgs().Contains("--updates-ui-only"))
+            {
+                await StopAsync();
+                await _services.DisposeAsync();
+                window.Close();
+                Application.Current.Exit();
+                return;
+            }
+            if (Environment.GetCommandLineArgs().Contains("--conversation-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
+                await CheckConversationScrollUiAsync(window, path);
+            if (Environment.GetCommandLineArgs().Contains("--conversation-ui-only"))
+            {
+                await StopAsync();
+                await _services.DisposeAsync();
+                window.Close();
+                Application.Current.Exit();
+                return;
+            }
             if (Environment.GetCommandLineArgs().Contains("--setup-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
                 await CheckSetupUiAsync(path);
             if (Environment.GetCommandLineArgs().Contains("--setup-ui-only"))
@@ -341,7 +371,7 @@ public sealed partial class MainPage
                 Math.Abs(taskCenter - 20) > 0.5 || Math.Abs(mailCenter - 20) > 0.5 ||
                 _widgets.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point()).X != sidebarLeft)
                 throw new InvalidOperationException("Collapsed rail icons/toggle are not centered or the left edge moved.");
-            if (ReferenceEquals(SidebarToggle.Parent, _widgets) || _widgets.RowDefinitions.Count != 3 ||
+            if (ReferenceEquals(SidebarToggle.Parent, _widgets) || _widgets.RowDefinitions.Count != 4 ||
                 _widgets.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point()).Y != 20 || sidebarLeft != 12 ||
                 SidebarToggle.Content is not null || SidebarToggle.ActualHeight <= _widgets.ActualHeight ||
                 ((Microsoft.UI.Xaml.Media.SolidColorBrush)SidebarToggle.Background).Color.A != 0)
@@ -388,7 +418,7 @@ public sealed partial class MainPage
             if (taskViewportBottom > ((Microsoft.UI.Xaml.Controls.Grid)Content).ActualHeight - 24 || _taskArea.ScrollableHeight <= 0)
                 throw new InvalidOperationException("Long task lists must scroll below the sidebar widgets in short windows.");
             File.AppendAllText(path, "PASS: top weather adapts to both sidebar states; long tasks scroll below the widgets in short windows\n");
-            File.AppendAllText(path, "PASS: Tasks icon click opens below all three widgets in collapsed, expanded and narrow states, including toggling with Tasks open\n");
+            File.AppendAllText(path, "PASS: Tasks icon click opens below all sidebar widgets in collapsed, expanded and narrow states, including toggling with Tasks open\n");
             await StopAsync();
             await _services.DisposeAsync();
             window.Close();

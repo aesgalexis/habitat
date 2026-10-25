@@ -16,6 +16,8 @@ http.DefaultRequestHeaders.Add("X-Habitat-Key", bridge.PairKey);
 async Task<JsonDocument> Status() => JsonDocument.Parse(await http.GetStringAsync("/status"));
 using (var status = await Status()) Check(!status.RootElement.GetProperty("connected").GetBoolean() && !bridge.IsConnected,
     "Reading status must never manufacture a heartbeat.");
+using (var status = await Status()) Check(status.RootElement.GetProperty("facebook").GetProperty("stage").GetString() == "waiting-for-extension" &&
+    !bridge.Facebook.IsConnected, "Facebook diagnostics distinguish a missing worker without starting a read.");
 var socketUrl = new Uri(address.Replace("http:", "ws:") + "/bridge");
 async Task Send(ClientWebSocket socket, object packet) => await socket.SendAsync(
     JsonSerializer.SerializeToUtf8Bytes(packet).AsMemory(), WebSocketMessageType.Text, true, CancellationToken.None);
@@ -287,3 +289,114 @@ foreach (var withIdentity in new[] { false, true })
     chrome.Abort();
 }
 Console.WriteLine($"Chrome bridge compatibility checks passed: {checks}.");
+
+var facebookUrl = new Uri(address.Replace("http:", "ws:") + "/facebook-bridge");
+using (var denied = new ClientWebSocket())
+{
+    await denied.ConnectAsync(facebookUrl, default);
+    await Send(denied, new { key = "wrong", facebookProtocol = 1 });
+    Check(await Receive(denied) is null && denied.CloseStatus == WebSocketCloseStatus.PolicyViolation,
+        "Facebook snapshots require the local pairing key.");
+}
+using (var facebook = new ClientWebSocket())
+{
+    await facebook.ConnectAsync(facebookUrl, default);
+    await Send(facebook, new { key = bridge.PairKey, facebookProtocol = 1, extensionVersion = "0.10.2" });
+    using (var tick = await Receive(facebook)) Check(tick!.RootElement.GetProperty("kind").GetString() == "facebook-tick", "Facebook uses its own snapshot protocol.");
+    await WaitUntil(() => bridge.Facebook.IsConnected);
+    async Task<string> FacebookRequest()
+    {
+        while (true)
+        {
+            using var tick = await Receive(facebook);
+            var request = tick!.RootElement.GetProperty("request");
+            if (request.ValueKind != JsonValueKind.Null) return request.GetProperty("id").GetString()!;
+        }
+    }
+    var snapshot = bridge.Facebook.ReadAsync(default);
+    var requestId = await FacebookRequest();
+    await Send(facebook, new { kind = "facebook-progress", id = "stale", diagnostic = new { stage = "section-read", photos = 999 } });
+    await Task.Delay(30);
+    Check(bridge.Facebook.Status.Reader is null, "Stale progress cannot change the current Facebook diagnostic.");
+    await Send(facebook, new { kind = "facebook-progress", id = requestId,
+        diagnostic = new { stage = "section-missing", sections = 2, photos = -1, rows = 10001 } });
+    await WaitUntil(() => bridge.Facebook.Status.Reader is not null);
+    Check(bridge.Facebook.Status.ExtensionVersion == "0.10.2" && bridge.Facebook.Status.Stage == "reading" &&
+        bridge.Facebook.Status.Reader is { Stage: "section-missing", Sections: 2, Photos: null, Rows: null } && !snapshot.IsCompleted,
+        "Reader progress identifies the failing stage, validates bounded counts and never completes the request.");
+    await Send(facebook, new { kind = "facebook-result", id = "stale", contacts = Array.Empty<object>() });
+    await Task.Delay(30);
+    Check(!snapshot.IsCompleted, "Unrelated or stale Facebook snapshots cannot complete a current request.");
+    await Send(facebook, new { kind = "facebook-result", id = requestId, contacts = new[] {
+        new { name = "Amiga ☕ 雪", photoUrl = "https://scontent.fbcdn.net/avatar.jpg", link = (string?)null } } });
+    var contacts = await snapshot.WaitAsync(TimeSpan.FromSeconds(3));
+    Check(contacts.Count == 1 && contacts[0].Name == "Amiga ☕ 雪" && contacts[0].Link is null,
+        "Contact names keep their original language and links are optional.");
+    using (var status = await Status())
+    {
+        var metadata = status.RootElement.GetProperty("facebook");
+        Check(metadata.GetProperty("stage").GetString() == "loaded" && metadata.GetProperty("contactCount").GetInt32() == 1 &&
+            !metadata.ToString().Contains("fbcdn") && !metadata.ToString().Contains("Amiga"),
+            "Facebook diagnostics retain the received count, without contact names or photo URLs.");
+    }
+    foreach (var unsafePhoto in new[] { "http://scontent.fbcdn.net/a.jpg", "https://fbcdn.net.evil.test/a.jpg", "https://user@scontent.fbcdn.net/a.jpg", "file:///C:/private.png" })
+    {
+        snapshot = bridge.Facebook.ReadAsync(default);
+        requestId = await FacebookRequest();
+        await Send(facebook, new { kind = "facebook-result", id = requestId, contacts = new[] { new { name = "Synthetic", photoUrl = unsafePhoto } } });
+        try { await snapshot.WaitAsync(TimeSpan.FromSeconds(3)); throw new Exception("Unsafe photo accepted."); }
+        catch (InvalidOperationException) { checks++; }
+    }
+    snapshot = bridge.Facebook.ReadAsync(default);
+    requestId = await FacebookRequest();
+    await Send(facebook, new { kind = "facebook-result", id = requestId, contacts = new[] {
+        new { name = "Synthetic", photoUrl = "https://scontent.fbcdn.net/avatar.jpg", link = "https://www.facebook.com/l.php?u=https://evil.test" } } });
+    try { await snapshot.WaitAsync(TimeSpan.FromSeconds(3)); throw new Exception("Redirect link accepted."); }
+    catch (InvalidOperationException) { checks++; }
+    using (var cancel = new CancellationTokenSource())
+    {
+        snapshot = bridge.Facebook.ReadAsync(cancel.Token);
+        await FacebookRequest();
+        cancel.Cancel();
+        try { await snapshot; throw new Exception("Canceled snapshot completed."); }
+        catch (OperationCanceledException) { checks++; }
+    }
+    snapshot = bridge.Facebook.ReadAsync(default);
+    requestId = await FacebookRequest();
+    await Send(facebook, new { kind = "facebook-result", id = requestId, error = "permission" });
+    try { await snapshot.WaitAsync(TimeSpan.FromSeconds(3)); throw new Exception("Missing permission ignored."); }
+    catch (InvalidOperationException exception) { Check(exception.Message.Contains("Enable Facebook contacts"), "Permission failures offer the English extension recovery action."); }
+    snapshot = bridge.Facebook.ReadAsync(default);
+    await FacebookRequest();
+    facebook.Abort();
+    try { await snapshot.WaitAsync(TimeSpan.FromSeconds(3)); throw new Exception("Disconnected snapshot did not fail."); }
+    catch (InvalidOperationException) { checks++; }
+    await WaitUntil(() => !bridge.Facebook.IsConnected);
+}
+Console.WriteLine($"Facebook bridge checks passed: {checks}. Synthetic snapshots only.");
+
+var workerInfo = new System.Diagnostics.ProcessStartInfo("node")
+{
+    UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true, RedirectStandardOutput = true
+};
+workerInfo.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "fixtures", "facebook-bridge.worker.cjs"));
+workerInfo.ArgumentList.Add(address);
+using (var worker = System.Diagnostics.Process.Start(workerInfo) ?? throw new Exception("Could not start the isolated Facebook worker."))
+{
+    var errors = worker.StandardError.ReadToEndAsync();
+    try
+    {
+        await WaitUntil(() => bridge.Facebook.IsConnected);
+        var result = await bridge.Facebook.ReadAsync(default).WaitAsync(TimeSpan.FromSeconds(5));
+        Check(result.Count == 1 && result[0].Name == "Real wire · synthetic contact ☕",
+            "The actual JavaScript Facebook worker pairs, authenticates and returns a snapshot through the real C# WebSocket bridge.");
+    }
+    finally
+    {
+        if (!worker.HasExited) worker.Kill(entireProcessTree: true);
+        await worker.WaitForExitAsync();
+        var diagnostic = await errors;
+        if (!string.IsNullOrEmpty(diagnostic)) Console.WriteLine(diagnostic);
+    }
+}
+Console.WriteLine($"Facebook worker-to-desktop integration passed: {checks}. Random port and synthetic contacts only.");

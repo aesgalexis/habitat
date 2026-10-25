@@ -19,7 +19,7 @@ public sealed partial class MainPage
     private async Task ReceiveActivationAsync(string? text)
     {
         // Dismiss modal UI through its normal cancel/close path before focusing.
-        if (_operations.IsStopping || _receivingActivation) return;
+        if (_operations.IsStopping || _receivingActivation || _updateDialogOpen || _updateHandoff) return;
         _receivingActivation = true;
         try
         {
@@ -31,6 +31,7 @@ public sealed partial class MainPage
             }
             OptionsMenu.Hide();
             GmailFlyout.Hide();
+            FacebookRecovery.Hide();
             if (_tasksPanelOpen) SetTasksOpen(false);
             if (string.IsNullOrEmpty(text) || text.Length > ActivationChannel.MaxTextLength) return;
             var destination = _destination;

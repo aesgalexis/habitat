@@ -1,6 +1,6 @@
 # Extensión de HABITAT en Chrome Web Store
 
-**Browser Bridge 0.9.0** se envió a Chrome Web Store el **19 de octubre de 2026**, con visibilidad **Unlisted** y publicación automática tras aprobación. El último estado comprobado es **Pendiente de revisión**; todavía no está publicada ni disponible para instalar desde la tienda. Su ID es `ennnldolgdbbkgmpjjpkafeajihpimii`.
+**Registro del 19 de octubre de 2026:** Browser Bridge 0.9.0 se envió a Chrome Web Store con visibilidad **Unlisted** y publicación automática tras aprobación. El estado registrado entonces fue **Pendiente de revisión**, sin disponibilidad de instalación. Su ID es `ennnldolgdbbkgmpjjpkafeajihpimii`. Esta guía no consulta el estado actual de la tienda; no debe interpretarse como una confirmación de que siga pendiente. El manifiesto fuente puede haber avanzado; véase [PROJECT_STATUS.md](PROJECT_STATUS.md).
 
 El [panel del elemento](https://chrome.google.com/webstore/devconsole/a22d2854-1ba1-46a3-966b-37dab27b2f83/ennnldolgdbbkgmpjjpkafeajihpimii/edit/status) muestra el estado de revisión al propietario. `packaging/chrome-store/submission.json` conserva el ID, la versión y el hash exacto del paquete enviado. La captura de confirmación queda en `artifacts/chrome-store/0.9.0/submission-pending-review.jpg`.
 
@@ -9,6 +9,8 @@ Esta versión añade iconos, política de privacidad, consentimiento explícito 
 La versión pública del escritorio 0.9.1 conserva su selector de navegador: con esa versión debe elegirse **Google Chrome** en **Preferences → Browser**. La siguiente publicación del escritorio incorporará la corrección que utiliza Chrome directamente.
 
 ## Archivos de publicación
+
+La copia local **0.10.2** añade el widget opcional de contactos de Facebook, actualiza los avisos de privacidad y separa el permiso de sitio del estado real de conexión y del resultado de la lectura, con recuperación desde el popup y diagnóstico local por fases. Sus permisos de Facebook se solicitan desde **Enable Facebook contacts**; no se conceden al instalar. Esta versión local no se ha enviado a la tienda. La compatibilidad con el panel real de Facebook está pendiente de comprobar según [FACEBOOK.md](FACEBOOK.md).
 
 - `extension/manifest.json`: versión y recursos de la extensión.
 - `docs/EXTENSION_PRIVACY.md`: política pública, en inglés y sin datos de usuarios.
