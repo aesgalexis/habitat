@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Habitat.Core/Habitat.Core.csproj" />
+    <Compile Include="../../src/Habitat.App/Services/WindowsApps.cs" Link="WindowsApps.cs" />
   </ItemGroup>
 </Project>

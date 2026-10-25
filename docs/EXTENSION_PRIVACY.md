@@ -1,6 +1,6 @@
 # HABITAT Browser Bridge privacy policy
 
-Effective date: 24 October 2026. Extension version: 0.10.2.
+Effective date: 25 October 2026. Extension version: 0.10.3.
 
 This policy covers the HABITAT Browser Bridge Chrome extension maintained by [aesgalexis](https://github.com/aesgalexis). The extension connects Chrome to the HABITAT desktop application running on your own Windows computer. It has no HABITAT cloud backend, advertising, analytics or tracking service.
 
@@ -13,7 +13,7 @@ The extension stays disconnected until you select **Enable connection** on its c
 - **ChatGPT:** messages you submit through HABITAT, the resulting assistant replies, the linked conversation address and tab identifier, model name, and readiness or error status. The extension uses your existing signed-in ChatGPT page. It does not create or rename conversations automatically.
 - **Search:** queries you submit in HABITAT and the titles, links, descriptions, channel information and pagination information returned by the Google or YouTube search page.
 - **Translation:** the source text and target language you submit in HABITAT and the text returned by Google Translate.
-- **Facebook (optional):** when you grant Facebook site access and open its widget in HABITAT, the extension reads the names, profile photo addresses and available Facebook links in the rendered Contacts panel. It does not read messages, open conversations to collect data, or retrieve the complete friends list. Names and contact snapshots are kept in memory rather than saved to extension storage. HABITAT loads the photo addresses to display avatars; Facebook's image servers receive those normal image requests.
+- **Facebook (optional):** when you grant Facebook site access and open its widget in HABITAT, the extension reads the names, profile photo addresses and available Facebook links in the rendered Contacts panel or All friends list. If Home has no contacts, it can open All friends in a background tab. It reads only loaded rows, without scrolling the list, reading messages or opening conversations to collect data; the complete friends list is not guaranteed. Names and contact snapshots are kept in memory rather than saved to extension storage. HABITAT loads the photo addresses to display avatars; Facebook's image servers receive those normal image requests.
 - **Connection information:** a local pairing key, your connection choice, browser tab identifiers and addresses needed to route requests to the correct page. Basic tab information is used to find and validate the relevant page, not to build a browsing history or profile.
 
 The extension does not read passwords, payment information, Gmail messages or unrelated page content. It does not access browser cookies directly or transfer a browsing history to the developer.

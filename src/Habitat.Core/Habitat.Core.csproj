@@ -7,4 +7,8 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Localization\*.json" LogicalName="Habitat.Localization.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Services\Updates\UpdateHelper.ps1" LogicalName="Habitat.UpdateHelper.ps1" />
+  </ItemGroup>
 </Project>

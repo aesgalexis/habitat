@@ -1,4 +1,4 @@
-param([switch]$VSCodeOnly, [switch]$HotkeyOnly, [switch]$ConversationOnly, [switch]$UpdatesOnly, [switch]$FacebookOnly, [string]$OutputDirectory)
+param([switch]$VSCodeOnly, [switch]$ConversationOnly, [switch]$UpdatesOnly, [switch]$FacebookOnly, [switch]$HotkeyOnly, [switch]$WindowMenuOnly, [switch]$CodexSchedulesOnly, [switch]$ScrollEdgesOnly, [string]$OutputDirectory)
 $ErrorActionPreference = "Stop"
 $taskProjectRoot = Split-Path -Parent $PSScriptRoot
 $env:DOTNET_CLI_HOME = Join-Path $taskProjectRoot ".dotnet-local"
@@ -14,11 +14,12 @@ dotnet publish (Join-Path $taskProjectRoot "src\Habitat.App\Habitat.App.csproj")
     -p:Platform=x64 -p:HabitatUiChecks=true -p:PublishReadyToRun=false --output $taskOutput
 if ($LASTEXITCODE -ne 0) { throw "Could not build the tasks UI checks." }
 $taskProcess = Start-Process -FilePath (Join-Path $taskOutput "HABITAT.exe") `
-    -ArgumentList $(if ($FacebookOnly) { '--facebook-ui-only' } elseif ($UpdatesOnly) { '--updates-ui-only' } elseif ($ConversationOnly) { '--conversation-ui-only' } elseif ($HotkeyOnly) { '--hotkey-ui-only' } elseif ($VSCodeOnly) { '--vscode-ui-only' } else { '--all-ui-checks' }) `
+    -ArgumentList $(if ($FacebookOnly) { '--facebook-ui-only' } elseif ($UpdatesOnly) { '--updates-ui-only' } elseif ($ConversationOnly) { '--conversation-ui-only' } elseif ($WindowMenuOnly) { '--window-menu-ui-only' } elseif ($ScrollEdgesOnly) { '--scroll-edges-ui-only' } elseif ($CodexSchedulesOnly) { '--codex-schedules-ui-only' } elseif ($HotkeyOnly) { '--hotkey-ui-only' } elseif ($VSCodeOnly) { '--vscode-ui-only' } else { '--all-ui-checks' }) `
     -WorkingDirectory $taskOutput -WindowStyle Hidden -PassThru
-if (-not $taskProcess.WaitForExit(30000)) {
+$taskTimeout = 60000
+if (-not $taskProcess.WaitForExit($taskTimeout)) {
     Stop-Process -Id $taskProcess.Id
     throw "Tasks UI checks timed out."
 }
-Get-Content -LiteralPath (Join-Path $taskOutput "tasks-ui-checks.log")
+Get-Content -LiteralPath (Join-Path $taskOutput $(if ($WindowMenuOnly) { 'window-menu-checks.log' } else { 'tasks-ui-checks.log' }))
 if ($taskProcess.ExitCode -ne 0) { throw "Tasks UI checks failed with exit code $($taskProcess.ExitCode)." }

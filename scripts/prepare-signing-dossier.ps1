@@ -15,16 +15,13 @@ if (@($config.ownBinaries).Count -eq 0 -or @($config.ownBinaries | Select-Object
 foreach ($name in $config.ownBinaries) {
     if ($name -cne [IO.Path]::GetFileName($name) -or $name -notmatch '^Habitat[.A-Za-z0-9]*\.(exe|dll)$') { throw 'Own binaries must be explicit root filenames.' }
 }
+Import-Module (Join-Path $PSScriptRoot 'Habitat.Release.psm1') -Force
 function Resolve-PreparationPath([string]$Path) {
     $full = [IO.Path]::GetFullPath($(if ([IO.Path]::IsPathRooted($Path)) { $Path } else { Join-Path $preparationRepo $Path }))
     if (-not $full.StartsWith($preparationArtifacts + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
         throw 'Signing preparation inputs and outputs must stay inside project artifacts; user data is not an input.'
     }
-    for ($walk = $full; $walk; $walk = Split-Path -Parent $walk) {
-        if ((Test-Path -LiteralPath $walk) -and ((Get-Item -LiteralPath $walk -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-            throw 'Signing preparation paths cannot contain filesystem links.'
-        }
-    }
+    Assert-HabitatNoLinks $full
     return $full
 }
 $payload = Resolve-PreparationPath $PayloadDirectory

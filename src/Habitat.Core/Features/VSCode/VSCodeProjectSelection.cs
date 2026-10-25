@@ -32,7 +32,7 @@ internal sealed class VSCodeProjectSelection(IEnumerable<string>? recentFolders 
 
     internal void SelectFolder(string path)
     {
-        var folder = VSCodeFolders.Normalize(path) ?? throw new ArgumentException("Choose a local folder.", nameof(path));
+        var folder = VSCodeFolders.Normalize(path) ?? throw new ArgumentException(UiText.Get("ChooseALocalFolder"), nameof(path));
         Remember(folder);
         _followActive = false;
         _selectedId = null;

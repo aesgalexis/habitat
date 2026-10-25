@@ -10,7 +10,7 @@ internal static class RunChecks
             ComposerDestinations.Cycle(ComposerDestination.Run, 1) == ComposerDestination.OpenAI &&
             ComposerDestinations.Label(ComposerDestination.Run) == "Run",
             "Run appears last, below Terminal, and participates in circular navigation");
-        check((int)ComposerDestination.Terminal == 6 && (int)ComposerDestination.VSCode == 9 &&
+        check(ComposerDestinations.FromLegacy(6) == ComposerDestination.Terminal && ComposerDestinations.FromLegacy(9) == ComposerDestination.VSCode &&
             ComposerDestinations.SearchUri(ComposerDestination.Run, "calc") is null,
             "Run preserves saved destination IDs and never creates a browser search");
 

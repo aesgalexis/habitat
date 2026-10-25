@@ -9,7 +9,7 @@ namespace Habitat;
 
 public sealed partial class MainPage
 {
-    private readonly Dictionary<Services.ComposerDestination, IDestinationSection> _destinationSections = new();
+    private readonly Dictionary<string, IDestinationSection> _destinationSections = new();
     private CancellationTokenSource? _emptyYouTubeReset;
     private readonly ContentControl _destinationContent = new()
     {
@@ -71,12 +71,17 @@ public sealed partial class MainPage
         youtube.StateChanged += () => { PresentDestinationSection(); UpdateWritingLayout(); UpdateSendState(); };
         youtube.ClearRequested += () => ResetSearch(Services.ComposerDestination.YouTube);
         _destinationSections.Add(youtube.Destination, youtube);
-        var codex = new CodexSection(() => _services.Codex, exception => _services.ReportError("Codex chat", exception));
+        var codex = new CodexSection(() => _services.Codex, exception => _services.ReportError("Codex chat", exception), ToneBrush);
+        codex.NewChatStarted += () =>
+        {
+            _composerDrafts.Edit(Services.ComposerDestination.Codex, "");
+            if (_destination == Services.ComposerDestination.Codex) { RestoreComposerDraft(); FocusComposer(); }
+        };
         codex.StateChanged += () =>
         {
             PresentDestinationSection(); UpdateWritingLayout(); UpdateSendState();
             if (_destination == Services.ComposerDestination.Codex && !_operations.IsStopping)
-                SetStatus(codex.StatusText, StatusTone.Active);
+                UpdateDestinationStatus();
         };
         _destinationSections.Add(codex.Destination, codex);
         _launchCodex = async (text, token) => (await codex.SendAsync(text, token)).Result;
@@ -84,7 +89,7 @@ public sealed partial class MainPage
         ConfigureComposerRoutes();
     }
 
-    private void ResetSearch(Services.ComposerDestination target)
+    private void ResetSearch(string target)
     {
         if (target == Services.ComposerDestination.YouTube) CancelEmptyYouTubeReset();
         if (!_destinationSections.TryGetValue(target, out var destination) ||

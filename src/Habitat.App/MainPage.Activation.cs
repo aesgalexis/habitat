@@ -45,13 +45,13 @@ public sealed partial class MainPage
                 else
 #endif
                 {
-                    var dialog = new ContentDialog
+                    var dialog = UiLanguage.Watch(new ContentDialog
                     {
-                        XamlRoot = XamlRoot, Title = "Replace draft?",
-                        Content = "The editor already contains a draft. Replace it with the selected text?",
-                        PrimaryButtonText = "Replace draft", CloseButtonText = "Keep draft",
+                        XamlRoot = XamlRoot, Title = UiText.Get("ReplaceDraftMessage"),
+                        Content = UiText.Get("TheEditorAlreadyContainsADraftReplaceIt"),
+                        PrimaryButtonText = UiText.Get("ReplaceDraft"), CloseButtonText = UiText.Get("KeepDraft"),
                         DefaultButton = ContentDialogButton.Close
-                    };
+                    }, ("Title", () => (object?)(UiText.Get("ReplaceDraftMessage"))), ("Content", () => (object?)(UiText.Get("TheEditorAlreadyContainsADraftReplaceIt"))), ("PrimaryButtonText", () => (object?)(UiText.Get("ReplaceDraft"))), ("CloseButtonText", () => (object?)(UiText.Get("KeepDraft"))));
                     StyleDialog(dialog);
                     replace = await ShowDialogAsync(dialog) == ContentDialogResult.Primary;
                 }

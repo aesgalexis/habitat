@@ -1,7 +1,5 @@
 # Fondos de HABITAT
 
-> **Referencia pendiente de reconciliar · 24 de octubre de 2026.** No se encontraron la biblioteca de fondos ni los controles de importación descritos en esta copia. El contenido conservado debajo describe una referencia anterior, incluidas sus versiones, etiquetas y pruebas; no acredita funciones disponibles, recursos incluidos ni pruebas ejecutables aquí. Puede pertenecer a otra rama. Consulta [PROJECT_STATUS.md](PROJECT_STATUS.md) antes de utilizarlo. Las etiquetas bilingües conservadas tampoco sustituyen la [regla de interfaz en inglés](LOCALIZATION.md).
-
 En **Preferencias… → Apariencia → Fondo de pantalla** (en inglés,
 **Preferences… → Appearance → Wallpaper**) se selecciona el fondo global.
 Las instalaciones nuevas mantienen el fondo transparente, **Híbrido al 15 %**.

@@ -11,7 +11,7 @@ namespace Habitat;
 
 public sealed partial class MainPage
 {
-    private static async Task CheckSectionShutdownAsync(string logPath)
+    private async Task CheckSectionShutdownAsync(string logPath)
     {
         var translationReply = new TaskCompletionSource<TranslationResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var translation = new TranslateSection((_, _, _) => translationReply.Task, _ => true, _ => { });
@@ -53,7 +53,7 @@ public sealed partial class MainPage
         if (vscode.SelectedProject is not null) throw new InvalidOperationException("Stopped VS Code must not bind projects.");
 
         var reader = new ShutdownCodexService { DelayRead = true, DelayOpen = true };
-        using var readingCodex = new CodexSection(() => reader, _ => { });
+        using var readingCodex = new CodexSection(() => reader, _ => { }, ToneBrush);
         readingCodex.SetActive(true);
         var reading = readingCodex.RefreshAsync();
         var openingCodex = readingCodex.OpenAsync();
@@ -67,7 +67,7 @@ public sealed partial class MainPage
         if (readingCodex.Messages.Count != 0) throw new InvalidOperationException("Stopped Codex must ignore late history.");
 
         var sender = new ShutdownCodexService();
-        using var sendingCodex = new CodexSection(() => sender, _ => { });
+        using var sendingCodex = new CodexSection(() => sender, _ => { }, ToneBrush);
         sendingCodex.SetActive(true);
         await sendingCodex.RefreshAsync();
         var sending = sendingCodex.SendAsync("synthetic instruction", default);
@@ -90,6 +90,7 @@ public sealed partial class MainPage
         internal bool DelayRead, DelayOpen;
         internal int Sends;
         public Task<CodexChatSelection> GetVisibleAsync(CancellationToken token) => Task.FromResult(new CodexChatSelection(Target, false));
+        public Task<CodexChatSelection> GetLinkedAsync(CancellationToken token) => GetVisibleAsync(token);
         public Task<CodexChatHistory> ReadAsync(CodexChatTarget target, CancellationToken token) =>
             DelayRead ? ReadReply.Task : Task.FromResult(new CodexChatHistory(target, []));
         public Task<CodexChatSubmission> SendAsync(CodexChatTarget? target, string text, CancellationToken token)

@@ -113,5 +113,10 @@ internal sealed class CodexDelivery(ICodexDesktop desktop, int attempts = 50, Ti
     // UI Automation represents paragraph endings as CR or CRLF. Do not trim
     // spaces or otherwise change the user's instruction.
     internal static bool SameText(string actual, string expected) => Normalize(actual) == Normalize(expected);
+    // Codex stores a final paragraph terminator in userMessage history. This
+    // tolerance is only for receipts; editor verification stays byte-for-byte
+    // equivalent after normalizing CR/LF, including the user's whitespace.
+    internal static bool SameHistoryText(string actual, string expected) =>
+        SameText(actual, expected) || Normalize(actual) == Normalize(expected) + "\n";
     internal static string Normalize(string text) => text.Replace("\r\n", "\n").Replace('\r', '\n');
 }

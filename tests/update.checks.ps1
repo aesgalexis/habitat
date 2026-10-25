@@ -34,6 +34,24 @@ if (-not $rejected) { throw 'Incorrect metadata was accepted.' }
 $rejected = $false
 try { Assert-HabitatUpdatePath $testRoot (Join-Path $testRoot '../escape') } catch { $rejected = $true }
 if (-not $rejected) { throw 'An update escaped its installation boundary.' }
+$junctionTarget = Join-Path $testRoot 'junction target'
+$junctionPath = Join-Path $testRoot 'linked installation'
+New-Item -ItemType Directory -Path $junctionTarget -Force | Out-Null
+New-Item -ItemType Junction -Path $junctionPath -Target $junctionTarget | Out-Null
+$rejected = $false
+try { Assert-HabitatUpdatePath $testRoot (Join-Path $junctionPath 'payload') } catch { $rejected = $true }
+if (-not $rejected) { throw 'An update followed a junction inside its installation boundary.' }
+$rejected = $false
+try { Assert-HabitatUpdatePath (Join-Path $junctionPath 'root') (Join-Path $junctionPath 'root/payload') } catch { $rejected = $true }
+if (-not $rejected) { throw 'An update followed a junction above its installation boundary.' }
+foreach ($hexTag in '9000001A', '9000601A', '9000701A', '9000F01A') {
+    $tag = [uint32]::Parse($hexTag, [Globalization.NumberStyles]::HexNumber)
+    if (-not [HabitatPackagingPath]::IsCloudTag($tag)) { throw 'A documented Cloud Files tag was mistaken for a filesystem link.' }
+}
+foreach ($hexTag in 'A0000003', 'A000000C', '80000021', '9000001B', 'B000001A') {
+    $tag = [uint32]::Parse($hexTag, [Globalization.NumberStyles]::HexNumber)
+    if ([HabitatPackagingPath]::IsCloudTag($tag)) { throw 'A junction, symlink, unknown or name-surrogate tag was accepted as Cloud Files metadata.' }
+}
 $arguments = Get-HabitatInstallerArguments $installed (Join-Path $testRoot 'installer log.txt')
 if (-not $arguments.Contains('/DIR="' + $installed + '"') -or -not $arguments.Contains('/NORESTART') -or -not $arguments.Contains('/VERYSILENT')) { throw 'The EXE updater lost its directory or unattended arguments.' }
 foreach ($file in 'scripts/install-release-update.ps1', 'scripts/Habitat.Update.psm1') {

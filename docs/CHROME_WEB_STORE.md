@@ -10,7 +10,7 @@ La versión pública del escritorio 0.9.1 conserva su selector de navegador: con
 
 ## Archivos de publicación
 
-La copia local **0.10.2** añade el widget opcional de contactos de Facebook, actualiza los avisos de privacidad y separa el permiso de sitio del estado real de conexión y del resultado de la lectura, con recuperación desde el popup y diagnóstico local por fases. Sus permisos de Facebook se solicitan desde **Enable Facebook contacts**; no se conceden al instalar. Esta versión local no se ha enviado a la tienda. La compatibilidad con el panel real de Facebook está pendiente de comprobar según [FACEBOOK.md](FACEBOOK.md).
+La copia local **0.10.3** añade la lectura de All friends como alternativa cuando Facebook no muestra Contacts en Home. Se mantienen el widget opcional, los avisos de privacidad, la separación entre permiso, conexión y resultado, y el diagnóstico local por fases. Sus permisos de Facebook se solicitan desde **Enable Facebook contacts**; no se conceden al instalar. Esta versión local no se ha enviado a la tienda. El alcance de la comprobación con Facebook real está en [FACEBOOK.md](FACEBOOK.md).
 
 - `extension/manifest.json`: versión y recursos de la extensión.
 - `docs/EXTENSION_PRIVACY.md`: política pública, en inglés y sin datos de usuarios.

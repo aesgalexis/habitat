@@ -22,13 +22,13 @@ internal sealed class BrowserTranslationService(TimeProvider? clock = null) : IT
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!TranslationLanguages.IsSupported(targetLanguage)) throw new ArgumentException("Unsupported translation language.");
-        if (text.EnumerateRunes().Count() > 5000) throw new BrowserTranslationException("Use 5,000 characters or fewer in Google Translate, then try again.");
+        if (text.EnumerateRunes().Count() > 5000) throw new BrowserTranslationException(UiText.Get("Use5000CharactersOrFewerInGoogleTranslate"));
         if (string.IsNullOrWhiteSpace(text)) return new TranslationResult(text, null);
         TaskCompletionSource<TranslationResult> completion;
         lock (_gate)
         {
-            if (!IsConnected) throw new BrowserTranslationException("Open Chrome and reload the HABITAT extension to connect Google Translate, then retry.");
-            if (_request is not null) throw new BrowserTranslationException("Wait for the current translation to finish.");
+            if (!IsConnected) throw new BrowserTranslationException(UiText.Get("OpenChromeAndReloadTheHABITATExtensionToMessage"));
+            if (_request is not null) throw new BrowserTranslationException(UiText.Get("WaitForTheCurrentTranslationToFinish"));
             LastDiagnostic = null;
             _request = new BrowserTranslationRequest(Guid.NewGuid().ToString("N"), text, targetLanguage);
             _completion = completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -67,25 +67,25 @@ internal sealed class BrowserTranslationService(TimeProvider? clock = null) : IT
         {
             if (!ReferenceEquals(_owner, owner)) return;
             _owner = null;
-            _completion?.TrySetException(new BrowserTranslationException("Chrome disconnected. Reconnect the HABITAT extension, then retry."));
+            _completion?.TrySetException(new BrowserTranslationException(UiText.Get("ChromeDisconnectedReconnectTheHABITATExtensionThenRetry")));
         }
     }
 
     private static string PageError(string error) => error switch
     {
-        "consent" => "Open Google Translate in Chrome and complete its consent screen, then retry.",
-        "permission" => "Reload the HABITAT extension and allow access to translate.google.com, then retry.",
-        "background-permission" => "Reload the HABITAT extension and allow its background translation permission, then retry.",
-        "background-unavailable" => "Could not keep Google Translate active in the background. Close its DevTools or reload the HABITAT extension, then retry.",
-        "page-changed" => "The Google Translate tab changed. Retry to reopen the translator.",
-        "timeout" => "Google Translate did not return a result. Check its tab in Chrome, then retry.",
-        _ => "Could not read the translation from Google Translate. Check its tab in Chrome, then retry."
+        "consent" => UiText.Get("OpenGoogleTranslateInChromeAndCompleteIts"),
+        "permission" => UiText.Get("ReloadTheHABITATExtensionAndAllowAccessToMessage"),
+        "background-permission" => UiText.Get("ReloadTheHABITATExtensionAndAllowItsBackgroundMessage"),
+        "background-unavailable" => UiText.Get("CouldNotKeepGoogleTranslateActiveInThe"),
+        "page-changed" => UiText.Get("TheGoogleTranslateTabChangedRetryToReopen"),
+        "timeout" => UiText.Get("GoogleTranslateDidNotReturnAResultCheck"),
+        _ => UiText.Get("CouldNotReadTheTranslationFromGoogleTranslate")
     };
 
     internal static string ErrorMessage(Exception exception) => exception switch
     {
         BrowserTranslationException => exception.Message,
-        OperationCanceledException => "Translation timed out. Try again.",
-        _ => "Could not translate in Chrome. Check Google Translate and try again."
+        OperationCanceledException => UiText.Get("TranslationTimedOutTryAgain"),
+        _ => UiText.Get("CouldNotTranslateInChromeCheckGoogleTranslate")
     };
 }

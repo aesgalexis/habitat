@@ -41,11 +41,7 @@ foreach ($required in 'HABITAT.Hotkey.exe', 'HABITAT.Hotkey.dll', 'Habitat.Activ
 }
 # Reject filesystem aliases before copying or activating any release.
 foreach ($root in $packageRoot, $destination) {
-    for ($walk = $root; $walk; $walk = Split-Path -Parent $walk) {
-        if ((Test-Path -LiteralPath $walk) -and ((Get-Item -LiteralPath $walk -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-            throw 'Installation paths cannot contain filesystem links.'
-        }
-    }
+    Assert-HabitatNoLinks $root
 }
 foreach ($item in Get-ChildItem -LiteralPath $packageRoot -Recurse -Force) {
     if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Package contents cannot contain filesystem links.' }

@@ -1,7 +1,5 @@
 # Mensajes programados para Codex
 
-> **Referencia pendiente de reconciliar · 24 de octubre de 2026.** No se encontró CodexScheduleQueue ni los modos de prueba de programación citados en esta copia. El contenido conservado debajo describe una referencia anterior, incluidas sus versiones, etiquetas y pruebas; no acredita funciones disponibles, recursos incluidos ni pruebas ejecutables aquí. Puede pertenecer a otra rama. Consulta [PROJECT_STATUS.md](PROJECT_STATUS.md) antes de utilizarlo. Las etiquetas bilingües conservadas tampoco sustituyen la [regla de interfaz en inglés](LOCALIZATION.md).
-
 Desde 0.15.1, el icono de calendario junto a **Enviar a Codex / Send to Codex** permite elegir el mensaje, el chat de destino y una fecha y hora locales. Está disponible también con el editor vacío para gestionar la cola. El envío normal mantiene su comportamiento.
 
 Desde 0.15.4, **Nuevo chat de Codex / New Codex chat** permite programar el primer mensaje aunque todavía no haya chats de HABITAT. El chat se crea al llegar la hora, mediante el envío habitual de HABITAT; guardar la programación no crea ni envía nada en Codex. Tras confirmar su identidad y primera instrucción, se registra para futuros envíos. Esta opción también está disponible si falla la carga de chats existentes; editar una programación existente nunca cambia su destino automáticamente.

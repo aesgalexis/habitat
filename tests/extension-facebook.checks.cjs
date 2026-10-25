@@ -17,10 +17,14 @@ function photo(name, source, order, href=null, options={}) {
   return image;
 }
 let rows=[], label='Contacts', login=false, missing=false;
+let friendsMissing=null;
 const location={origin:'https://www.facebook.com',href:'https://www.facebook.com/',pathname:'/'};
 const region={...rect,contains:()=>true,getAttribute:()=>'',querySelectorAll:selector=>selector==='h2,h3,[role="heading"]'?
   [heading('Sponsored',0),heading(label,10),heading('Group conversations',100)]:rows};
-const document={querySelector:()=>login?{}:null,querySelectorAll:()=>missing?[]:[region]};
+const friendRegion={...region,querySelectorAll:selector=>selector==='h2,h3,[role="heading"]'?
+  [heading('Todos los amigos\u200b',0),heading('77 amigos',10)]:rows};
+const document={querySelector:()=>login?{}:null,querySelectorAll:selector=>selector==='nav,[role="navigation"]'?
+  ((friendsMissing??missing)?[]:[friendRegion]):missing?[]:[region]};
 const consent={habitatConsentVersion:1};
 let permission=false, clock=0, injections=0, queries=0, created=0, held=null;
 const session={}, tabs=new Map([[1,{id:1,url:'https://www.facebook.com/some.person',status:'complete'}],
@@ -69,12 +73,31 @@ async function dispatch(){context.request={id:(++number).toString(16).padStart(3
   tabs.delete(2);tabs.set(3,{id:3,url:'https://www.facebook.com/login/',status:'complete'});
   result=await dispatch();check(result.error==='login'&&created===0,'Reuse an existing login tab instead of opening another on every refresh.');
   tabs.delete(3);rows=[];result=await dispatch();
-  check(created===1&&result.contacts.length===0,'An explicit read may open one background Home tab and return a genuinely empty panel.');
+  check(created===1&&result.contacts.length===0&&tabs.get(11).url==='https://www.facebook.com/friends/list/',
+    'An explicit read may open one background All friends tab and return a genuinely empty list.');
   await dispatch();check(created===1,'Subsequent reads reuse the Facebook tab.');
   missing=true;result=await dispatch();check(result.error==='contacts-unavailable','An unrecognized layout must not fabricate contacts or scan the feed.');
   check(result.diagnostic.stage==='section-missing'&&result.diagnostic.sections===0&&
     vm.runInContext('facebookTransport.status().lastRead.error',context)==='contacts-unavailable',
     'Missing sections are distinguishable from a disconnected transport and a successfully empty panel.');missing=false;
+  rows=[photo('Ana ☕','https://scontent.fbcdn.net/ana.jpg',20,'/ana.person?tracking=1'),
+    photo('Ana ☕','https://scontent.fbcdn.net/new-ana.jpg',21,'/ana.person'),
+    photo('Diego','https://scontent.fbcdn.net/diego.jpg',22,'/profile.php?id=123&tracking=1'),
+    photo('Suggestion','https://scontent.fbcdn.net/suggest.jpg',23,'/friends/suggestions/?profile_id=456'),
+    photo('No profile','https://scontent.fbcdn.net/unknown.jpg',24)];
+  result=await dispatch();
+  check(result.contacts.length===2&&result.contacts[1].link==='https://www.facebook.com/profile.php?id=123',
+    'Read real friends after the total-count heading, deduplicate by profile and reject suggestions or missing profile links.');
+  tabs.delete(11);delete session.habitatFacebookTab;
+  tabs.set(2,{id:2,url:'https://www.facebook.com/',status:'complete',active:true});
+  missing=true;friendsMissing=false;result=await dispatch();
+  check(result.contacts.length===2&&created===2&&tabs.get(2).url==='https://www.facebook.com/',
+    'When Home has no Contacts, open a background All friends tab and leave the personal Home tab untouched.');
+  const fallbackTabs=created;await dispatch();
+  check(created===fallbackTabs,'Reuse the friends tab instead of opening another for every refresh.');
+  location.pathname='/friends/suggestions/';
+  check(vm.runInContext('readFacebookContacts()',context).error==='page-changed','Never read suggestions as a friends list.');
+  missing=false;friendsMissing=null;
   let release;held=new Promise(resolve=>release=resolve);const before=context.socket.sent.length;
   const pending=dispatch();await settle();context.socket.onmessage({data:JSON.stringify({kind:'facebook-tick',request:null})});release();await pending;
   check(!context.socket.sent.slice(before).some(packet=>packet.kind==='facebook-result'),'Closing the sidebar discards an in-flight snapshot.');

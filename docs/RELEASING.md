@@ -11,13 +11,11 @@ HABITAT usa **SemVer: MAJOR.MINOR.PATCH**. `VERSION` es la fuente de la versión
 
 La primera distribución instalable del escritorio es **0.9.1**: recoge el estado funcional de 0.9.0 y corrige su comprobación del changelog en clones Windows con CRLF. `v0.9.0` se conserva como etiqueta histórica sin paquetes publicados. La versión 1.0.0 queda para un estado con compatibilidad y distribución consideradas estables. Una etiqueta publicada es inmutable: si una publicación requiere cambios, se incrementa la versión. Las etiquetas siguen el formato `vMAJOR.MINOR.PATCH` y apuntan a un commit de `main` ya verificado.
 
-La extensión de Chrome (`extension/manifest.json`) y la de VS Code (`vscode-extension/package.json`) tienen versiones independientes porque se instalan y actualizan por separado. Cada paquete registra las versiones incluidas en `release.json`; el manifiesto fuente puede avanzar durante el desarrollo. Consulta [PROJECT_STATUS.md](PROJECT_STATUS.md) para los valores observados y desajustes pendientes. La versión del protocolo del puente es un contrato independiente de la versión de producto.
+La extensión de Chrome (`extension/manifest.json`, actualmente 0.9.0) y la de VS Code (`vscode-extension/package.json`, actualmente 0.2.0) tienen versiones independientes porque se instalan y actualizan por separado. Cada paquete registra las versiones incluidas en `release.json`. La versión del protocolo del puente es un contrato independiente de la versión de producto.
 
-La versión 0.10.0 añade la guía de primera puesta en marcha y utiliza exclusivamente Chrome para los destinos web. El envío de la extensión 0.9.0 a Chrome Web Store como Unlisted se registró el 19 de octubre de 2026; ese registro no establece el estado actual de aprobación. Se mantiene la carga manual incluida mientras tanto. Consulta [la guía para otro PC](GETTING_STARTED.md).
+La versión 0.10.0 añade la guía de primera puesta en marcha y utiliza exclusivamente Chrome para los destinos web. La extensión 0.9.0 está enviada a Chrome Web Store como Unlisted; el enlace estará disponible tras la aprobación de Google. Se mantiene la carga manual incluida mientras tanto. Consulta [la guía para otro PC](GETTING_STARTED.md).
 
 ## Instalar una publicación
-
-Las notas de versiones siguientes son referencias del historial documentado; no certifican que cada función esté en esta copia. Consulta los desajustes de [PROJECT_STATUS.md](PROJECT_STATUS.md) y el [changelog](../CHANGELOG.md). Las instrucciones de actualización vigentes están en [UPDATES.md](UPDATES.md).
 
 La versión **0.11.0** incorpora el aviso automático de versiones nuevas mediante **Update HABITAT**, los destinos personalizados y la gestión de aplicaciones de Windows.
 
@@ -25,7 +23,7 @@ La versión **0.14.0** añade Mercados, la interfaz en inglés/español, fondos 
 
 La versión **0.14.2** restaura el comportamiento normal del ratón: hacer clic en HABITAT vuelve a activarlo después de usar el escritorio u otra aplicación. Se elimina el paso automático de clics que obligaba a recuperar la ventana mediante Alt+Tab.
 
-La versión **0.15.0** incorpora descarga, verificación SHA-256, instalación y reapertura desde el icono de actualización. La conservación y el reinicio se describen en [UPDATES.md](UPDATES.md). Las versiones anteriores necesitan una instalación manual de 0.15.0 para disponer de este flujo. Consulta [actualizaciones desde la app](AUTO_UPDATES.md).
+La versión **0.15.0** incorpora descarga, verificación SHA-256, instalación y reapertura desde el icono de actualización. Conserva el formato EXE/ZIP y los borradores. Las versiones anteriores necesitan una instalación manual de 0.15.0 para disponer de este flujo. Consulta [actualizaciones desde la app](AUTO_UPDATES.md).
 
 La versión **0.15.1** añade [mensajes programados para Codex](CODEX_SCHEDULING.md): selección explícita del chat, fecha y hora, prioridad para chats detenidos por límite, cola persistente y gestión de resultados sin duplicar envíos. También permite probar la actualización directa desde 0.15.0.
 
@@ -61,7 +59,7 @@ Para retirar una instalación ZIP, desactiva primero **Preferences… → Global
 
 ## Preparar y publicar
 
-La detección, confirmación, descarga y reinicio se definen en [UPDATES.md](UPDATES.md). Antes de publicar, verifica el recorrido descrito allí para ambos formatos y la correspondencia entre los manifiestos fuente y los metadatos de los paquetes.
+La aplicación consulta la última release pública de GitHub al arrancar y cada seis horas mientras permanece abierta. Solo avisa si su versión estable es superior a la instalada y tiene un EXE o ZIP de Windows ya subido. Al pulsar el icono **Actualizar HABITAT**, se refrescan los metadatos y se descarga el formato correspondiente con su SHA-256. Tras verificarlo, espera las acciones en curso y se cierra para instalar y reabrirse. Las copias de desarrollo ofrecen la página oficial como alternativa. No descarga paquetes sin pulsar el icono. Los fallos de red o de metadatos se registran sin interrumpir y se reintentan tras una hora; un aviso ya encontrado se conserva durante esos fallos.
 
 1. Trabaja en una rama y revisa todos los cambios, incluidos archivos nuevos. No incluyas credenciales, datos de usuario ni salidas de `artifacts` en Git.
 2. Actualiza `VERSION`, `CHANGELOG.md`, las instrucciones de instalación del README y, si corresponde, las versiones de las extensiones.

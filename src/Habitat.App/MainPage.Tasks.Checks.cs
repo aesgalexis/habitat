@@ -20,6 +20,68 @@ public sealed partial class MainPage
                 await CheckFacebookUiAsync(path);
             if (Environment.GetCommandLineArgs().Contains("--facebook-ui-only"))
             {
+                await StopAsync(); await _services.DisposeAsync(); window.Close(); Application.Current.Exit(); return;
+            }
+            if (Environment.GetCommandLineArgs().Contains("--conversation-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
+                await CheckConversationScrollUiAsync(window, path);
+            if (Environment.GetCommandLineArgs().Contains("--conversation-ui-only"))
+            {
+                await StopAsync(); await _services.DisposeAsync(); window.Close(); Application.Current.Exit(); return;
+            }
+            if (Environment.GetCommandLineArgs().Contains("--scroll-edges-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
+                await CheckScrollEdgesUiAsync(window, path);
+            if (Environment.GetCommandLineArgs().Contains("--scroll-edges-ui-only"))
+            {
+                await StopAsync();
+                await _services.DisposeAsync();
+                window.Close();
+                Application.Current.Exit();
+                return;
+            }
+            if (Environment.GetCommandLineArgs().Contains("--codex-schedules-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
+                await CheckCodexSchedulesUiAsync(path);
+            if (Environment.GetCommandLineArgs().Contains("--codex-schedules-ui-only"))
+            {
+                await StopAsync();
+                await _services.DisposeAsync();
+                window.Close();
+                Application.Current.Exit();
+                return;
+            }
+            if (Environment.GetCommandLineArgs().Contains("--markets-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
+                await CheckMarketsUiAsync(path);
+            if (Environment.GetCommandLineArgs().Contains("--markets-ui-only"))
+            {
+                await StopAsync();
+                await _services.DisposeAsync();
+                window.Close();
+                Application.Current.Exit();
+                return;
+            }
+            if (Environment.GetCommandLineArgs().Contains("--wallpaper-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
+                await CheckWallpaperUiAsync(path);
+            if (Environment.GetCommandLineArgs().Contains("--wallpaper-ui-only"))
+            {
+                await StopAsync();
+                await _services.DisposeAsync();
+                window.Close();
+                Application.Current.Exit();
+                return;
+            }
+            if (Environment.GetCommandLineArgs().Contains("--language-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
+                await CheckLanguageUiAsync(path);
+            if (Environment.GetCommandLineArgs().Contains("--language-ui-only"))
+            {
+                await StopAsync();
+                await _services.DisposeAsync();
+                window.Close();
+                Application.Current.Exit();
+                return;
+            }
+            if (Environment.GetCommandLineArgs().Contains("--about-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
+                await CheckAboutUiAsync(path);
+            if (Environment.GetCommandLineArgs().Contains("--about-ui-only"))
+            {
                 await StopAsync();
                 await _services.DisposeAsync();
                 window.Close();
@@ -36,9 +98,9 @@ public sealed partial class MainPage
                 Application.Current.Exit();
                 return;
             }
-            if (Environment.GetCommandLineArgs().Contains("--conversation-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
-                await CheckConversationScrollUiAsync(window, path);
-            if (Environment.GetCommandLineArgs().Contains("--conversation-ui-only"))
+            if (Environment.GetCommandLineArgs().Contains("--status-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
+                await CheckDestinationStatusAsync(path);
+            if (Environment.GetCommandLineArgs().Contains("--status-ui-only"))
             {
                 await StopAsync();
                 await _services.DisposeAsync();
@@ -67,7 +129,11 @@ public sealed partial class MainPage
                 return;
             }
             if (Environment.GetCommandLineArgs().Contains("--preferences-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
+            {
                 await CheckPreferencesUiAsync(path);
+                await CheckDestinationPreferencesUiAsync(path);
+                await CheckSidebarPreferencesUiAsync(path);
+            }
             if (Environment.GetCommandLineArgs().Contains("--preferences-ui-only"))
             {
                 await StopAsync();
@@ -371,7 +437,7 @@ public sealed partial class MainPage
                 Math.Abs(taskCenter - 20) > 0.5 || Math.Abs(mailCenter - 20) > 0.5 ||
                 _widgets.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point()).X != sidebarLeft)
                 throw new InvalidOperationException("Collapsed rail icons/toggle are not centered or the left edge moved.");
-            if (ReferenceEquals(SidebarToggle.Parent, _widgets) || _widgets.RowDefinitions.Count != 4 ||
+            if (ReferenceEquals(SidebarToggle.Parent, _widgets) || _widgets.RowDefinitions.Count != _sidebarCatalog.Enabled.Count + 2 ||
                 _widgets.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point()).Y != 20 || sidebarLeft != 12 ||
                 SidebarToggle.Content is not null || SidebarToggle.ActualHeight <= _widgets.ActualHeight ||
                 ((Microsoft.UI.Xaml.Media.SolidColorBrush)SidebarToggle.Background).Color.A != 0)
@@ -418,7 +484,7 @@ public sealed partial class MainPage
             if (taskViewportBottom > ((Microsoft.UI.Xaml.Controls.Grid)Content).ActualHeight - 24 || _taskArea.ScrollableHeight <= 0)
                 throw new InvalidOperationException("Long task lists must scroll below the sidebar widgets in short windows.");
             File.AppendAllText(path, "PASS: top weather adapts to both sidebar states; long tasks scroll below the widgets in short windows\n");
-            File.AppendAllText(path, "PASS: Tasks icon click opens below all sidebar widgets in collapsed, expanded and narrow states, including toggling with Tasks open\n");
+            File.AppendAllText(path, "PASS: Tasks icon click opens below enabled widgets in collapsed, expanded and narrow states, including toggling with Tasks open\n");
             await StopAsync();
             await _services.DisposeAsync();
             window.Close();
@@ -438,8 +504,9 @@ public sealed partial class MainPage
             var tasksBottom = TasksButton.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, TasksButton.ActualHeight)).Y;
             var gmailBottom = GmailWidget.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, GmailWidget.ActualHeight)).Y;
             var weatherBottom = WeatherBlock.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, WeatherBlock.ActualHeight)).Y;
-            if (panelTop < tasksBottom + 16 || panelTop < gmailBottom || panelTop < weatherBottom || GmailWidget.Visibility != Visibility.Visible)
-                throw new InvalidOperationException("Tasks panel invades the Weather/Gmail/Tasks widget region.");
+            var marketsBottom = MarketsButton.Parent is null ? 0 : MarketsButton.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, MarketsButton.ActualHeight)).Y;
+            if (panelTop < marketsBottom + 16 || panelTop < tasksBottom + 16 || panelTop < gmailBottom || panelTop < weatherBottom || GmailWidget.Visibility != Visibility.Visible)
+                throw new InvalidOperationException("Tasks panel invades the Weather/Gmail/Tasks/Markets widget region.");
             CheckWeatherSidebar();
         }
 

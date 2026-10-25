@@ -6,23 +6,26 @@ namespace Habitat.Features.Composer;
 // draft ownership are independent of controls and can be exercised headlessly.
 internal sealed class ComposerCoordinator(ComposerDrafts drafts, Action draftChanged)
 {
-    private sealed record Route(Func<Submission, Task> Execute, Func<string, bool> IsBusy, bool Exclusive, bool ExclusiveForEmpty);
-    private readonly Dictionary<(ComposerDestination, bool), Route> _routes = new();
+    private sealed record Route(Func<Submission, Task> Execute, Func<string, bool> IsBusy, bool Exclusive, bool ExclusiveForEmpty, bool AllowEmpty);
+    private readonly Dictionary<(string, bool), Route> _routes = new();
     public bool IsExclusiveBusy { get; private set; }
     public bool IsStopping { get; private set; }
     public event Action? StateChanged;
+    public Func<string, bool> IsEnabled { get; set; } = _ => true;
 
-    public void Register(ComposerDestination destination, bool external, Func<Submission, Task> execute,
-        Func<string, bool> isBusy, bool exclusive = false, bool exclusiveForEmpty = false) =>
-        _routes.Add((destination, external), new(execute, isBusy, exclusive, exclusiveForEmpty));
+    public void Register(string destination, bool external, Func<Submission, Task> execute,
+        Func<string, bool> isBusy, bool exclusive = false, bool exclusiveForEmpty = false, bool allowEmpty = false) =>
+        _routes[(destination, external)] = new(execute, isBusy, exclusive, exclusiveForEmpty, allowEmpty);
 
-    public bool CanSend(ComposerDestination destination, string text, bool external = false) =>
-        !IsStopping && !IsExclusiveBusy && _routes.TryGetValue((destination, external), out var route) && !route.IsBusy(text);
+    public bool CanSend(string destination, string text, bool external = false) =>
+        !IsStopping && !IsExclusiveBusy && IsEnabled(destination) &&
+        _routes.TryGetValue((destination, external), out var route) && !route.IsBusy(text);
 
-    public async Task SubmitAsync(ComposerDestination destination, string text, bool external = false)
+    public async Task SubmitAsync(string destination, string text, bool external = false)
     {
-        if (!CanSend(destination, text, external) || !external && string.IsNullOrWhiteSpace(text)) return;
+        if (!CanSend(destination, text, external)) return;
         var route = _routes[(destination, external)];
+        if (!external && !route.AllowEmpty && string.IsNullOrWhiteSpace(text)) return;
         var exclusive = route.Exclusive || route.ExclusiveForEmpty && string.IsNullOrWhiteSpace(text);
         var submission = new Submission(destination, text, external, drafts.Capture(destination), drafts, draftChanged, () => !IsStopping);
         if (exclusive) { IsExclusiveBusy = true; StateChanged?.Invoke(); }
@@ -38,10 +41,10 @@ internal sealed class ComposerCoordinator(ComposerDrafts drafts, Action draftCha
     public static string OpenAIText(string text, bool textOnly) => textOnly
         ? text.Trim() + "\n\n[HABITAT: Reply in plain text unless asked otherwise.]" : text.Trim();
 
-    internal sealed class Submission(ComposerDestination destination, string text, bool external,
+    internal sealed class Submission(string destination, string text, bool external,
         ComposerDrafts.Submission draft, ComposerDrafts drafts, Action changed, Func<bool> canProceed)
     {
-        public ComposerDestination Destination { get; } = destination;
+        public string Destination { get; } = destination;
         public string Text { get; } = text;
         public bool External { get; } = external;
         public ComposerDrafts.Submission Draft { get; } = draft;

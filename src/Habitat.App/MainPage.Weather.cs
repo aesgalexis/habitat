@@ -23,7 +23,7 @@ public sealed partial class MainPage
         // Keep the icon in place when the compact temperature is hidden.
         symbol.Children.Add(new Border { Height = 18, Child = WeatherCompactTemperature });
         WeatherBlock.Children.Add(symbol);
-        WeatherLocation.Text = _preferences.UseDeviceLocation ? "Current location" : _preferences.WeatherCity;
+        WeatherLocation.Text = UiLanguage.Value(WeatherLocation, "Text", () => _preferences.UseDeviceLocation ? UiText.Get("CurrentLocation") : _preferences.WeatherCity);
         WeatherLocation.TextTrimming = TextTrimming.CharacterEllipsis;
         WeatherOutlook.TextTrimming = TextTrimming.CharacterEllipsis;
         WeatherDetails.Children.Add(WeatherLocation);
@@ -46,7 +46,6 @@ public sealed partial class MainPage
     private void UpdateWeatherSummary()
     {
         WeatherCompactTemperature.Text = WeatherTemperature.Text;
-        AutomationProperties.SetName(WeatherCompactTemperature,
-            $"Weather · {WeatherLocation.Text} · {WeatherTemperature.Text} · {WeatherOutlook.Text}");
+        UiLanguage.SetName(WeatherCompactTemperature, () => UiText.Format("Weather", WeatherLocation.Text, WeatherTemperature.Text, WeatherOutlook.Text));
     }
 }

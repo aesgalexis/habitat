@@ -1,6 +1,7 @@
 using Habitat.Services;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Composition.SystemBackdrops;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -10,7 +11,7 @@ using WinRT;
 
 namespace Habitat;
 
-public sealed class MainWindow : Window, IWindowHost
+public sealed partial class MainWindow : Window, IWindowHost
 {
     private const int SmXVirtualScreen = 76;
     private const int SmYVirtualScreen = 77;
@@ -27,6 +28,8 @@ public sealed class MainWindow : Window, IWindowHost
     private readonly TextBlock _titleText = new() { Text = "HABITAT", FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
     private readonly Microsoft.UI.Xaml.Shapes.Ellipse _titleIcon = new() { Width = 6.4, Height = 6.4, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, Fill = new SolidColorBrush(Color.FromArgb(255, 0x89, 0x95, 0xFF)) };
     private readonly ColumnDefinition _captionInset = new() { Width = new GridLength(138) };
+    private Windows.Graphics.RectInt32? _menuInputRect;
+    private bool _captionLayoutPending;
     private readonly DesktopAcrylicController? _acrylic;
     private readonly SystemBackdropConfiguration? _backdropConfiguration;
     private string _statusIcon = string.Empty;
@@ -52,7 +55,7 @@ public sealed class MainWindow : Window, IWindowHost
         _page.RestoreWindowPlacement(AppWindow);
         Activated += OnActivated;
         AppWindow.Closing += OnClosing;
-        Closed += (_, _) => _acrylic?.Dispose();
+        Closed += (_, _) => { _closing = true; _acrylic?.Dispose(); };
     }
 
     private void BuildWindowChrome()
@@ -82,14 +85,18 @@ public sealed class MainWindow : Window, IWindowHost
         _page.RegisterDestinationWheel(_windowRoot);
 
         ExtendsContentIntoTitleBar = true;
-        // Only this area is draggable; the menu remains an interactive control.
+        // Keep dragging separate from the menu's explicit native input region.
         SetTitleBar(dragArea);
-        _titleSurface.Loaded += (_, _) => UpdateCaptionLayout();
-        _titleSurface.SizeChanged += (_, _) => UpdateCaptionLayout();
-        AppWindow.Changed += (_, _) => UpdateCaptionLayout();
+        _titleSurface.Loaded += (_, _) => QueueCaptionLayout();
+        _titleSurface.SizeChanged += (_, _) => QueueCaptionLayout();
+        _titleSurface.LayoutUpdated += (_, _) => UpdateCaptionInputRegion();
+        AppWindow.Changed += (_, args) =>
+        {
+            if (args.DidSizeChange || args.DidPresenterChange) QueueCaptionLayout();
+        };
         _windowRoot.Loaded += (_, _) =>
         {
-            if (_windowRoot.XamlRoot is { } root) root.Changed += (_, _) => UpdateCaptionLayout();
+            if (_windowRoot.XamlRoot is { } root) root.Changed += (_, _) => QueueCaptionLayout();
         };
     }
 
@@ -105,12 +112,47 @@ public sealed class MainWindow : Window, IWindowHost
     [DllImport("user32.dll")] private static extern bool ShowWindowAsync(nint window, int command);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(nint window);
 
+    private void QueueCaptionLayout()
+    {
+        if (_closing || _captionLayoutPending) return;
+        _captionLayoutPending = DispatcherQueue.TryEnqueue(() =>
+        {
+            _captionLayoutPending = false;
+            UpdateCaptionLayout();
+        });
+    }
+
     private void UpdateCaptionLayout()
     {
+        if (_closing) return;
         var scale = _windowRoot.XamlRoot?.RasterizationScale ?? 1;
+        if (!double.IsFinite(scale) || scale <= 0) return;
         // Insets are physical pixels and change with DPI and window state.
-        _captionInset.Width = new GridLength(AppWindow.TitleBar.RightInset / scale);
-        _titleSurface.Height = AppWindow.TitleBar.Height > 0 ? AppWindow.TitleBar.Height / scale : 32;
+        // Windows reports a negative inset while minimizing (observed: -14).
+        // Passing it to GridLength throws through AppWindow.Changed and causes
+        // the native windowing layer to fail-fast instead of recovering.
+        var inset = Math.Max(0, AppWindow.TitleBar.RightInset) / scale;
+        var height = AppWindow.TitleBar.Height > 0 ? AppWindow.TitleBar.Height / scale : 32;
+        if (_captionInset.Width.Value != inset) _captionInset.Width = new GridLength(inset);
+        if (_titleSurface.Height != height) _titleSurface.Height = height;
+    }
+
+    private void UpdateCaptionInputRegion()
+    {
+        var button = _page.WindowMenuButton;
+        if (_closing || _windowRoot.XamlRoot is not { } root || button.ActualWidth <= 0 || button.ActualHeight <= 0) return;
+        // Native regions use physical pixels. Read the final arranged bounds so
+        // resizing, maximizing and DPI changes never leave the menu in a drag region.
+        var bounds = button.TransformToVisual(_windowRoot).TransformBounds(
+            new Windows.Foundation.Rect(0, 0, button.ActualWidth, button.ActualHeight));
+        var scale = root.RasterizationScale;
+        var left = (int)Math.Floor(bounds.X * scale);
+        var top = (int)Math.Floor(bounds.Y * scale);
+        var rect = new Windows.Graphics.RectInt32(left, top,
+            (int)Math.Ceiling(bounds.Right * scale) - left, (int)Math.Ceiling(bounds.Bottom * scale) - top);
+        if (_menuInputRect is { } previous && previous.Equals(rect)) return;
+        InputNonClientPointerSource.GetForWindowId(AppWindow.Id).SetRegionRects(NonClientRegionKind.Passthrough, [rect]);
+        _menuInputRect = rect;
     }
 
     public void SetBackgroundAppearance(double percent, bool dark)
@@ -162,8 +204,9 @@ public sealed class MainWindow : Window, IWindowHost
 
     public void SetStatusPresentation(string text, string status)
     {
-        Title = string.IsNullOrWhiteSpace(text) ? "HABITAT" : $"HABITAT - {text}";
-        _titleText.Text = Title;
+        var title = string.IsNullOrWhiteSpace(text) ? "HABITAT" : $"HABITAT - {text}";
+        if (Title != title) Title = title;
+        if (_titleText.Text != title) _titleText.Text = title;
         var normalized = status switch
         {
             "Success" => "Success",
@@ -259,7 +302,7 @@ public sealed class MainWindow : Window, IWindowHost
             _page.OnWindowActivated();
             _page.RefreshHybridAppearance(force: true);
             await Task.Delay(80);
-            if (!_closing) _page.FocusComposer();
+            if (!_closing && IsActive) _page.FocusComposer();
         }
     }
 

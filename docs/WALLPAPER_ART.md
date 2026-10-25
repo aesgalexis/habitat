@@ -1,7 +1,5 @@
 # Colección ilustrada de HABITAT
 
-> **Referencia pendiente de reconciliar · 24 de octubre de 2026.** No existe el directorio Assets/Wallpapers citado en esta copia; no se ha comprobado la procedencia de esos recursos. El contenido conservado debajo describe una referencia anterior, incluidas sus versiones, etiquetas y pruebas; no acredita funciones disponibles, recursos incluidos ni pruebas ejecutables aquí. Puede pertenecer a otra rama. Consulta [PROJECT_STATUS.md](PROJECT_STATUS.md) antes de utilizarlo. Las etiquetas bilingües conservadas tampoco sustituyen la [regla de interfaz en inglés](LOCALIZATION.md).
-
 Cinco fondos generados con la herramienta integrada `image_gen`, sin API ni CLI, el 20 de octubre de 2026. Los PNG originales se incluyen en `src/Habitat.App/Assets/Wallpapers/` y se distribuyen con la aplicación. Se mantiene el fondo transparente Híbrido al 15 % como predeterminado.
 
 Los prompts completos utilizados son:

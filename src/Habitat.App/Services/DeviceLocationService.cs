@@ -22,10 +22,10 @@ internal sealed class DeviceLocationService(AppDataPaths paths)
             if (_access != GeolocationAccessStatus.Allowed)
             {
                 if (!isForeground)
-                    return Failed("Open HABITAT to allow Windows location access.");
+                    return Failed(UiText.Get("OpenHABITATToAllowWindowsLocationAccess"));
                 _access = await Geolocator.RequestAccessAsync().AsTask(cancellationToken);
                 if (_access != GeolocationAccessStatus.Allowed)
-                    return Failed("Windows location access is disabled or denied. Check Windows location settings.");
+                    return Failed(UiText.Get("WindowsLocationAccessIsDisabledOrDeniedCheck"));
             }
 
             _locator ??= new Geolocator { DesiredAccuracy = PositionAccuracy.High, DesiredAccuracyInMeters = 100 };
@@ -35,12 +35,12 @@ internal sealed class DeviceLocationService(AppDataPaths paths)
             var point = coordinate.Point.Position;
             if (!double.IsFinite(point.Latitude) || !double.IsFinite(point.Longitude) ||
                 Math.Abs(point.Latitude) > 90 || Math.Abs(point.Longitude) > 180)
-                return Failed("Windows returned an invalid location.");
+                return Failed(UiText.Get("WindowsReturnedAnInvalidLocation"));
             var source = coordinate.PositionSource switch
             {
                 PositionSource.Satellite => "GPS",
-                PositionSource.Default => "Windows default location",
-                _ => "Windows location"
+                PositionSource.Default => UiText.Get("WindowsDefaultLocation"),
+                _ => UiText.Get("WindowsLocation")
             };
             WriteStatus($"Available: {source}; accuracy {coordinate.Accuracy:0} m.");
             return new DeviceLocationResult(new DeviceLocation(point.Latitude, point.Longitude, source, coordinate.Accuracy), null);
@@ -49,12 +49,12 @@ internal sealed class DeviceLocationService(AppDataPaths paths)
         catch (UnauthorizedAccessException)
         {
             _access = GeolocationAccessStatus.Denied;
-            return Failed("Windows location access is disabled or denied. Check Windows location settings.");
+            return Failed(UiText.Get("WindowsLocationAccessIsDisabledOrDeniedCheck"));
         }
         catch (Exception exception) when (exception is COMException or TimeoutException or
             OperationCanceledException or InvalidOperationException or NotSupportedException)
         {
-            return Failed("Windows could not provide a location. Using the saved city.");
+            return Failed(UiText.Get("WindowsCouldNotProvideALocationUsingThe"));
         }
     }
 

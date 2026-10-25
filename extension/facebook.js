@@ -1,4 +1,4 @@
-// Facebook is optional. Read only the rendered Contacts section on demand;
+// Facebook is optional. Read only rendered Contacts or All friends on demand;
 // never inspect messages, cookies, page internals or private HTTP endpoints.
 function readFacebookContacts() {
   if (location.origin !== "https://www.facebook.com" && location.origin !== "https://facebook.com") return {error:"page-changed"};
@@ -8,15 +8,20 @@ function readFacebookContacts() {
     const box = element.getBoundingClientRect();
     return box.width > 0 && box.height > 0 && getComputedStyle(element).visibility !== "hidden";
   };
-  const text = value => String(value || "").replace(/[\u0000-\u001f\u007f]/g," ").replace(/\s+/g," ").trim();
-  const labels = new Set(["contacts","contactos","contatos","kontakte","contatti"]);
+  const text = value => String(value || "").replace(/[\u200b-\u200f\ufeff]/g,"").replace(/[\u0000-\u001f\u007f]/g," ").replace(/\s+/g," ").trim();
+  const friends = /^\/friends\/list\/?$/.test(location.pathname);
+  // Never confuse requests, suggestions, stories or feed authors with friends.
+  const labels = new Set(friends ? ["all friends","todos los amigos","todos tus amigos","todos os amigos","alle freunde","tous les amis","tutti gli amici"] :
+    ["contacts","contactos","contatos","kontakte","contatti"]);
   let region, heading, next;
-  const regions = [...document.querySelectorAll('[role="complementary"],aside,[role="region"][aria-label]')];
+  if (!friends && location.pathname !== "/") return {error:"page-changed"};
+  const regions = [...document.querySelectorAll(friends ? 'nav,[role="navigation"]' : '[role="complementary"],aside,[role="region"][aria-label]')];
   for (const candidate of regions) {
     if (!visible(candidate)) continue;
     const headings = [...candidate.querySelectorAll('h2,h3,[role="heading"]')].filter(visible);
     const index = headings.findIndex(item => labels.has(text(item.textContent).toLowerCase()));
-    if (index >= 0) { region = candidate; heading = headings[index]; next = headings[index + 1]; break; }
+    // All friends includes a second heading with the total count, before rows.
+    if (index >= 0) { region = candidate; heading = headings[index]; next = friends ? null : headings[index + 1]; break; }
     if (labels.has(text(candidate.getAttribute("aria-label")).toLowerCase())) { region = candidate; break; }
   }
   if (!region) return {error:"contacts-unavailable",diagnostic:{stage:"section-missing",sections:regions.length}};
@@ -38,7 +43,9 @@ function readFacebookContacts() {
     // A section-wide button/list item must never become an invented contact.
     if (row.querySelectorAll("img,svg image").length !== 1) continue;
     rowCount++;
-    let name = text(row.textContent) || text(row.getAttribute("aria-label")) || text(photo.getAttribute("alt"));
+    let name = text(row.getAttribute("aria-label")) || text(row.textContent) || text(photo.getAttribute("alt"));
+    // Facebook's photo-only profile link can take its accessible name from SVG.
+    if (!name) name = text(photo.closest('[aria-label]')?.getAttribute("aria-label"));
     name = name.replace(/(?:[,·]?\s*(?:Active now|Activo ahora|Activa ahora|En línea))$/i, "").trim();
     if (!name || name.length > 200 || /^(?:profile picture|foto del perfil|imagen del perfil)$/i.test(name)) continue;
     let link = null;
@@ -57,7 +64,8 @@ function readFacebookContacts() {
         }
       } catch (_) {}
     }
-    const identity = name + "\n" + image.href;
+    if (friends && !link) continue;
+    const identity = link || name + "\n" + image.href;
     if (seen.has(identity)) continue;
     seen.add(identity);
     contacts.push({name,photoUrl:image.href,link});
@@ -162,20 +170,22 @@ const facebookTransport = (() => {
         if (!valid()) return null;
         const tabs = await chrome.tabs.query({url:["https://www.facebook.com/*","https://facebook.com/*"]});
         if (!valid()) return null;
-        // Prefer Home, where Facebook renders Contacts. Never navigate a personal tab.
-        let tab = tabs.filter(item => isFacebook(item.url) && new URL(item.url).pathname === "/")
-          .sort((a,b) => Number(b.active) - Number(a.active) || (b.lastAccessed || 0) - (a.lastAccessed || 0))[0];
+        // Prefer an explicit friends list; Home may not render Contacts at all.
+        const supported = item => isFacebook(item.url) && /^\/(?:friends\/list\/?)?$/.test(new URL(item.url).pathname);
+        let tab = tabs.filter(supported)
+          .sort((a,b) => Number(new URL(b.url).pathname.startsWith("/friends/list")) - Number(new URL(a.url).pathname.startsWith("/friends/list")) ||
+            Number(b.active) - Number(a.active) || (b.lastAccessed || 0) - (a.lastAccessed || 0))[0];
         if (!tab) {
           const saved = await chrome.storage.session.get("habitatFacebookTab");
           if (Number.isInteger(saved.habitatFacebookTab)) {
-            try { const own = await chrome.tabs.get(saved.habitatFacebookTab); if (isFacebook(own.pendingUrl || own.url)) tab = own; } catch (_) {}
+            try { const own = await chrome.tabs.get(saved.habitatFacebookTab); if (supported({...own,url:own.pendingUrl || own.url})) tab = own; } catch (_) {}
           }
         }
         if (!valid()) return null;
         if (!tab) {
           tab = tabs.find(item => isFacebook(item.url) && /^\/(login|checkpoint|two_step_verification)/.test(new URL(item.url).pathname));
           if (!tab) {
-            tab = await chrome.tabs.create({url:"https://www.facebook.com/",active:false});
+            tab = await chrome.tabs.create({url:"https://www.facebook.com/friends/list/",active:false});
             await chrome.storage.session.set({habitatFacebookTab:tab.id});
           }
         }
@@ -186,6 +196,7 @@ const facebookTransport = (() => {
       if (!valid() || !tab) return;
       progress({stage:"page-loading"});
       const deadline = Date.now() + 18000;
+      const homeDeadline = Date.now() + 2500;
       while (valid() && Date.now() < deadline) {
         if (!await chrome.permissions.contains({origins:[origin]})) throw Error("permission");
         tab = await chrome.tabs.get(tab.id);
@@ -196,10 +207,25 @@ const facebookTransport = (() => {
           const page = read[0]?.result;
           progress(page?.diagnostic || {stage:"page-read"});
           if (page?.error && page.error !== "contacts-unavailable") throw Error(page.error);
-          if (Array.isArray(page?.contacts)) {
+          if (Array.isArray(page?.contacts) && (page.contacts.length || new URL(tab.url).pathname !== "/")) {
             let size = 0;
             result = {contacts:page.contacts.slice(0,200).filter(contact => (size += new TextEncoder().encode(JSON.stringify(contact)).length) <= 180000)};
             break;
+          }
+          if (new URL(tab.url).pathname === "/" && Date.now() >= homeDeadline) {
+            // Read a dedicated list when Home has no contacts. Never navigate,
+            // scroll or close a personal tab, nor open a conversation.
+            const saved = await chrome.storage.session.get("habitatFacebookTab");
+            let own;
+            if (Number.isInteger(saved.habitatFacebookTab)) {
+              try { const candidate = await chrome.tabs.get(saved.habitatFacebookTab);
+                if (isFacebook(candidate.url) && /^\/friends\/list\/?$/.test(new URL(candidate.url).pathname)) own = candidate;
+              } catch (_) {}
+            }
+            if (!valid()) return;
+            tab = own || await chrome.tabs.create({url:"https://www.facebook.com/friends/list/",active:false});
+            await chrome.storage.session.set({habitatFacebookTab:tab.id});
+            progress({stage:"page-loading"});
           }
         }
         await new Promise(resolve => setTimeout(resolve, 500));

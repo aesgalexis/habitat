@@ -1,7 +1,5 @@
 # Barra lateral personalizable
 
-> **Referencia pendiente de reconciliar · 24 de octubre de 2026.** No se encontraron SidebarCatalog, MainPage.Sidebar ni SidebarWidgets en esta copia. El contenido conservado debajo describe una referencia anterior, incluidas sus versiones, etiquetas y pruebas; no acredita funciones disponibles, recursos incluidos ni pruebas ejecutables aquí. Puede pertenecer a otra rama. Consulta [PROJECT_STATUS.md](PROJECT_STATUS.md) antes de utilizarlo. Las etiquetas bilingües conservadas tampoco sustituyen la [regla de interfaz en inglés](LOCALIZATION.md).
-
 **Preferences → Sidebar / Preferencias → Barra lateral** permite añadir, quitar y ordenar Gmail, Tareas y Mercados. El tiempo permanece siempre visible y fijo arriba. El menú contextual de la barra ofrece **Customize sidebar… / Personalizar barra lateral…** para abrir esa sección directamente.
 
 La lista utiliza botones de subir, bajar y quitar, con nombres accesibles y tooltips en el idioma elegido. El selector de elementos disponibles solo contiene los que aún no están en la barra. Al cerrar Preferencias se guardan y aplican los cambios sin reiniciar. Retirar un widget conserva las tareas, la cuenta de Gmail y los favoritos de Mercados. Si se retira Tareas con su panel abierto, el panel se cierra; el menú principal sigue permitiendo abrir la lista.

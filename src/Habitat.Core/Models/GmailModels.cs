@@ -7,15 +7,15 @@ internal sealed record GmailClientConfiguration(string ClientId, string ClientSe
 {
     public static GmailClientConfiguration FromJson(string json)
     {
-        if (json.Length > 65536) throw new InvalidDataException("The Google client file is too large.");
+        if (json.Length > 65536) throw new InvalidDataException(UiText.Get("TheGoogleClientFileIsTooLarge"));
         using var document = JsonDocument.Parse(json);
         if (!document.RootElement.TryGetProperty("installed", out var installed))
-            throw new InvalidDataException("Choose a Google OAuth client of type Desktop app.");
+            throw new InvalidDataException(UiText.Get("ChooseAGoogleOAuthClientOfTypeDesktop"));
         var id = installed.TryGetProperty("client_id", out var idValue) ? idValue.GetString() : null;
         var secret = installed.TryGetProperty("client_secret", out var secretValue) ? secretValue.GetString() : null;
         if (id is null || !Regex.IsMatch(id, @"^[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$", RegexOptions.CultureInvariant) ||
             string.IsNullOrWhiteSpace(secret))
-            throw new InvalidDataException("This file does not contain a valid Google desktop client.");
+            throw new InvalidDataException(UiText.Get("ThisFileDoesNotContainAValidGoogle"));
         return new GmailClientConfiguration(id, secret);
     }
 }

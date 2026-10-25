@@ -31,9 +31,9 @@ Entrada para usuarios y colaboradores. La documentación combina inglés y espa�
 | Firma aplazada y preparación local | [SIGNING.md](SIGNING.md), [política propuesta](CODE_SIGNING_POLICY.md) |
 | Extensión de VS Code | [README de la extensión](../vscode-extension/README.md) |
 
-## Referencias pendientes e informes históricos
+## Funciones recuperadas e informes históricos
 
-[PROJECT_STATUS.md](PROJECT_STATUS.md) identifica funciones descritas previamente cuya implementación no está en esta copia. Sus documentos se conservan para reconciliación: [Markets](MARKETS.md), [sidebar](SIDEBAR.md), [programación de Codex](CODEX_SCHEDULING.md), [fondos](WALLPAPERS.md) y [colección ilustrada](WALLPAPER_ART.md). No deben usarse como instrucciones de funciones disponibles hasta contrastarlas con la rama que las implemente.
+[PROJECT_STATUS.md](PROJECT_STATUS.md) identifica las funciones presentes. La [recuperación del 25 de octubre](RECOVERY_2026-10-25.md) vuelve a integrar [Markets](MARKETS.md), [sidebar](SIDEBAR.md), [programación de Codex](CODEX_SCHEDULING.md), [fondos](WALLPAPERS.md) y [colección ilustrada](WALLPAPER_ART.md), conservando Facebook.
 
 Las auditorías del [15 de octubre](ARCHITECTURE_AUDIT.md) y del [18 de octubre](ARCHITECTURE_AUDIT_2026-10-18.md), y el [diagnóstico de ventana](WINDOW_STABILITY.md), registran estados y validaciones de fechas concretas. No certifican el árbol de trabajo actual. [PRODUCT_STATE_AND_VISION.md](PRODUCT_STATE_AND_VISION.md) conserva filosofía, feedback e ideas; el estado técnico se mantiene por separado.
 

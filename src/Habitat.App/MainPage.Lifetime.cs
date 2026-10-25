@@ -12,6 +12,7 @@ public sealed partial class MainPage
     private async Task<Microsoft.UI.Xaml.Controls.ContentDialogResult> ShowDialogAsync(Microsoft.UI.Xaml.Controls.ContentDialog dialog)
     {
         if (_operations.IsStopping) return Microsoft.UI.Xaml.Controls.ContentDialogResult.None;
+        dialog.Language = UiText.Culture.Name;
         _activeDialog = dialog;
         try { return await dialog.ShowAsync(); }
         finally { if (ReferenceEquals(_activeDialog, dialog)) _activeDialog = null; }
@@ -32,12 +33,14 @@ public sealed partial class MainPage
     private async Task StopCoreAsync()
     {
         _timer.Stop();
+        _codexScheduleConfirmation.Hide();
         _composer.Stop();
         CancelEmptyYouTubeReset();
         CancelPendingCodexSend();
         _activeDialog?.Hide();
         _facebookCancellation?.Cancel();
         FacebookRecovery.Hide();
+        _marketNewsCancellation?.Cancel();
         var sectionStops = _destinationSections.Values.Select(section => section.StopAsync()).ToArray();
         if (_bridge is not null)
         {

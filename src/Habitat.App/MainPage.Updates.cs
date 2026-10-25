@@ -23,17 +23,18 @@ public sealed partial class MainPage
         return button;
     }
     private readonly MenuFlyoutItem UpdateMenuItem = new() { Text = "Update…", Visibility = Visibility.Collapsed };
-    private AppUpdate? _availableUpdate;
+    private ReleaseAppUpdate? _availableUpdate;
     private string? _offeredUpdateVersion;
     private bool _checkingUpdates, _updateBusy, _updateDialogOpen, _updateFailed, _updateHandoff;
     private string _updateStatus = "";
+    private bool _openingUpdate => _updateDialogOpen || _updateHandoff;
     private int _updatePercent;
     private DateTimeOffset _nextUpdateCheck = DateTimeOffset.MinValue;
 
     private void BuildUpdateInterface()
     {
         UpdateMenuItem.Click += async (_, _) => await RunOperationAsync(InstallUpdateAsync);
-        OptionsMenu.Items.Add(UpdateMenuItem);
+        OptionsMenu.Items.Insert(Math.Max(0, OptionsMenu.Items.Count - 2), UpdateMenuItem);
     }
 
     private void TickUpdates()
@@ -91,7 +92,8 @@ public sealed partial class MainPage
     }
 
     private bool HasWorkBeforeUpdate => _bridge?.HasMessageInFlight == true || _composer.IsExclusiveBusy ||
-        _destinationSections.Values.Any(section => section.IsBusy) || _gmailBusy || _taskAdding;
+        _destinationSections.Values.Any(section => section.IsBusy) || _gmailBusy || _taskAdding ||
+        CodexChat.IsBusy || _codexSendCancellation is not null || _services.CodexSchedules.IsSending;
 
     private async Task InstallUpdateAsync()
     {
@@ -102,6 +104,7 @@ public sealed partial class MainPage
         ContentDialog? progressDialog = null;
         Task<ContentDialogResult>? showing = null;
         var committing = false;
+        var savedDrafts = false;
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_operations.Token);
         try
         {
@@ -114,7 +117,7 @@ public sealed partial class MainPage
             var prompt = new StackPanel { Spacing = 24 };
             prompt.Children.Add(new TextBlock
             {
-                Text = $"Install version {release.Version} and restart HABITAT? Saved tasks and preferences will be kept. Text and results in this window will be cleared.",
+                Text = $"Install version {release.Version} and restart HABITAT? Saved tasks and preferences will be kept. Drafts will be restored after restarting.",
                 TextWrapping = TextWrapping.Wrap
             });
             prompt.Children.Add(UpdateButton);
@@ -175,6 +178,9 @@ public sealed partial class MainPage
             committing = true;
             progressDialog.CloseButtonText = "";
             RenderUpdateButton();
+            var restartState = new UpdateRestartState(1, _destination, _composerDrafts.SaveForRestart());
+            await Task.Run(() => restartState.Save(_services.Paths.UpdateDraftsPath), cancellation.Token);
+            savedDrafts = true;
             await _services.Updates.LaunchInstallerAsync(prepared, cancellation.Token);
             _updateHandoff = true;
         }
@@ -201,6 +207,11 @@ public sealed partial class MainPage
             committing = false;
             progressDialog?.Hide();
             if (showing is not null) await showing;
+            if (savedDrafts && !_updateHandoff)
+            {
+                try { File.Delete(_services.Paths.UpdateDraftsPath); }
+                catch (IOException) { } catch (UnauthorizedAccessException) { }
+            }
             _updateBusy = false;
             _updateDialogOpen = false;
             RenderUpdateButton();

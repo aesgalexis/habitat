@@ -5,7 +5,7 @@ internal static class ComposerDraftChecks
     internal static void Run(Action<bool, string> check)
     {
         const string original = "  café ☕\nsecond line  ";
-        var destinations = Enum.GetValues<ComposerDestination>();
+        var destinations = ComposerDestinations.Ordered.ToArray();
         var drafts = new ComposerDrafts();
         drafts.Edit(ComposerDestination.OpenAI, original);
         check(destinations.All(destination => drafts.Text(destination) == original),

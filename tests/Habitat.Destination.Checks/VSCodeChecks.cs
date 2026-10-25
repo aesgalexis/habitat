@@ -162,7 +162,7 @@ internal static class VSCodeChecks
             "Empty VS Code windows retain focus ordering without becoming executable projects");
         check(ComposerDestinations.Label(ComposerDestination.VSCode) == "VS Code" &&
             ComposerDestinations.SearchUri(ComposerDestination.VSCode, command) is null &&
-            (int)ComposerDestination.Terminal == 6 && (int)ComposerDestination.Codex == 8,
+            ComposerDestinations.FromLegacy(6) == ComposerDestination.Terminal && ComposerDestinations.FromLegacy(8) == ComposerDestination.Codex,
             "VS Code uses its English label and preserves existing destination preference values");
         await CheckFoldersAsync(root, endpoint, context, handler, service, check);
     }

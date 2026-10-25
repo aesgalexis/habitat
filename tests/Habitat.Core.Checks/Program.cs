@@ -9,9 +9,15 @@ var checks = 0;
 void Check(bool condition, string message) { if (!condition) throw new Exception(message); checks++; }
 var root = Path.Combine(AppContext.BaseDirectory, "isolated-core", Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(root);
+LocalizationChecks.Run(root, Check);
+SidebarChecks.Run(root, Check);
+WallpaperChecks.Run(root, Check);
 BrowserChecks.Run(root, Check);
 InstallationChecks.Run(root, Check);
-await UpdateChecks.RunAsync(root, Check);
+await UpdateChecks.RunAsync(Check);
+await ReleaseUpdateChecks.RunAsync(root, Check);
+await UpdateDownloadChecks.RunAsync(root, Check);
+await MarketsChecks.RunAsync(root, Check);
 var paths = AppDataPaths.Isolated(root);
 Check(paths.IsIsolated && paths.LocalDirectory == root && paths.DesktopDirectory == root && paths.TasksPath.StartsWith(root), "Isolated paths never resolve desktop data.");
 
@@ -105,8 +111,12 @@ using (var locked = new FileStream(paths.PreferencesPath, FileMode.Open, FileAcc
     Check(!(preferences with { Opacity = 50 }).Save(paths.PreferencesPath, _ => reported = true), "A locked replacement reports failure.");
 Check(reported && File.ReadAllText(paths.PreferencesPath) == original && !Directory.EnumerateFiles(root, "*.tmp").Any(), "Failed preference writes preserve the original and clean up.");
 var storedPreferences = Preferences.Load(paths.PreferencesPath);
-Check((storedPreferences with { VSCodeFolders = preferences.VSCodeFolders }) == preferences &&
-    storedPreferences.VSCodeFolders.SequenceEqual(preferences.VSCodeFolders),
+Check((storedPreferences with { VSCodeFolders = preferences.VSCodeFolders, WindowsApps = preferences.WindowsApps,
+        EnabledDestinations = preferences.EnabledDestinations, Markets = preferences.Markets, SidebarWidgets = preferences.SidebarWidgets }) == preferences &&
+    storedPreferences.SidebarWidgets!.SequenceEqual(preferences.SidebarWidgets!) &&
+    storedPreferences.Markets.Symbols.SequenceEqual(preferences.Markets.Symbols) && storedPreferences.Markets.PinnedSymbol == preferences.Markets.PinnedSymbol &&
+    storedPreferences.VSCodeFolders.SequenceEqual(preferences.VSCodeFolders) && storedPreferences.WindowsApps.SequenceEqual(preferences.WindowsApps) &&
+    storedPreferences.EnabledDestinations!.SequenceEqual(ComposerDestinations.Ordered),
     "All existing preference values and remembered project folders survive atomic storage.");
 var replacement = Path.Combine(root, "prepared.json");
 File.WriteAllText(replacement, "replacement");

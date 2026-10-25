@@ -95,7 +95,7 @@ internal sealed class GmailSession(Func<GmailAuthService> createAuth, Func<Gmail
         SignInCancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
         Notify(token);
         try { await Auth.SignInAsync(SignInCancellation.Token, authorizeDrafts); NextRefresh = DateTimeOffset.MinValue; }
-        catch (OperationCanceledException) { Error = "Sign-in cancelled or timed out. You can try again."; }
+        catch (OperationCanceledException) { Error = UiText.Get("SigninCancelledOrTimedOutYouCanTry"); }
         catch (Exception exception) { Error = describeError(exception); }
         finally
         {

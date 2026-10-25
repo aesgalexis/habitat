@@ -8,14 +8,14 @@ namespace Habitat.Services;
 
 internal enum UpdatePackageKind { Installer, Zip }
 internal sealed record ReleaseAsset(string Name, Uri Url, long Size);
-internal sealed record AppUpdate(string Version, UpdatePackageKind Kind, ReleaseAsset Package, ReleaseAsset Checksum);
-internal sealed record PreparedAppUpdate(AppUpdate Release, string Directory, string PackagePath, string Sha256, string? ExtractedDirectory);
+internal sealed record ReleaseAppUpdate(string Version, UpdatePackageKind Kind, ReleaseAsset Package, ReleaseAsset Checksum);
+internal sealed record PreparedAppUpdate(ReleaseAppUpdate Release, string Directory, string PackagePath, string Sha256, string? ExtractedDirectory);
 
 internal interface IAppUpdateService : IDisposable
 {
     string? FailedVersion => null;
-    Task<AppUpdate?> CheckAsync(CancellationToken token);
-    Task<PreparedAppUpdate> PrepareAsync(AppUpdate release, IProgress<int> progress, CancellationToken token);
+    Task<ReleaseAppUpdate?> CheckAsync(CancellationToken token);
+    Task<PreparedAppUpdate> PrepareAsync(ReleaseAppUpdate release, IProgress<int> progress, CancellationToken token);
     Task LaunchInstallerAsync(PreparedAppUpdate prepared, CancellationToken token);
 }
 
@@ -52,7 +52,7 @@ internal sealed class ReleaseUpdateClient : IDisposable
         uri.UserInfo.Length == 0 && uri.Fragment.Length == 0 && uri.Host is "github.com" or "api.github.com" or
             "release-assets.githubusercontent.com" or "objects.githubusercontent.com" or "github-releases.githubusercontent.com";
 
-    internal async Task<AppUpdate?> CheckAsync(CancellationToken token)
+    internal async Task<ReleaseAppUpdate?> CheckAsync(CancellationToken token)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromSeconds(25));
@@ -84,7 +84,7 @@ internal sealed class ReleaseUpdateClient : IDisposable
         return package is null || checksum is null ? null : new(version.ToString(), _kind, package, checksum);
     }
 
-    internal async Task<PreparedAppUpdate> PrepareAsync(AppUpdate release, IProgress<int> progress, CancellationToken token)
+    internal async Task<PreparedAppUpdate> PrepareAsync(ReleaseAppUpdate release, IProgress<int> progress, CancellationToken token)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromMinutes(15));

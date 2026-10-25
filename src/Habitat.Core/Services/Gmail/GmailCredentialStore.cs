@@ -30,11 +30,11 @@ internal sealed class GmailCredentialStore(string? path = null, string? vaultTar
         try { encrypted = File.ReadAllBytes(_path); }
         catch (FileNotFoundException) { return new GmailAccount(null, null, null); }
         catch (DirectoryNotFoundException) { return new GmailAccount(null, null, null); }
-        if (encrypted.Length > 131072) throw new InvalidDataException("Invalid Gmail account storage.");
+        if (encrypted.Length > 131072) throw new InvalidDataException(UiText.Get("GmailAccountStorageInvalid"));
         var json = Protect(encrypted, decrypt: true);
         try
         {
-            var account = JsonSerializer.Deserialize<GmailAccount>(json) ?? throw new InvalidDataException("Invalid Gmail account storage.");
+            var account = JsonSerializer.Deserialize<GmailAccount>(json) ?? throw new InvalidDataException(UiText.Get("GmailAccountStorageInvalid"));
             if (_useVault && account.Client is not null) Save(account);
             return account;
         }
@@ -64,15 +64,15 @@ internal sealed class GmailCredentialStore(string? path = null, string? vaultTar
         {
             var error = Marshal.GetLastWin32Error();
             if (error == 1168) return null; // ERROR_NOT_FOUND
-            throw new Win32Exception(error, "Windows could not read the saved Gmail authorization.");
+            throw new Win32Exception(error, UiText.Get("WindowsCouldNotReadTheSavedGmailAuthorization"));
         }
         try
         {
             var credential = Marshal.PtrToStructure<NativeCredential>(pointer);
-            if (credential.BlobSize is 0 or > 2560) throw new InvalidDataException("Invalid Gmail credential in Windows.");
+            if (credential.BlobSize is 0 or > 2560) throw new InvalidDataException(UiText.Get("GmailCredentialInvalid"));
             var json = new byte[credential.BlobSize];
             Marshal.Copy(credential.Blob, json, 0, json.Length);
-            try { return JsonSerializer.Deserialize<GmailAccount>(json) ?? throw new InvalidDataException("Invalid Gmail credential in Windows."); }
+            try { return JsonSerializer.Deserialize<GmailAccount>(json) ?? throw new InvalidDataException(UiText.Get("GmailCredentialInvalid")); }
             finally { CryptographicOperations.ZeroMemory(json); }
         }
         finally { CredFree(pointer); }
@@ -88,7 +88,7 @@ internal sealed class GmailCredentialStore(string? path = null, string? vaultTar
         var pointer = IntPtr.Zero;
         try
         {
-            if (json.Length > 2560) throw new InvalidDataException("The Gmail authorization exceeds Windows credential storage limits.");
+            if (json.Length > 2560) throw new InvalidDataException(UiText.Get("TheGmailAuthorizationExceedsWindowsCredentialStorageLimits"));
             pointer = Marshal.AllocHGlobal(json.Length);
             Marshal.Copy(json, 0, pointer, json.Length);
             var credential = new NativeCredential
@@ -97,7 +97,7 @@ internal sealed class GmailCredentialStore(string? path = null, string? vaultTar
                 BlobSize = (uint)json.Length, Blob = pointer, Persist = 2 // CRED_PERSIST_LOCAL_MACHINE
             };
             if (!CredWrite(ref credential, 0))
-                throw new Win32Exception(Marshal.GetLastWin32Error(), "Windows could not save the Gmail authorization.");
+                throw new Win32Exception(Marshal.GetLastWin32Error(), UiText.Get("WindowsCouldNotSaveTheGmailAuthorization"));
         }
         finally
         {
@@ -159,7 +159,7 @@ internal sealed class GmailCredentialStore(string? path = null, string? vaultTar
             var success = decrypt
                 ? CryptUnprotectData(ref input, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, 1, out output)
                 : CryptProtectData(ref input, null, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, 1, out output);
-            if (!success) throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not protect the Gmail account with Windows.");
+            if (!success) throw new Win32Exception(Marshal.GetLastWin32Error(), UiText.Get("CouldNotProtectTheGmailAccountWithWindows"));
             var result = new byte[output.Length];
             Marshal.Copy(output.Data, result, 0, result.Length);
             return result;

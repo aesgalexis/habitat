@@ -9,4 +9,11 @@ internal sealed record WeatherSnapshot(
     bool IsDay,
     string Outlook,
     int PrecipitationChance,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt)
+{
+    public string? DeviceSource { get; init; }
+    public string? SavedCityName { get; init; }
+    public string DisplayLocation => DeviceSource is { } source
+        ? UiText.Get("CurrentLocation") + " · " + UiText.LocalizeMessage(source)
+        : SavedCityName is { } city ? city + " · " + UiText.Get("SavedCity") : Location;
+}

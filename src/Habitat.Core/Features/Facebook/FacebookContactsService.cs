@@ -151,8 +151,8 @@ internal sealed class FacebookContactsService(TimeProvider? clock = null) : IFac
         "permission" => "In the HABITAT extension popup, choose Enable Facebook contacts and allow access to Facebook, then retry.",
         "login" => "Sign in to Facebook in Chrome, then retry.",
         "blocked" => "Complete Facebook's verification in Chrome, then retry.",
-        "page-changed" => "Open Facebook Home in Chrome to load its Contacts panel, then retry.",
-        "contacts-unavailable" => "Open Facebook Home in a wide Chrome window with the Contacts panel visible, then retry.",
+        "page-changed" => "Open Facebook All friends in Chrome, then retry.",
+        "contacts-unavailable" => "Open Friends → All friends in Facebook in Chrome, wait for the profile photos, then retry.",
         _ => "Could not read Facebook contacts. Open Facebook in Chrome, then retry."
     };
 }

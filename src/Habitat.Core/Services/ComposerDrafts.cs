@@ -3,16 +3,26 @@ namespace Habitat.Services;
 internal sealed class ComposerDrafts
 {
     private readonly record struct Draft(string Text, long Revision);
-    internal readonly record struct Submission(ComposerDestination Destination, long Revision);
+    internal readonly record struct Submission(string Destination, long Revision);
+    internal sealed record Snapshot(string Shared, Dictionary<string, string> Local);
 
-    private readonly Dictionary<ComposerDestination, Draft> _local = new();
+    private readonly Dictionary<string, Draft> _local = new();
     private Draft _shared = new("", 0);
     private long _revision;
 
-    private Draft Get(ComposerDestination destination) => _local.GetValueOrDefault(destination, _shared);
-    public string Text(ComposerDestination destination) => Get(destination).Text;
+    private Draft Get(string destination) => _local.GetValueOrDefault(destination, _shared);
+    public string Text(string destination) => Get(destination).Text;
 
-    public void Edit(ComposerDestination destination, string text)
+    internal Snapshot SaveForRestart() => new(_shared.Text, _local.ToDictionary(item => item.Key, item => item.Value.Text));
+
+    internal void RestoreAfterRestart(Snapshot snapshot)
+    {
+        _local.Clear();
+        _shared = new(snapshot.Shared, ++_revision);
+        foreach (var item in snapshot.Local) _local[item.Key] = new(item.Value, ++_revision);
+    }
+
+    public void Edit(string destination, string text)
     {
         if (Get(destination).Text == text) return;
         var draft = new Draft(text, ++_revision);
@@ -22,7 +32,7 @@ internal sealed class ComposerDrafts
         else _local[destination] = draft;
     }
 
-    public Submission Capture(ComposerDestination destination) => new(destination, Get(destination).Revision);
+    public Submission Capture(string destination) => new(destination, Get(destination).Revision);
 
     public void Accept(Submission submission)
     {

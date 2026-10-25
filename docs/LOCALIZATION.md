@@ -1,17 +1,9 @@
 # Idioma de la interfaz
 
-Estado vigente: **interfaz en inglés**, según [AGENTS.md](../AGENTS.md). Revisión documental: 24 de octubre de 2026. La documentación y la conversación de desarrollo pueden estar en español.
+Todos los textos de interfaz de HABITAT se muestran en **inglés**, incluidos botones, menús, carga, errores, recuperación, tooltips y etiquetas accesibles. Es la regla vigente de [AGENTS.md](../AGENTS.md).
 
-## Textos y datos
+Los perfiles de las versiones bilingües se cargan en inglés conservando sus demás preferencias. No hay un selector de idioma en Appearance. Los catálogos históricos se conservan para reconocer mensajes antiguos y mantener la compatibilidad del código recuperado; UiText resuelve siempre el catálogo inglés para el producto.
 
-- Títulos, botones, menús, campos, placeholders, tooltips, accesibilidad, carga, errores y recuperación deben utilizar inglés en todos sus estados.
-- Conserva el vocabulario existente: **Tasks**, **New task**, **Completed**, **Reload tasks**. Al documentar una acción, cita su etiqueta real en inglés.
-- No traduzcas tareas, mensajes, nombres, correos, resultados, respuestas ni otros datos escritos por el usuario o recibidos de proveedores.
-- Translate permite elegir el idioma de la traducción; eso no cambia el idioma de la interfaz.
-- Las aplicaciones externas mantienen su propia configuración. No cambies sus etiquetas ni su configuración como parte de la documentación de HABITAT.
+El contenido del usuario y de los proveedores conserva su idioma: tareas, mensajes, nombres, borradores, títulos y resultados. Los idiomas de destino de Translate son independientes del idioma de interfaz.
 
-## Verificación
-
-Al cambiar un componente, revisa sus textos visibles y accesibles, incluidos estados vacíos, foco, carga, error y reintento. Actualiza las comprobaciones y la documentación asociadas a cualquier etiqueta modificada; consulta [CHECKS.md](CHECKS.md).
-
-La versión anterior de esta guía describía catálogos `en.json`/`es.json`, `UiText`, `UiLanguage` y una prueba de localización que no existen en esta copia. Esa descripción no constituye una implementación ni una autorización para introducir interfaz bilingüe. Cualquier propuesta futura requiere reconciliar primero la regla del repositorio. Véase [PROJECT_STATUS.md](PROJECT_STATUS.md).
+Las comprobaciones de Core y de la vista verifican la migración de perfiles antiguos, etiquetas accesibles, la estructura inicial centrada y la conservación de borradores y traducciones en curso. La comprobación tests/localization.checks.cjs valida las referencias del código a los recursos.

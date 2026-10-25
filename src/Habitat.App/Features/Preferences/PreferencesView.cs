@@ -10,54 +10,80 @@ internal sealed class PreferencesView : Grid
 {
     internal ListView Categories { get; } = new() { SelectionMode = ListViewSelectionMode.Single, IsItemClickEnabled = false };
     internal ComboBox Theme { get; }
+    internal ComboBox InterfaceLanguage { get; }
     internal Slider BackgroundOpacity { get; }
+    internal WallpaperView Wallpaper { get; }
     internal ToggleSwitch TextOnly { get; }
     internal ToggleSwitch GlobalHotkey { get; }
     internal ToggleSwitch UseDeviceLocation { get; }
     internal TextBox WeatherCity { get; }
     internal HyperlinkButton LocationSettings { get; }
+    internal DestinationsView Destinations { get; }
+    internal MarketsPreferencesView Markets { get; }
+    internal SidebarPreferencesView Sidebar { get; }
     internal string Category => ((ListViewItem)Categories.SelectedItem).Tag as string ?? "Appearance";
-    private readonly ScrollViewer _scroll = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+    private readonly ScrollViewer _scroll = ScrollEdgeFade.Enable(new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
 
-    public PreferencesView(Habitat.Preferences saved)
+    public PreferencesView(Habitat.Preferences saved, Func<Task<IReadOnlyList<WindowsAppDestination>>>? discoverApps = null,
+        Func<Task<string?>>? browseApp = null, WallpaperService? wallpapers = null,
+        Func<Task<IReadOnlyList<string>>>? pickWallpapers = null)
     {
         ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(148) });
         ColumnDefinitions.Add(new ColumnDefinition());
         ColumnSpacing = 20;
-        AutomationProperties.SetName(Categories, "Preference categories");
+        UiLanguage.SetName(Categories, () => UiText.Get("PreferenceCategories"));
         Children.Add(Categories);
         Grid.SetColumn(_scroll, 1);
         Children.Add(_scroll);
 
-        Theme = new ComboBox { Header = "Theme", HorizontalAlignment = HorizontalAlignment.Stretch,
-            ItemsSource = new[] { "Day", "Night", "Hybrid" }, SelectedIndex = saved.Theme switch { "night" => 1, "hybrid" => 2, _ => 0 } };
-        AutomationProperties.SetName(Theme, "Theme");
+        InterfaceLanguage = UiLanguage.Watch(new ComboBox { Header = UiText.Get("InterfaceLanguage"),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            ItemsSource = new[] { "English" }, SelectedIndex = 0, IsEnabled = false }, ("Header", () => (object?)(UiText.Get("InterfaceLanguage"))));
+        UiLanguage.SetName(InterfaceLanguage, () => UiText.Get("InterfaceLanguage"));
+
+        Theme = UiLanguage.Watch(new ComboBox { Header = UiText.Get("Theme"), HorizontalAlignment = HorizontalAlignment.Stretch,
+            ItemsSource = new[] { UiText.Get("Day"), UiText.Get("Night"), UiText.Get("Hybrid") }, SelectedIndex = saved.Theme switch { "night" => 1, "hybrid" => 2, _ => 0 } }, ("Header", () => (object?)(UiText.Get("Theme"))));
+        UiLanguage.SetName(Theme, () => UiText.Get("Theme"));
         BackgroundOpacity = new Slider { Minimum = 0, Maximum = 100, Value = saved.Opacity, StepFrequency = 1 };
-        AutomationProperties.SetName(BackgroundOpacity, "Background opacity");
-        var opacityValue = new TextBlock { Text = $"Background opacity · {saved.Opacity:0}%" };
-        BackgroundOpacity.ValueChanged += (_, args) => opacityValue.Text = $"Background opacity · {args.NewValue:0}%";
-        AddCategory("Appearance", "\uE790", "Personalize the look and feel of HABITAT.",
-            Card(Theme, Description("Hybrid adjusts the contrast to the background behind the window.")), Card(opacityValue, BackgroundOpacity));
+        UiLanguage.SetName(BackgroundOpacity, () => UiText.Get("BackgroundOpacity"));
+        var opacityValue = UiLanguage.Watch(new TextBlock { Text = UiText.Format("BackgroundOpacityMessage", saved.Opacity) }, ("Text", () => (object?)(UiText.Format("BackgroundOpacityMessage", saved.Opacity))));
+        BackgroundOpacity.ValueChanged += (_, args) => opacityValue.Text = UiLanguage.Value(opacityValue, "Text", () => UiText.Format("BackgroundOpacityMessage", args.NewValue));
+        Wallpaper = new WallpaperView(saved.Wallpaper, wallpapers, pickWallpapers);
+        Wallpaper.RestoreOriginal += () => { Theme.SelectedIndex = 2; BackgroundOpacity.Value = 15; };
+        Wallpaper.Changed += () => BackgroundOpacity.IsEnabled = Wallpaper.Settings.SelectedId == WallpaperSettings.Original;
+        BackgroundOpacity.IsEnabled = Wallpaper.Settings.SelectedId == WallpaperSettings.Original;
+        AddCategory("Appearance", "\uE790", UiText.Get("PersonalizeTheLookAndFeelOfHABITAT"),
+            Card(Theme, Description(UiText.Get("HybridAdjustsTheContrastToTheBackgroundBehind"))), Card(opacityValue, BackgroundOpacity),
+            Card(Wallpaper));
 
-        UseDeviceLocation = new ToggleSwitch { Header = "Use current location (GPS / Windows)", IsOn = saved.UseDeviceLocation };
-        WeatherCity = new TextBox { Header = saved.UseDeviceLocation ? "Fallback city" : "Weather location", Text = saved.WeatherCity,
-            PlaceholderText = "City, country code (for example Palma, ES)", MaxLength = 100 };
-        UseDeviceLocation.Toggled += (_, _) => WeatherCity.Header = UseDeviceLocation.IsOn ? "Fallback city" : "Weather location";
-        LocationSettings = new HyperlinkButton { Content = "Windows location settings", NavigateUri = new Uri("ms-settings:privacy-location"),
-            HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(0) };
-        AddCategory("Location", "\uE707", "Choose where your weather forecast comes from.",
-            Card(UseDeviceLocation, Description("Uses GPS when available. Windows asks for location permission. Coordinates are sent to Open-Meteo for the forecast; the saved city is used if location is unavailable.")),
-            Card(WeatherCity, LocationSettings), Description("Weather data: Open-Meteo · refreshes every 15 minutes."));
+        UseDeviceLocation = UiLanguage.Watch(new ToggleSwitch { Header = UiText.Get("UseCurrentLocationGPSWindows"), IsOn = saved.UseDeviceLocation,
+            OnContent = UiText.Get("On"), OffContent = UiText.Get("Off") }, ("Header", () => (object?)(UiText.Get("UseCurrentLocationGPSWindows"))), ("OnContent", () => (object?)(UiText.Get("On"))), ("OffContent", () => (object?)(UiText.Get("Off"))));
+        WeatherCity = UiLanguage.Watch(new TextBox { Header = saved.UseDeviceLocation ? UiText.Get("FallbackCity") : UiText.Get("WeatherLocation"), Text = saved.WeatherCity,
+            PlaceholderText = UiText.Get("CityCountryCodeForExamplePalmaES"), MaxLength = 100 }, ("Header", () => (object?)(saved.UseDeviceLocation ? UiText.Get("FallbackCity") : UiText.Get("WeatherLocation"))), ("PlaceholderText", () => (object?)(UiText.Get("CityCountryCodeForExamplePalmaES"))));
+        UseDeviceLocation.Toggled += (_, _) => WeatherCity.Header = UiLanguage.Value(WeatherCity, "Header", () => UseDeviceLocation.IsOn ? UiText.Get("FallbackCity") : UiText.Get("WeatherLocation"));
+        LocationSettings = UiLanguage.Watch(new HyperlinkButton { Content = UiText.Get("WindowsLocationSettings"), NavigateUri = new Uri("ms-settings:privacy-location"),
+            HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(0) }, ("Content", () => (object?)(UiText.Get("WindowsLocationSettings"))));
+        AddCategory("Location", "\uE707", UiText.Get("ChooseWhereYourWeatherForecastComesFrom"),
+            Card(UseDeviceLocation, Description(UiText.Get("UsesGPSWhenAvailableWindowsAsksForLocation"))),
+            Card(WeatherCity, LocationSettings), Description(UiText.Get("WeatherDataOpenMeteoRefreshesEvery15Minutes")));
 
-        TextOnly = new ToggleSwitch { Header = "Text-only replies", IsOn = saved.TextOnly };
-        AddCategory("ChatGPT", "\uE8F2", "Customize replies from the linked ChatGPT conversation.", Card(TextOnly,
-            Description("Tell ChatGPT that messages come from HABITAT and avoid tables, images, files and other rich output unless you explicitly request them.")));
+        TextOnly = UiLanguage.Watch(new ToggleSwitch { Header = UiText.Get("TextonlyReplies"), IsOn = saved.TextOnly,
+            OnContent = UiText.Get("On"), OffContent = UiText.Get("Off") }, ("Header", () => (object?)(UiText.Get("TextonlyReplies"))));
+        AddCategory("ChatGPT", "\uE8F2", UiText.Get("CustomizeRepliesFromTheLinkedChatGPTConversation"), Card(TextOnly,
+            Description(UiText.Get("TellChatGPTThatMessagesComeFromHABITATAnd"))));
 
-        GlobalHotkey = new ToggleSwitch { Header = "Global shortcut (Ctrl+H)", IsOn = saved.GlobalHotkeyEnabled,
-            OnContent = "On", OffContent = "Off" };
-        AutomationProperties.SetName(GlobalHotkey, "Global shortcut (Ctrl+H)");
-        AddCategory("Shortcuts", "\uE765", "Access HABITAT from any application.", Card(GlobalHotkey,
-            Description("Open HABITAT from any app and place selected text in the editor. Starts with Windows. Nothing is sent automatically.")));
+        GlobalHotkey = UiLanguage.Watch(new ToggleSwitch { Header = UiText.Get("GlobalShortcutCtrlH"), IsOn = saved.GlobalHotkeyEnabled,
+            OnContent = UiText.Get("On"), OffContent = UiText.Get("Off") }, ("Header", () => (object?)(UiText.Get("GlobalShortcutCtrlH"))), ("OnContent", () => (object?)(UiText.Get("On"))), ("OffContent", () => (object?)(UiText.Get("Off"))));
+        UiLanguage.SetName(GlobalHotkey, () => UiText.Get("GlobalShortcutCtrlH"));
+        AddCategory("Shortcuts", "\uE765", UiText.Get("AccessHABITATFromAnyApplication"), Card(GlobalHotkey,
+            Description(UiText.Get("OpenHABITATFromAnyAppAndPlaceSelected"))));
+        Destinations = new(saved, discoverApps ?? (() => Task.FromResult<IReadOnlyList<WindowsAppDestination>>([])),
+            browseApp ?? (() => Task.FromResult<string?>(null)));
+        AddCategory("Destinations", "\uE8A7", UiText.Get("ChooseAndOrderYourDestinationsRemovingOneKeeps"), Destinations);
+        Markets = new MarketsPreferencesView(saved.Markets);
+        AddCategory("Markets", "\uE9D2", UiText.Get("MarketsPreferencesDescription"), Markets);
+        Sidebar = new SidebarPreferencesView(saved.SidebarWidgets);
+        AddCategory("Sidebar", "\uE700", UiText.Get("SidebarDescription"), Sidebar);
         Categories.SelectionChanged += (_, _) =>
         {
             _scroll.Content = ((ListViewItem)Categories.SelectedItem).Content is StackPanel label ? label.Tag : null;
@@ -66,17 +92,23 @@ internal sealed class PreferencesView : Grid
         Categories.SelectedIndex = 0;
     }
 
+    internal void SelectCategory(string name)
+    {
+        Categories.SelectedItem = Categories.Items.Cast<ListViewItem>().FirstOrDefault(item => item.Tag as string == name) ?? Categories.Items[0];
+    }
+
     private void AddCategory(string name, string glyph, string description, params UIElement[] controls)
     {
+        var title = UiText.Get(name);
         var page = new StackPanel { Spacing = 16, Padding = new Thickness(0, 0, 8, 8) };
-        page.Children.Add(new TextBlock { Text = name, FontSize = 24, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+        page.Children.Add(new TextBlock { Text = title, FontSize = 24, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         page.Children.Add(Description(description));
         foreach (var control in controls) page.Children.Add(control);
         var label = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Tag = page };
         label.Children.Add(new FontIcon { Glyph = glyph, FontSize = 16 });
-        label.Children.Add(new TextBlock { Text = name, VerticalAlignment = VerticalAlignment.Center });
+        label.Children.Add(new TextBlock { Text = title, VerticalAlignment = VerticalAlignment.Center });
         var item = new ListViewItem { Content = label, Tag = name, Padding = new Thickness(10, 12, 8, 12), HorizontalContentAlignment = HorizontalAlignment.Stretch };
-        AutomationProperties.SetName(item, name);
+        AutomationProperties.SetName(item, title);
         Categories.Items.Add(item);
     }
 

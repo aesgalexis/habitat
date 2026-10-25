@@ -93,7 +93,7 @@ public sealed partial class MainPage
         var openFacebook = new Button { Content = "Open Facebook" };
         openFacebook.Click += async (_, _) => await RunOperationAsync(async () =>
         {
-            await _launchBrowser(new Uri("https://www.facebook.com/"));
+            await _launchBrowser(new Uri("https://www.facebook.com/friends/list/"));
         });
         recovery.Children.Add(openFacebook);
         var retry = new Button { Content = "Retry" };
@@ -177,7 +177,7 @@ public sealed partial class MainPage
             AutomationProperties.SetItemStatus(FacebookButton, $"{contacts.Count} contacts");
             FacebookAvatars.Children.Clear();
             foreach (var contact in contacts) AddFacebookAvatar(contact);
-            if (contacts.Count == 0) ShowFacebookState("No contacts are loaded in Facebook. Open Facebook Home in Chrome, then retry.", true);
+            if (contacts.Count == 0) ShowFacebookState("No contacts are loaded in Facebook. Open Friends → All friends in Chrome, wait for the profile photos, then retry.", true);
             _nextFacebookRefresh = DateTimeOffset.UtcNow.AddSeconds(30);
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }

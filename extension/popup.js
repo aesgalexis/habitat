@@ -32,8 +32,8 @@ async function connectFacebook(restart = false) {
       permission:"Enable Facebook contacts to allow the reader.",
       login:"Sign in to Facebook in Chrome, then retry its widget.",
       blocked:"Complete Facebook's verification in Chrome, then retry its widget.",
-      "page-changed":"Open Facebook Home in Chrome, then retry its widget.",
-      "contacts-unavailable":"The reader cannot find Facebook's Contacts panel. Open Facebook Home in a wide Chrome window, then retry its widget.",
+      "page-changed":"Open Facebook All friends in Chrome, then retry its widget.",
+      "contacts-unavailable":"The reader cannot find Facebook contacts. Open Friends → All friends in Chrome, wait for the profile photos, then retry its widget.",
       result:"The reader could not load Facebook contacts. Open Facebook Home, then retry its widget."
     };
     facebookStatus.textContent = facebookWorkerNeedsReload ? "The running extension needs reloading to start its Facebook reader." :

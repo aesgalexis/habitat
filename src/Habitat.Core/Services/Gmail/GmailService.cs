@@ -30,7 +30,7 @@ internal sealed class GmailService : IDisposable
         var root = list.RootElement;
         var ids = root.TryGetProperty("messages", out var messages)
             ? messages.EnumerateArray().Select(message => message.GetProperty("id").GetString()!).ToArray() : [];
-        if (ids.Length > 25) throw new InvalidDataException("Unexpected Gmail page size.");
+        if (ids.Length > 25) throw new InvalidDataException(UiText.Get("GmailPageSizeUnexpected"));
         using var parallel = new SemaphoreSlim(4);
         var results = await Task.WhenAll(ids.Select(async id =>
         {
@@ -61,14 +61,14 @@ internal sealed class GmailService : IDisposable
 
     private static string MessageUrl(string id)
     {
-        if (!Regex.IsMatch(id, @"^[A-Za-z0-9_-]{1,128}$", RegexOptions.CultureInvariant)) throw new InvalidDataException("Invalid Gmail message identifier.");
+        if (!Regex.IsMatch(id, @"^[A-Za-z0-9_-]{1,128}$", RegexOptions.CultureInvariant)) throw new InvalidDataException(UiText.Get("GmailMessageIdentifierInvalid"));
         return Api + "messages/" + id;
     }
 
     public async Task<GmailDraft> CreateDraftAsync(string text, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(text)) throw new ArgumentException("Write an email before saving a draft.", nameof(text));
-        if (!_auth.IsSignedIn) throw new GmailDraftAuthorizationException("Authorize Gmail drafts, then press Draft email again.");
+        if (string.IsNullOrWhiteSpace(text)) throw new ArgumentException(UiText.Get("WriteAnEmailBeforeSavingADraft"), nameof(text));
+        if (!_auth.IsSignedIn) throw new GmailDraftAuthorizationException(UiText.Get("AuthorizeGmailDraftsThenPressDraftEmailAgain"));
         var subject = GmailDraft.SubjectFrom(text);
         var messageId = Guid.NewGuid().ToString("N") + "@habitat.local";
         var raw = GmailDraft.EncodeMessage(text, subject, messageId);
@@ -81,20 +81,20 @@ internal sealed class GmailService : IDisposable
             using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
             if (response.StatusCode == HttpStatusCode.Unauthorized && attempt == 0) continue;
             if (response.StatusCode == HttpStatusCode.Unauthorized)
-                throw new GmailDraftAuthorizationException("Authorize Gmail drafts, then press Draft email again.");
+                throw new GmailDraftAuthorizationException(UiText.Get("AuthorizeGmailDraftsThenPressDraftEmailAgain"));
             if (response.StatusCode == HttpStatusCode.Forbidden)
             {
                 var error = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
                 if (error.Contains("insufficientPermissions", StringComparison.OrdinalIgnoreCase) ||
                     error.Contains("ACCESS_TOKEN_SCOPE_INSUFFICIENT", StringComparison.OrdinalIgnoreCase))
-                    throw new GmailDraftAuthorizationException("Authorize Gmail drafts, then press Draft email again.");
-                throw new InvalidOperationException("Google denied draft creation. Check Gmail API access in Gmail setup.");
+                    throw new GmailDraftAuthorizationException(UiText.Get("AuthorizeGmailDraftsThenPressDraftEmailAgain"));
+                throw new InvalidOperationException(UiText.Get("GoogleDeniedDraftCreationCheckGmailAPIAccess"));
             }
             // A POST may already have saved the draft. Never retry ambiguous failures automatically.
             response.EnsureSuccessStatusCode();
             using var data = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
             var id = data.RootElement.GetProperty("id").GetString();
-            if (string.IsNullOrWhiteSpace(id)) throw new InvalidDataException("Google did not confirm the saved draft.");
+            if (string.IsNullOrWhiteSpace(id)) throw new InvalidDataException(UiText.Get("GoogleDidNotConfirmTheSavedDraft"));
             return new GmailDraft(id, subject, messageId);
         }
     }
@@ -113,7 +113,7 @@ internal sealed class GmailService : IDisposable
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
                 if (!refreshed) { refreshed = true; forceRefresh = true; continue; }
-                throw new GmailSignInRequiredException("Google authorization is no longer valid. Sign in again.");
+                throw new GmailSignInRequiredException(UiText.Get("GoogleAuthorizationIsNoLongerValidSignIn"));
             }
             if ((response.StatusCode == HttpStatusCode.TooManyRequests || (int)response.StatusCode >= 500) && attempt < 2)
             {
@@ -122,16 +122,16 @@ internal sealed class GmailService : IDisposable
                 continue;
             }
             if (response.StatusCode == HttpStatusCode.Forbidden)
-                throw new InvalidOperationException("Google denied Gmail access. Check that Gmail API is enabled and the account is an OAuth test user.");
+                throw new InvalidOperationException(UiText.Get("GoogleDeniedGmailAccessCheckThatGmailAPI"));
             response.EnsureSuccessStatusCode();
-            if (response.Content.Headers.ContentLength > 6000000) throw new InvalidDataException("This Gmail message is too large to preview.");
+            if (response.Content.Headers.ContentLength > 6000000) throw new InvalidDataException(UiText.Get("ThisGmailMessageIsTooLargeToPreview"));
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
             using var buffer = new MemoryStream();
             var bytes = new byte[8192];
             int read;
             while ((read = await stream.ReadAsync(bytes, cancellationToken).ConfigureAwait(false)) > 0)
             {
-                if (buffer.Length + read > 6000000) throw new InvalidDataException("This Gmail message is too large to preview.");
+                if (buffer.Length + read > 6000000) throw new InvalidDataException(UiText.Get("ThisGmailMessageIsTooLargeToPreview"));
                 buffer.Write(bytes, 0, read);
             }
             return JsonDocument.Parse(buffer.ToArray());

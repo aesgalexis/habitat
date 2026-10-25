@@ -6,6 +6,8 @@
 
 No enviar solicitudes de admisión ni de firma, crear cuentas, instalar aplicaciones de GitHub, aceptar condiciones, añadir tokens o activar workflows de SignPath hasta que el propietario retome expresamente el proceso. No contactar con la fundación en nombre del proyecto. La preparación actual es local y no cambia las publicaciones existentes.
 
+**25 de octubre de 2026:** la recuperación de las funciones consolidadas conserva esta decisión. Las comprobaciones locales de preparación pasan también bajo OneDrive: se inspeccionan todos los ancestros y solo se distinguen las etiquetas oficiales Cloud Files de los enlaces reales. No se ha activado ni enviado ninguna solicitud de firma.
+
 ## Preparación incluida
 
 - [Política de firma](CODE_SIGNING_POLICY.md): borrador para el repositorio, roles propuestos y límites. No afirma que SignPath nos haya aceptado.

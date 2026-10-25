@@ -11,16 +11,18 @@ public sealed partial class MainPage
 
     private void ConfigureComposerRoutes()
     {
-        foreach (var destination in ComposerDestinations.Ordered)
+        foreach (var destination in _destinationCatalog.Available)
         {
             foreach (var external in new[] { false, true })
             {
-                if (destination == ComposerDestination.OpenAI)
+                if (_destinationCatalog.WindowsApp(destination) is not null)
+                    _composer.Register(destination, external, OpenWindowsAppAsync, _ => false, exclusive: true, allowEmpty: true);
+                else if (destination == ComposerDestination.OpenAI)
                     _composer.Register(destination, external, SendOpenAIAsync,
                         text => !(external && string.IsNullOrWhiteSpace(text)) && _bridge is not { HasMessageInFlight: false }, external);
                 else if (destination == ComposerDestination.Codex)
                     _composer.Register(destination, external, SendCodexComposerAsync,
-                        text => _codexSendCancellation is not null || !(external && string.IsNullOrWhiteSpace(text)) && CodexChat.IsBusy,
+                        text => _codexSendCancellation is not null || _services.CodexSchedules.IsSending || !(external && string.IsNullOrWhiteSpace(text)) && CodexChat.IsBusy,
                         exclusiveForEmpty: external);
                 else if (_destinationSections.TryGetValue(destination, out var section) && (!external || destination == ComposerDestination.VSCode))
                     _composer.Register(destination, external, SubmitSectionAsync, _ => _destinationSections[destination].IsBusy);
@@ -29,7 +31,24 @@ public sealed partial class MainPage
                         _ => _destinationSections.TryGetValue(destination, out var view) && view.IsBusy, true);
             }
         }
-        _composer.StateChanged += UpdateSendState;
+    }
+
+    private Task OpenWindowsAppAsync(ComposerCoordinator.Submission request)
+    {
+        if (_destinationCatalog.WindowsApp(request.Destination) is not { } app) return Task.CompletedTask;
+        try
+        {
+            if (!_services.LaunchWindowsApp(app, request.Text))
+                SetStatus(UiText.Format("CouldNotOpenCheckThatTheApplicationIs", app.Name), StatusTone.Warning);
+            else if (app.PassText && request.Text.Length > 0) { request.Accept(); request.Clear(); }
+        }
+        catch (Exception exception)
+        {
+            _services.ReportError("Open Windows application", exception);
+            SetStatus(UiText.Format("CouldNotOpenCheckTheApplicationInPreferences", app.Name), StatusTone.Warning);
+        }
+        finally { if (!request.External) FocusComposer(); }
+        return Task.CompletedTask;
     }
 
     private Task SendOpenAIAsync(ComposerCoordinator.Submission request)
@@ -39,14 +58,14 @@ public sealed partial class MainPage
         if (_bridge is null) return Task.CompletedTask;
         if (!_bridge.TryQueueMessage(ComposerCoordinator.OpenAIText(text, _preferences.TextOnly), out var reason, request.External))
         {
-            SetStatus(reason, StatusTone.Warning);
+            SetOpenAIStatus(reason, StatusTone.Warning);
             FocusComposer();
             return Task.CompletedTask;
         }
-        AddMessage("YOU", text, MessageTone.User);
+        AddMessage(UiText.Get("YOU"), text, MessageTone.User);
         request.Accept();
         request.Clear();
-        SetStatus("Sending to browser…", StatusTone.Active);
+        SetOpenAIStatus(UiText.Get("SendingToBrowser"), StatusTone.Active);
         UpdateSendState();
         if (!request.External) FocusComposer();
         return Task.CompletedTask;
@@ -107,9 +126,9 @@ public sealed partial class MainPage
         finally { if (!request.External) FocusComposer(); }
     }
 
-    private static string DestinationLaunchError(ComposerDestination destination) => destination == ComposerDestination.Run
-        ? "Could not run this command. Check the name or path and try again."
-        : $"Could not open {ComposerDestinations.Label(destination)}. Try again.";
+    private static string DestinationLaunchError(string destination) => destination == ComposerDestination.Run
+        ? UiText.Get("CouldNotRunThisCommandCheckTheName")
+        : UiText.Format("CouldNotOpenTryAgain", ComposerDestinations.Label(destination));
 
     private void RestoreComposerDraft()
     {

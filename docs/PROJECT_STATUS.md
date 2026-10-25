@@ -1,45 +1,25 @@
 # Estado verificable del proyecto
 
-Revisión documental: **24 de octubre de 2026**. Base local: `4faa5e9`, con cambios sin commit y otra implementación en curso. Este documento registra una inspección estática; no se han ejecutado las suites de producto durante esta revisión ni se han verificado las tiendas o publicaciones remotas.
+Revisión: **25 de octubre de 2026**. La rama de recuperación integra main hasta 1c4138a (0.16.1) y la implementación de Facebook e5a2ecc, incluidos los cambios locales de la extensión 0.10.3. No implica una nueva publicación remota.
 
-## Cómo interpretar el estado
+## Recuperación de las funciones consolidadas
 
-- **Presente:** hay código en esta copia. No implica que esté publicado ni que se haya vuelto a probar hoy.
-- **Declarado:** un archivo de versión, manifiesto o changelog indica un valor; no acredita los bytes de una publicación remota ni la versión instalada.
-- **Pendiente de reconciliar:** existe documentación anterior, pero faltan componentes citados o contradice esta copia. Puede pertenecer a otra rama; no se presupone su origen.
-- **Histórico:** evidencia de una fecha y revisión concretas, con sus límites originales.
+La rama de Facebook partía de 4faa5e9 (0.10.0). Cambiar a esa rama sin integrar main dejó fuera 16 commits posteriores. El trabajo seguía guardado en Git y se ha fusionado conservando ambas líneas de historial. Véase [RECOVERY_2026-10-25.md](RECOVERY_2026-10-25.md).
 
-## Código y metadatos
-
-| Área | Estado y evidencia local |
+| Área | Código presente |
 | --- | --- |
-| Escritorio | WinUI 3 y .NET 10; [proyecto de la app](../src/Habitat.App/Habitat.App.csproj) y [biblioteca compartida](../src/Habitat.Core/Habitat.Core.csproj). |
-| Destinos | OpenAI, Google, YouTube, Notepad, Translate, Gmail, Google Maps, Codex, VS Code, Terminal y Run; [catálogo](../src/Habitat.Core/Services/ComposerDestination.cs). |
-| Preferencias | Appearance, Location, ChatGPT y Shortcuts; [vista](../src/Habitat.App/Features/Preferences/PreferencesView.cs). Interfaz en inglés. |
-| Persistencia | Tareas, preferencias y registro de chats de origen; [almacenamiento](../src/Habitat.Core/Services/Storage), [registro Codex](../src/Habitat.Core/Services/Codex/CodexChatOrigins.cs). |
-| Integraciones | Puente Chrome, Gmail, tiempo, atajo global y terminal VS Code; [arquitectura](ARCHITECTURE.md). |
-| Actualizaciones | Código presente y en modificación local; [servicio](../src/Habitat.App/Services/DesktopUpdateService.cs), [flujo](UPDATES.md). |
-| Facebook | Integración añadida durante el trabajo simultáneo; [guía](FACEBOOK.md) y [servicio de contactos](../src/Habitat.Core/Features/Facebook/FacebookContactsService.cs). No se ha verificado ni probado como parte de esta revisión documental. |
-| Escritorio declarado | [VERSION](../VERSION) y [release.json](../release.json) indican 0.16.1 en esta revisión. No se ha comprobado su publicación. |
-| Extensión Chrome | El [manifiesto fuente](../extension/manifest.json) declara 0.10.0; `release.json` registra 0.9.0. Se distinguen desarrollo y metadatos de paquete, sin asumir que sean una misma entrega. |
-| Extensión VS Code | El [manifiesto fuente](../vscode-extension/package.json) declara 0.2.0. |
+| Fondos | Importación, biblioteca, ajustes por imagen y cinco ilustraciones en [Assets/Wallpapers](../src/Habitat.App/Assets/Wallpapers); [guía](WALLPAPERS.md). |
+| Codex | Chat vinculado persistente, New chat, modelo y razonamiento; [servicio](../src/Habitat.Core/Services/Codex/CodexChatService.cs). |
+| Programación | Cola persistente, mensajes para chats nuevos o existentes, indicadores y reanudaciones tras límites; [guía](CODEX_SCHEDULING.md). |
+| Widgets | Mercados y barra lateral configurable; [Markets](MARKETS.md), [Sidebar](SIDEBAR.md). Facebook permanece accesible al personalizar los demás widgets. |
+| Destinos | Selección, orden y aplicaciones personales; [catálogo](../src/Habitat.Core/Services/DestinationCatalog.cs). |
+| Lectura y ventana | Desvanecido de bordes, recuperación del foco y estabilidad de minimizar/restaurar. |
+| Actualizaciones | Modal centrado, Later, progreso y reintento. Conserva borradores al reiniciar y espera los envíos de Codex en curso; [flujo](UPDATES.md). |
+| Facebook | Extensión local 0.10.3 y contactos cargados en Chrome; [evidencia previa y límites](FACEBOOK.md). La recuperación no vuelve a leer contactos reales durante las pruebas. |
+| Idioma | Interfaz en inglés; contenido del usuario intacto; [política](LOCALIZATION.md). |
 
-## Documentación que requiere reconciliación
+## Distribución y decisiones
 
-| Tema | Desajuste comprobado el 24 de octubre |
-| --- | --- |
-| Markets y sidebar configurable | Las guías citan `MarketsService`, `MainPage.Markets`, `SidebarCatalog` y `MainPage.Sidebar`; no se encontraron en `src`. Se conservan como referencias pendientes. |
-| Programación de mensajes Codex | La guía cita `CodexScheduleQueue` y comprobaciones de programación ausentes en esta copia. No se documenta como acción disponible. |
-| Fondos ilustrados | Las guías describen importación, biblioteca y `Assets/Wallpapers`, ausentes en esta copia. |
-| Interfaz bilingüe | No se encontraron los catálogos ni `UiText`/`UiLanguage` citados anteriormente. Además, la regla vigente exige inglés; véase [LOCALIZATION.md](LOCALIZATION.md). |
-| Funciones de Codex descritas en el README anterior | La selección persistente independiente de la navegación, **New chat** y la cabecera de modelo/razonamiento no quedan respaldadas por la sección y servicios actuales. La guía de uso describe únicamente el recorrido presente. |
+La versión fuente sigue declarando 0.16.1; la extensión local declara 0.10.3. La versión instalada y las publicaciones son comprobaciones independientes. Las guías de Chrome Web Store y WinGet describen observaciones fechadas. La firma sigue aplazada conforme a [SIGNING.md](SIGNING.md).
 
-No elimines trabajo de otra rama para resolver estos desajustes. Cuando se integre una implementación, revisa código, pruebas y etiquetas, actualiza su guía y retira el aviso pendiente solo con evidencia.
-
-## Publicación y mantenimiento
-
-La versión instalada se consulta en HABITAT; la versión del código se obtiene de sus manifiestos; el contenido publicado se comprueba contra los assets y metadatos de la release correspondiente. Son tres comprobaciones distintas.
-
-El estado de Chrome Web Store y WinGet de sus guías es una observación fechada, no una consulta en directo. [SIGNING.md](SIGNING.md) conserva la decisión vigente de aplazar la firma. Para publicar, sigue [RELEASING.md](RELEASING.md).
-
-Actualiza esta página cuando cambien los desajustes o se cierre una reconciliación; no hace falta editarla por cada corrección menor. Los detalles de cada entrega pertenecen al [changelog](../CHANGELOG.md).
+Las comprobaciones de esta recuperación se registran en [RECOVERY_2026-10-25.md](RECOVERY_2026-10-25.md), sin atribuir a este árbol validaciones de otras revisiones.

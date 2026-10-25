@@ -21,9 +21,15 @@ public sealed partial class MainPage
         Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
         HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center
     };
-    private readonly Dictionary<ComposerDestination, Button> _destinationButtons = new();
-    private readonly Dictionary<ComposerDestination, Button> _externalDestinationButtons = new();
-    private ComposerDestination _destination;
+    private readonly Dictionary<string, Button> _destinationButtons = new();
+    private readonly Dictionary<string, Button> _externalDestinationButtons = new();
+    private string _destination = "";
+    private DestinationCatalog _destinationCatalog = new();
+    private readonly ScrollViewer _destinationRailScroll = new()
+    {
+        HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center,
+        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+    };
     private int _destinationWheelDelta;
     private PointerRoutedEventArgs? _lastDestinationWheelEvent;
     private Func<Uri, Task<bool>> _launchBrowser;
@@ -35,7 +41,7 @@ public sealed partial class MainPage
     private Func<string, Task<bool>>? _confirmTerminal;
     private bool _terminalConfirmationOpen;
 
-    private static FontIcon DestinationIcon(ComposerDestination destination) => new()
+    private static FontIcon DestinationIcon(string destination) => new()
     {
         Glyph = destination switch
         {
@@ -58,12 +64,41 @@ public sealed partial class MainPage
     {
         _launchTerminal = _powerShell.Run;
         _confirmTerminal = ConfirmTerminalAsync;
-        _destination = ComposerDestinations.Normalize(_preferences.Destination);
-        foreach (var destination in ComposerDestinations.Ordered)
+        _destination = _destinationCatalog.Select(_preferences.DefaultDestination ?? _preferences.Destination);
+        RebuildDestinationRail();
+        _destinationRailScroll.Content = DestinationRail;
+        _destinationRailScroll.Width = DestinationRailWidth + 12;
+        surface.Children.Add(_destinationRailScroll);
+        surface.SizeChanged += (_, _) => _destinationRailScroll.MaxHeight = Math.Max(36, surface.ActualHeight - 40);
+        RegisterDestinationWheel(surface);
+        UpdateDestinationPresentation();
+    }
+
+    private void ApplyDestinationPreferences()
+    {
+        var previous = _destination;
+        _destinationCatalog = new(_preferences.EnabledDestinations, _preferences.WindowsApps);
+        _destination = _destinationCatalog.Select(previous);
+        if (previous == ComposerDestination.Codex && _destination != previous) CancelPendingCodexSend();
+        ConfigureComposerRoutes();
+        RebuildDestinationRail();
+        RestoreComposerDraft();
+        _preferences = _preferences with { Destination = _destination };
+        UpdateDestinationPresentation();
+    }
+
+    private void RebuildDestinationRail()
+    {
+        DestinationRail.Children.Clear();
+        _destinationButtons.Clear();
+        _externalDestinationButtons.Clear();
+        foreach (var destination in _destinationCatalog.Enabled)
         {
             var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-            content.Children.Add(DestinationIcon(destination));
-            content.Children.Add(new TextBlock { Text = ComposerDestinations.Label(destination), FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
+            content.Children.Add(_destinationCatalog.WindowsApp(destination) is null ? DestinationIcon(destination) :
+                new FontIcon { Glyph = "\uE737", FontSize = 16 });
+            content.Children.Add(new TextBlock { Text = _destinationCatalog.Label(destination), FontSize = 12,
+                MaxWidth = DestinationLabelWidth - 44, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center });
             var button = new Button
             {
                 Content = content, Width = DestinationLabelWidth, Height = 36,
@@ -72,11 +107,12 @@ public sealed partial class MainPage
             };
             UseStableWidgetButton(button);
             button.Click += (_, _) => { SelectDestination(destination); FocusComposer(); };
-            AutomationProperties.SetName(button, ComposerDestinations.Label(destination));
-            AutomationProperties.SetHelpText(button, "Select destination. Mouse wheel over the selector cycles destinations. Ctrl + mouse wheel works anywhere in the window.");
+            AutomationProperties.SetName(button, _destinationCatalog.Label(destination));
+            ToolTipService.SetToolTip(button, _destinationCatalog.Label(destination));
+            UiLanguage.SetHelpText(button, () => UiText.Get("SelectDestinationMouseWheelOverTheSelectorCycles"));
             if (destination == ComposerDestination.Codex)
             {
-                const string help = "Continue a Codex chat started from HABITAT or start a new chat and show its reply here.";
+                var help = UiText.Get("ContinueACodexChatStartedFromHABITATOr");
                 ToolTipService.SetToolTip(button, help);
                 AutomationProperties.SetHelpText(button, help);
             }
@@ -97,9 +133,6 @@ public sealed partial class MainPage
             row.Children.Add(button);
             DestinationRail.Children.Add(row);
         }
-        surface.Children.Add(DestinationRail);
-        RegisterDestinationWheel(surface);
-        UpdateDestinationPresentation();
     }
 
     internal void RegisterDestinationWheel(UIElement element) => element.AddHandler(
@@ -111,10 +144,10 @@ public sealed partial class MainPage
         if (ReferenceEquals(e, _lastDestinationWheelEvent) ||
             (_windowHost is { IsActive: false })) return;
         var control = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control);
-        var position = e.GetCurrentPoint(DestinationRail).Position;
+        var position = e.GetCurrentPoint(_destinationRailScroll).Position;
         var overSelector = DestinationRail.Visibility == Visibility.Visible &&
-            position.X >= 0 && position.X < DestinationRail.ActualWidth &&
-            position.Y >= 0 && position.Y < DestinationRail.ActualHeight;
+            position.X >= 0 && position.X < _destinationRailScroll.ActualWidth &&
+            position.Y >= 0 && position.Y < _destinationRailScroll.ActualHeight;
         if (!overSelector && (control & CoreVirtualKeyStates.Down) == 0)
         {
             _destinationWheelDelta = 0;
@@ -127,18 +160,19 @@ public sealed partial class MainPage
         _destinationWheelDelta += properties.MouseWheelDelta;
         var steps = _destinationWheelDelta / 120;
         _destinationWheelDelta %= 120;
-        if (steps != 0) SelectDestination(ComposerDestinations.CycleFromWheel(_destination, steps));
+        if (steps != 0) SelectDestination(_destinationCatalog.Cycle(_destination, -steps));
     }
 
-    private void SelectDestination(ComposerDestination destination)
+    private void SelectDestination(string destination)
     {
         if (_updateDialogOpen || _updateHandoff) return;
         if (_destination == ComposerDestination.Codex && destination != _destination) CancelPendingCodexSend();
-        _destination = ComposerDestinations.Normalize(destination);
+        _destination = _destinationCatalog.Select(destination);
         RestoreComposerDraft();
         _preferences = _preferences with { Destination = _destination };
         SavePreferences();
         UpdateDestinationPresentation();
+        if (_destinationButtons.TryGetValue(_destination, out var button)) button.StartBringIntoView();
     }
 
     private void PaintDestinations()
@@ -156,7 +190,7 @@ public sealed partial class MainPage
             button.FontWeight = active ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal;
             foreach (var key in new[] { "ButtonBackgroundPointerOver", "ButtonBackgroundPressed" })
                 button.Resources[key] = transparent;
-            AutomationProperties.SetItemStatus(button, active ? "Selected" : "Not selected");
+            UiLanguage.SetItemStatus(button, () => active ? UiText.Get("Selected") : UiText.Get("NotSelected"));
             var external = _externalDestinationButtons[destination];
             external.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
             external.Foreground = accent;
@@ -172,45 +206,47 @@ public sealed partial class MainPage
         PaintDestinations();
         PresentDestinationSection();
         Composer.PlaceholderText = string.Empty;
-        ComposerHint.Text = ComposerDestinations.Placeholder(_destination);
+        ComposerHint.Text = _destinationCatalog.Placeholder(_destination);
         AutomationProperties.SetName(Composer, ComposerHint.Text);
         UpdateWritingLayout();
-        SendButton.Content = _destination switch
+        SendButton.Content = UiLanguage.Value(SendButton, "Content", () => _destination switch
         {
-            ComposerDestination.Notepad => "Open in Notepad",
-            ComposerDestination.Translate => "Translate",
-            ComposerDestination.Gmail => "Draft email",
-            ComposerDestination.Terminal => "Run command…",
-            ComposerDestination.Run => "Run",
-            ComposerDestination.VSCode => "Run in VS Code",
-            ComposerDestination.Codex => "Send to Codex",
-            ComposerDestination.OpenAI => "Send",
-            _ => "Search"
-        };
+            ComposerDestination.Notepad => UiText.Get("OpenInNotepad"),
+            ComposerDestination.Translate => UiText.Get("Translate"),
+            ComposerDestination.Gmail => UiText.Get("DraftEmail"),
+            ComposerDestination.Terminal => UiText.Get("RunCommandMessage"),
+            ComposerDestination.Run => UiText.Get("Run"),
+            ComposerDestination.VSCode => UiText.Get("RunInVSCode"),
+            ComposerDestination.Codex => UiText.Get("SendToCodex"),
+            ComposerDestination.OpenAI => UiText.Get("Send"),
+            _ => _destinationCatalog.WindowsApp(_destination) is not null || _destination.Length == 0
+                ? _destinationCatalog.ActionLabel(_destination) : UiText.Get("Search")
+        });
+        UpdateDestinationStatus();
         UpdateSendState();
     }
 
-    private Task LaunchDestinationAsync(ComposerDestination destination, string draft, bool openExternally = false) =>
+    private Task LaunchDestinationAsync(string destination, string draft, bool openExternally = false) =>
         RunOperationAsync(() => _composer.SubmitAsync(destination, draft, openExternally));
 
     private async Task<bool> ConfirmTerminalAsync(string command)
     {
         if (HasAppearanceOverlay) return false;
         var content = new StackPanel { Spacing = 12 };
-        content.Children.Add(new TextBlock { Text = "Run this command in a new PowerShell window?", TextWrapping = TextWrapping.Wrap });
+        content.Children.Add(UiLanguage.Watch(new TextBlock { Text = UiText.Get("RunThisCommandInANewPowerShellWindow"), TextWrapping = TextWrapping.Wrap }, ("Text", () => (object?)(UiText.Get("RunThisCommandInANewPowerShellWindow")))));
         var preview = new TextBox
         {
             Text = command, IsReadOnly = true, AcceptsReturn = true, TextWrapping = TextWrapping.NoWrap,
             MaxHeight = 240, FontFamily = new FontFamily("Cascadia Mono")
         };
-        AutomationProperties.SetName(preview, "PowerShell command to run");
+        UiLanguage.SetName(preview, () => UiText.Get("PowerShellCommandToRun"));
         content.Children.Add(preview);
-        content.Children.Add(new TextBlock { Text = $"Working directory: {_powerShell.WorkingDirectory}", TextWrapping = TextWrapping.Wrap });
-        var dialog = new ContentDialog
+        content.Children.Add(UiLanguage.Watch(new TextBlock { Text = UiText.Format("WorkingDirectoryMessage", _powerShell.WorkingDirectory), TextWrapping = TextWrapping.Wrap }, ("Text", () => (object?)(UiText.Format("WorkingDirectoryMessage", _powerShell.WorkingDirectory)))));
+        var dialog = UiLanguage.Watch(new ContentDialog
         {
-            XamlRoot = XamlRoot, Title = "Run PowerShell command", Content = content,
-            PrimaryButtonText = "Run command", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close
-        };
+            XamlRoot = XamlRoot, Title = UiText.Get("RunPowerShellCommand"), Content = content,
+            PrimaryButtonText = UiText.Get("RunCommand"), CloseButtonText = UiText.Get("Cancel"), DefaultButton = ContentDialogButton.Close
+        }, ("Title", () => (object?)(UiText.Get("RunPowerShellCommand"))), ("PrimaryButtonText", () => (object?)(UiText.Get("RunCommand"))), ("CloseButtonText", () => (object?)(UiText.Get("Cancel"))));
         StyleDialog(dialog);
         _terminalConfirmationOpen = true;
         try { return await ShowDialogAsync(dialog) == ContentDialogResult.Primary; }

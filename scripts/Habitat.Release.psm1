@@ -1,5 +1,48 @@
 $ErrorActionPreference = 'Stop'
 
+function Assert-HabitatNoLinks([string]$Path) {
+    if (-not ('HabitatPackagingPath' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.IO;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+public static class HabitatPackagingPath {
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct FindData {
+        public uint Attributes;
+        public System.Runtime.InteropServices.ComTypes.FILETIME Creation, Access, Write;
+        public uint SizeHigh, SizeLow, ReparseTag, Reserved;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string Name;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 14)] public string AlternateName;
+    }
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr FindFirstFileW(string path, out FindData data);
+    [DllImport("kernel32.dll")] private static extern bool FindClose(IntPtr handle);
+    // Only the documented Cloud Files tags are metadata rather than path aliases.
+    // All junctions, symlinks, other tags and unreadable tags remain rejected.
+    public static bool IsCloudTag(uint tag) { return (tag & 0xFFFF0FFFu) == 0x9000001Au; }
+    public static void EnsureNoLinks(string path) {
+        for (var item = new DirectoryInfo(System.IO.Path.GetFullPath(path)); item != null; item = item.Parent) {
+            FileAttributes attributes;
+            try { attributes = File.GetAttributes(item.FullName); }
+            catch (FileNotFoundException) { continue; }
+            catch (DirectoryNotFoundException) { continue; }
+            if ((attributes & FileAttributes.ReparsePoint) == 0) continue;
+            FindData data;
+            var handle = FindFirstFileW(item.FullName, out data);
+            if (handle == new IntPtr(-1)) throw new Win32Exception(Marshal.GetLastWin32Error());
+            try {
+                if (!IsCloudTag(data.ReparseTag)) throw new InvalidDataException("Paths cannot contain filesystem links: " + item.FullName);
+            } finally { FindClose(handle); }
+        }
+    }
+}
+'@
+    }
+    [HabitatPackagingPath]::EnsureNoLinks($Path)
+}
+
 function Assert-HabitatChildPath([string]$Root, [string]$Path) {
     $rootPath = [IO.Path]::GetFullPath($Root).TrimEnd('\', '/')
     $childPath = [IO.Path]::GetFullPath($Path)
@@ -138,4 +181,4 @@ function Install-HabitatRelease {
     } finally { $lock.Dispose() }
 }
 
-Export-ModuleMember -Function New-HabitatBuildManifest, Test-HabitatBuildManifest, Get-HabitatActiveDirectory, Install-HabitatRelease
+Export-ModuleMember -Function New-HabitatBuildManifest, Test-HabitatBuildManifest, Get-HabitatActiveDirectory, Install-HabitatRelease, Assert-HabitatNoLinks

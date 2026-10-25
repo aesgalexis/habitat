@@ -15,11 +15,11 @@ internal sealed class ConversationView
     private bool _scrollPending, _scrollQueued;
     private double _lastScrollableHeight;
     public StackPanel Messages { get; } = new() { Spacing = 22 };
-    public ScrollViewer Scroll { get; } = new();
-    private readonly TextBlock _notice = new()
+    public ScrollViewer Scroll { get; } = ScrollEdgeFade.Enable(new());
+    private readonly TextBlock _notice = UiLanguage.Watch(new TextBlock()
     {
-        Text = "Earlier messages remain available in ChatGPT.", FontSize = 12, TextWrapping = TextWrapping.Wrap
-    };
+        Text = UiText.Get("EarlierMessagesRemainAvailableInChatGPT"), FontSize = 12, TextWrapping = TextWrapping.Wrap
+    }, ("Text", () => (object?)(UiText.Get("EarlierMessagesRemainAvailableInChatGPT"))));
 
     public ConversationView(ConversationSession session, Func<MessageTone, Brush> toneBrush, Func<Brush> textBrush)
     {
@@ -97,6 +97,20 @@ internal sealed class ConversationView
             if (child is not StackPanel group || group.Tag is not MessageTone tone) continue;
             if (group.Children.Count > 0 && group.Children[0] is TextBlock author) author.Foreground = _toneBrush(tone);
             if (group.Children.Count > 1 && group.Children[1] is TextBlock body) body.Foreground = _textBrush();
+        }
+    }
+
+    public void RefreshLanguage()
+    {
+        foreach (var child in Messages.Children.OfType<StackPanel>())
+        {
+            if (child.Tag is not MessageTone tone || child.Children[0] is not TextBlock author) continue;
+            if (tone == MessageTone.User) author.Text = UiLanguage.Value(author, "Text", () => UiText.Get("YOU"));
+            else if (tone == MessageTone.Muted)
+            {
+                author.Text = UiLanguage.Value(author, "Text", () => UiText.Get("SYSTEM"));
+                if (child.Children[1] is TextBlock body) body.Text = UiLanguage.Value(body, "Text", () => UiText.LocalizeMessage(body.Text));
+            }
         }
     }
 }

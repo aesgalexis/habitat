@@ -114,6 +114,19 @@ public sealed partial class MainPage
             await pending;
             if (UpdateButton.Visibility != Visibility.Collapsed || _nextUpdateCheck < DateTimeOffset.UtcNow.AddHours(5))
                 throw new InvalidOperationException("An up-to-date result must hide Update and retain the six-hour schedule.");
+            var previousDestination = _destination;
+            SelectDestination(ComposerDestination.Codex);
+            Composer.Text = "Recovered scheduled-chat draft · mañana";
+            new UpdateRestartState(1, _destination, _composerDrafts.SaveForRestart()).Save(_services.Paths.UpdateDraftsPath);
+            Composer.Text = "";
+            SelectDestination(ComposerDestination.Google);
+            RestoreUpdateRestartState();
+            if (_destination != ComposerDestination.Codex || Composer.Text != "Recovered scheduled-chat draft · mañana" ||
+                File.Exists(_services.Paths.UpdateDraftsPath))
+                throw new InvalidOperationException("Modal updates must restore the consolidated destination and exact draft once after restarting.");
+            SelectDestination(previousDestination);
+            Composer.Text = draft;
+            File.AppendAllText(log, "PASS: modal update restart restores the exact multilingual Codex draft and selected destination from isolated storage\n");
             File.AppendAllText(log, "PASS: automatic centered update modal in both themes/sidebar layouts, deferred behind existing modals, keyboard focus, blocked destination changes/global capture, duplicate prevention, unchanged workspace, Later, cancelable download, menu retry, offline retry and coalesced checks; no network or installer\n");
         }
         finally
@@ -143,17 +156,17 @@ public sealed partial class MainPage
 
     private sealed class CheckedUpdates : IAppUpdateService
     {
-        public AppUpdate? Available;
+        public ReleaseAppUpdate? Available;
         public bool Fail, UsedCancelableToken, Canceled;
         public int Requests, Preparations, Launches;
-        public TaskCompletionSource<AppUpdate?>? Pending;
-        public Task<AppUpdate?> CheckAsync(CancellationToken token)
+        public TaskCompletionSource<ReleaseAppUpdate?>? Pending;
+        public Task<ReleaseAppUpdate?> CheckAsync(CancellationToken token)
         {
             Requests++; UsedCancelableToken = token.CanBeCanceled;
             if (Fail) throw new HttpRequestException("Synthetic offline check");
             return Pending?.Task.WaitAsync(token) ?? Task.FromResult(Available);
         }
-        public async Task<PreparedAppUpdate> PrepareAsync(AppUpdate release, IProgress<int> progress, CancellationToken token)
+        public async Task<PreparedAppUpdate> PrepareAsync(ReleaseAppUpdate release, IProgress<int> progress, CancellationToken token)
         {
             Preparations++;
             try { await Task.Delay(Timeout.Infinite, token); }

@@ -52,7 +52,9 @@ Install and sign in to the Codex desktop app separately. This copy reads convers
 
 Sending checks the selected conversation and its editor before delivery. An existing draft or running turn can prevent a send. The editor clears only after confirmed delivery; if confirmation is uncertain, inspect Codex before retrying. With multiple Codex windows, activate the intended one once. Duplicate titles can prevent unambiguous identification.
 
-**Stop waiting** stops HABITAT's local wait. Codex retains control of its turn. HABITAT displays user messages and final text replies from the last twenty turns; its history is separate from OpenAI. Earlier descriptions of scheduling and persistent selection require reconciliation; consult [project status](PROJECT_STATUS.md).
+**Stop waiting** stops HABITAT's local wait. Codex retains control of its turn. HABITAT displays user messages and final text replies from the last twenty turns; its history is separate from OpenAI. The selected HABITAT chat stays linked across Codex navigation and restarts; **New chat** starts another without deleting the old conversation. The header shows the last known model and reasoning settings.
+
+The calendar beside **Send to Codex** opens [scheduled messages](CODEX_SCHEDULING.md), including new chats, existing HABITAT chats and resumptions after usage limits. Queue counts, the next delivery time and review warnings persist across restarts. HABITAT must remain open with Windows signed in.
 
 ## VS Code
 
@@ -83,8 +85,10 @@ Weather appears at the top of the sidebar. **Preferences… → Location** contr
 
 **Preferences… → Appearance** offers **Day**, **Night**, **Hybrid** and background opacity. The default is Hybrid at 15% opacity. Appearance and window placement persist. The interface stays in English; this does not change the language of your content or the Translate target. See [LOCALIZATION.md](LOCALIZATION.md).
 
+Appearance also includes the [wallpaper library](WALLPAPERS.md): import images or select one of the five [included illustrations](WALLPAPER_ART.md). Per-image settings and the selected background persist. **Preferences… → Sidebar** adds, removes and orders Gmail, Tasks and [Markets](MARKETS.md); Weather stays first and Facebook remains available. **Preferences… → Destinations** controls the destination order and personal Windows applications.
+
 ## Global shortcut, updates and recovery
 
 **Ctrl+H** focuses HABITAT and can import selected text without sending it. Configure it in **Preferences… → Shortcuts**. Replacing an existing draft requires confirmation. If selection or clipboard backup cannot be verified, the shortcut only focuses HABITAT. See [GLOBAL_SHORTCUT.md](GLOBAL_SHORTCUT.md).
 
-Before an update, save important window text and results: they are cleared on restart. Saved tasks, preferences and credentials remain. [UPDATES.md](UPDATES.md) is the reference for detection, confirmation and recovery. For connection failures or uncertain sends, use [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+Updates preserve drafts, saved tasks, preferences and credentials. Save transient results you want to keep. [UPDATES.md](UPDATES.md) is the reference for detection, confirmation and recovery. For connection failures or uncertain sends, use [TROUBLESHOOTING.md](TROUBLESHOOTING.md).

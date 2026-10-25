@@ -5,9 +5,7 @@ function Assert-HabitatUpdatePath([string]$Root, [string]$Path) {
     $rootPath = [IO.Path]::GetFullPath($Root).TrimEnd('\', '/')
     $child = [IO.Path]::GetFullPath($Path)
     if (-not $child.StartsWith($rootPath + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Update path escapes its directory.' }
-    for ($walk = $child; $walk; $walk = Split-Path -Parent $walk) {
-        if ((Test-Path -LiteralPath $walk) -and ((Get-Item -LiteralPath $walk -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Update paths cannot contain filesystem links.' }
-    }
+    Assert-HabitatNoLinks $child
     return $child
 }
 

@@ -1,7 +1,5 @@
 # Mercados
 
-> **Referencia pendiente de reconciliar · 24 de octubre de 2026.** No se encontraron MarketsService, MainPage.Markets ni sus controles en esta copia. El contenido conservado debajo describe una referencia anterior, incluidas sus versiones, etiquetas y pruebas; no acredita funciones disponibles, recursos incluidos ni pruebas ejecutables aquí. Puede pertenecer a otra rama. Consulta [PROJECT_STATUS.md](PROJECT_STATUS.md) antes de utilizarlo. Las etiquetas bilingües conservadas tampoco sustituyen la [regla de interfaz en inglés](LOCALIZATION.md).
-
 El widget **Markets / Mercados** se añade, retira y ordena desde **Preferences → Sidebar / Preferencias → Barra lateral**. Está desactivado en instalaciones nuevas; los perfiles anteriores conservan su posición debajo de Tareas hasta personalizarla. La barra recogida conserva el icono y la variación porcentual. Al desplegarla muestra el nombre, la cotización en la moneda de origen, la variación diaria y la hora del dato. Su nombre accesible y tooltip incluyen la fecha completa de la cotización. Véase [Barra lateral](SIDEBAR.md).
 
 Al pulsarlo abre un panel con los favoritos, precios, variación diaria, gráfica del último mes y hasta tres titulares con fecha y dominio de origen. Los enlaces abren Chrome mediante el lanzador habitual de HABITAT. Los titulares conservan el texto original del proveedor; la interfaz, los estados y la accesibilidad siguen el idioma de Preferencias.

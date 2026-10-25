@@ -6,7 +6,7 @@ namespace Habitat.Services;
 
 internal sealed class DesktopUpdateService : IAppUpdateService
 {
-    private readonly UpdateInstallation? _installation;
+    private readonly ReleaseUpdateInstallation? _installation;
     private readonly ReleaseUpdateClient? _client;
     private readonly bool _enabled;
     public string? FailedVersion { get; }
@@ -18,7 +18,7 @@ internal sealed class DesktopUpdateService : IAppUpdateService
         if (!_enabled) return;
         try
         {
-            _installation = UpdateInstallation.Find(AppContext.BaseDirectory);
+            _installation = ReleaseUpdateInstallation.Find(AppContext.BaseDirectory);
             var resultPath = Path.Combine(paths.LocalDirectory, "updates", "last-result.json");
             if (File.Exists(resultPath))
             {
@@ -31,8 +31,8 @@ internal sealed class DesktopUpdateService : IAppUpdateService
             _client = new(typeof(App).Assembly.GetName().Version!, _installation.Kind, Path.Combine(paths.LocalDirectory, "updates"));
     }
 
-    public Task<AppUpdate?> CheckAsync(CancellationToken token) => _client?.CheckAsync(token) ?? Task.FromResult<AppUpdate?>(null);
-    public Task<PreparedAppUpdate> PrepareAsync(AppUpdate release, IProgress<int> progress, CancellationToken token) =>
+    public Task<ReleaseAppUpdate?> CheckAsync(CancellationToken token) => _client?.CheckAsync(token) ?? Task.FromResult<ReleaseAppUpdate?>(null);
+    public Task<PreparedAppUpdate> PrepareAsync(ReleaseAppUpdate release, IProgress<int> progress, CancellationToken token) =>
         _client?.PrepareAsync(release, progress, token) ?? throw new InvalidOperationException("Updates are unavailable for this installation.");
 
     public async Task LaunchInstallerAsync(PreparedAppUpdate prepared, CancellationToken token)

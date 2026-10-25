@@ -22,7 +22,7 @@ public sealed partial class BridgeService : IAsyncDisposable
     private bool _disposed;
     private DateTimeOffset UtcNow => _time.GetUtcNow();
     private object? _connectionOwner;
-    private string _connectionIssue = "Reconnecting to ChatGPT…";
+    private string _connectionIssue = UiText.Get("ReconnectingToChatGPT");
     private static readonly JsonSerializerOptions SocketJson = new(JsonSerializerDefaults.Web);
 
     public BridgeService(int port = 8765, TimeProvider? timeProvider = null)
@@ -40,7 +40,7 @@ public sealed partial class BridgeService : IAsyncDisposable
 
     public string PairKey { get; }
     internal string? Address => _server?.Urls.SingleOrDefault();
-    public string ConnectionIssue { get { lock (_stateLock) return _connectionIssue; } }
+    public string ConnectionIssue { get { lock (_stateLock) return UiText.BridgeMessage(_connectionIssue); } }
 
     public bool IsConnected
     {
@@ -108,7 +108,7 @@ public sealed partial class BridgeService : IAsyncDisposable
                 {
                     _lastPoll = UtcNow;
                     _connectionOwner = null;
-                    _connectionIssue = "Reconnecting to ChatGPT…";
+                    _connectionIssue = UiText.Get("ReconnectingToChatGPT");
                     // Keep offering an unacknowledged message. If Chrome
                     // reloads or invalidates the content script between this
                     // response and its acknowledgement, the replacement
@@ -152,7 +152,7 @@ public sealed partial class BridgeService : IAsyncDisposable
         catch (Exception exception)
         {
             if (_server is not null) { await _server.DisposeAsync(); _server = null; }
-            StartFailed?.Invoke(this, $"Could not open port {_port}: {exception.Message}");
+            StartFailed?.Invoke(this, UiText.Format("CouldNotOpenPort", _port, exception.Message));
         }
         finally { _lifecycle.Release(); }
     }
@@ -168,12 +168,12 @@ public sealed partial class BridgeService : IAsyncDisposable
             }
             if (openExternally && (_connectionOwner is null || !_supportsExternalOpen))
             {
-                reason = "Reload the HABITAT browser extension to send and open ChatGPT.";
+                reason = UiText.Get("ReloadTheHABITATBrowserExtensionToSendAnd");
                 return false;
             }
             if (!_session.TryQueue(text, openExternally))
             {
-                reason = "Wait for the current response to finish";
+                reason = UiText.Get("WaitForTheCurrentResponseToFinish");
                 return false;
             }
             reason = string.Empty;
@@ -281,7 +281,7 @@ public sealed partial class BridgeService : IAsyncDisposable
                 _connectionOwner = owner;
                 _supportsExternalOpen = root.TryGetProperty("supportsExternalOpen", out var supportsOpen) && supportsOpen.ValueKind == JsonValueKind.True;
                 var issue = root.TryGetProperty("issue", out var reason) && reason.ValueKind == JsonValueKind.String ? reason.GetString() : null;
-                _connectionIssue = string.IsNullOrWhiteSpace(issue) ? "Reconnecting to ChatGPT…" : issue[..Math.Min(issue.Length, 160)];
+                _connectionIssue = string.IsNullOrWhiteSpace(issue) ? UiText.Get("ReconnectingToChatGPT") : issue[..Math.Min(issue.Length, 160)];
             }
             if (ready && root.TryGetProperty("model", out var model) && model.ValueKind == JsonValueKind.String)
             {

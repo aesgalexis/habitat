@@ -36,9 +36,11 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Search extension checks failed.' }
     node tests/extension-youtube.checks.cjs
     if ($LASTEXITCODE -ne 0) { throw 'YouTube extension checks failed.' }
+    node tests/localization.checks.cjs
+    if ($LASTEXITCODE -ne 0) { throw 'Interface localization checks failed.' }
     node tests/extension-facebook.checks.cjs
     if ($LASTEXITCODE -ne 0) { throw 'Facebook extension checks failed.' }
-    foreach ($suite in 'Appearance', 'Bridge', 'Core', 'Destination', 'Gmail', 'Tasks', 'Weather', 'Hotkey') {
+    foreach ($suite in 'Appearance', 'Bridge', 'Core', 'Destination', 'Gmail', 'Tasks', 'Weather', 'Hotkey', 'Window') {
         dotnet run --project "tests/Habitat.$suite.Checks" --configuration Release --no-restore `
             "-p:BaseOutputPath=$verifyOutput/$suite/"
         if ($LASTEXITCODE -ne 0) { throw "$suite checks failed." }

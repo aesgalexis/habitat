@@ -1,8 +1,8 @@
 namespace Habitat.Services;
 
-internal sealed record UpdateInstallation(string Root, string Executable, UpdatePackageKind Kind)
+internal sealed record ReleaseUpdateInstallation(string Root, string Executable, UpdatePackageKind Kind)
 {
-    internal static UpdateInstallation? Find(string baseDirectory)
+    internal static ReleaseUpdateInstallation? Find(string baseDirectory)
     {
         var current = Path.TrimEndingDirectorySeparator(Path.GetFullPath(baseDirectory));
         var executable = Path.Combine(current, "HABITAT.exe");

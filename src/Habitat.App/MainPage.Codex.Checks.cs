@@ -2,6 +2,9 @@
 using Habitat.Services;
 using Habitat.Features.Codex;
 using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 
 namespace Habitat;
 
@@ -89,12 +92,13 @@ public sealed partial class MainPage
             Composer.Text = "";
         }
         await CheckCodexConversationUiAsync(logPath);
+        await CheckCodexSettingsUiAsync(logPath);
         var previousService = _services.Codex;
         var stoppingService = new CheckCodexService { WaitForOpenCancellation = true };
         try
         {
             _services.Codex = stoppingService;
-            using var section = new Habitat.Features.Codex.CodexSection(() => _services.Codex, _ => { });
+            using var section = new Habitat.Features.Codex.CodexSection(() => _services.Codex, _ => { }, ToneBrush);
             var opening = section.OpenAsync();
             section.Dispose();
             await opening;
@@ -129,10 +133,18 @@ public sealed partial class MainPage
             SendCurrentMessage();
             if (fake.Sends != 1 || !CodexChat.IsBusy)
                 throw new InvalidOperationException("Editing while Codex responds must preserve response tracking and prevent duplicate sends.");
+            fake.Interrupted = true;
+            await CodexChat.RefreshAsync();
+            if (CodexChat.IsBusy || CodexChat.StatusText != UiText.Get("TheCodexTurnDidNotCompleteOpenThe"))
+                throw new InvalidOperationException("An interrupted snapshot must end the local wait with a notice.");
             fake.Visible = fake.B;
             await CodexChat.RefreshAsync();
-            if (CodexChat.Target != fake.B || CodexChat.Messages.Last().Text != "B reply")
-                throw new InvalidOperationException("HABITAT must follow another linked HABITAT chat while the old chat responds.");
+            if (CodexChat.Target != fake.A || !CodexChat.Messages.Any(message => message.Author == "YOU" && message.Text == original))
+                throw new InvalidOperationException("Navigating Codex must keep HABITAT's linked chat and original instruction.");
+            fake.Visible = null;
+            await CodexChat.RefreshAsync();
+            if (CodexChat.Target != fake.A || !CodexChat.HasMessages)
+                throw new InvalidOperationException("Opening a new chat in Codex must not clear HABITAT's conversation.");
             SelectDestination(ComposerDestination.OpenAI);
             fake.Complete();
             await CodexChat.RefreshAsync();
@@ -142,13 +154,39 @@ public sealed partial class MainPage
             SelectDestination(ComposerDestination.Codex);
             await CodexChat.RefreshAsync();
             if (CodexChat.Messages[^2].Text != original || CodexChat.Messages[^1].Text != "A recovered reply" ||
-                Composer.Text != "Next instruction" || !SendButton.IsEnabled)
+                Composer.Text != "Next instruction" || !SendButton.IsEnabled ||
+                CodexChat.StatusText != UiText.Get("FollowingACodexChatStartedFromHABITAT"))
                 throw new InvalidOperationException("Returning to Codex must recover the final response and preserve the next draft.");
+            CheckCodexMessageAppearance();
             fake.Result = CodexDeliveryResult.Unconfirmed;
             await LaunchDestinationAsync(ComposerDestination.Codex, Composer.Text);
             if (Composer.Text != "Next instruction" || CodexChat.IsBusy || !CodexChat.StatusText.Contains("could not be confirmed"))
                 throw new InvalidOperationException("An uncertain Codex send must retain its instruction without waiting for an invented turn.");
-            File.AppendAllText(logPath, "PASS: Codex shows linked HABITAT chats, sends a contextual follow-up, recovers its reply across chat and destination changes, preserves original text and keeps OpenAI history separate\n");
+            foreach (var language in new[] { "es", "en" })
+            {
+                UiText.SetLanguage(language); UiLanguage.Refresh(); CodexChat.RefreshLanguage();
+                var button = ((Grid)CodexChat.View).Children.OfType<Grid>().Single().Children.OfType<StackPanel>()
+                    .Single(panel => panel.Children[0] is Button).Children.OfType<Button>().First();
+                if ((string)button.Content != UiText.Get("CodexNewChat"))
+                    throw new InvalidOperationException("New chat must follow the interface language.");
+            }
+            await CodexChat.NewChatAsync();
+            await CodexChat.RefreshAsync();
+            UpdateWritingLayout();
+            if (CodexChat.Target is not null || CodexChat.HasContent || Composer.Text.Length != 0 ||
+                HasActiveConversation || Composer.TextAlignment != TextAlignment.Center ||
+                SendButton.HorizontalAlignment != HorizontalAlignment.Center ||
+                !ReferenceEquals(Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot), Composer))
+                throw new InvalidOperationException("New chat must clear the link and draft and return focus to the centered initial editor.");
+            fake.Result = CodexDeliveryResult.Sent;
+            Composer.Text = "New conversation";
+            await LaunchDestinationAsync(ComposerDestination.Codex, Composer.Text);
+            if (CodexChat.Target != fake.B || Composer.Text.Length != 0)
+                throw new InvalidOperationException("The first send after an explicit reset must link the new conversation.");
+            await CodexChat.NewChatAsync();
+            if (CodexChat.IsBusy || CodexChat.Target is not null)
+                throw new InvalidOperationException("Starting another chat must also release a pending local response wait.");
+            File.AppendAllText(logPath, "PASS: Codex keeps its linked conversation across desktop navigation, new chats and destination changes; explicit New chat resets the link and centered editor, localizes labels and starts a separate conversation\n");
         }
         finally
         {
@@ -157,27 +195,64 @@ public sealed partial class MainPage
         }
     }
 
+    private void CheckCodexMessageAppearance()
+    {
+        var theme = RequestedTheme;
+        var language = UiText.Language;
+        try
+        {
+            foreach (var currentLanguage in new[] { "en", "es" })
+            foreach (var currentTheme in new[] { ElementTheme.Light, ElementTheme.Dark })
+            {
+                UiText.SetLanguage(currentLanguage);
+                CodexChat.RefreshLanguage();
+                RequestedTheme = currentTheme;
+                CodexChat.RefreshAppearance();
+                var scroll = ((Grid)CodexChat.View).Children.OfType<ScrollViewer>().Single();
+                foreach (var group in ((StackPanel)scroll.Content).Children.OfType<StackPanel>())
+                {
+                    var tone = (MessageTone)group.Tag;
+                    var author = (TextBlock)group.Children[0];
+                    if (((SolidColorBrush)author.Foreground).Color != ((SolidColorBrush)ToneBrush(tone)).Color ||
+                        author.Opacity != 1 || author.Text != (tone == MessageTone.User ? UiText.Get("YOU") : "Codex"))
+                        throw new InvalidOperationException("Codex authors must match OpenAI colors in both themes and interface languages.");
+                }
+            }
+        }
+        finally
+        {
+            RequestedTheme = theme;
+            UiText.SetLanguage(language);
+            CodexChat.RefreshLanguage();
+            CodexChat.RefreshAppearance();
+        }
+    }
+
     private sealed class CheckCodexService : ICodexChatService
     {
         public readonly CodexChatTarget A = new("11111111-1111-1111-1111-111111111111", "Check A");
         public readonly CodexChatTarget B = new("22222222-2222-2222-2222-222222222222", "Check B");
-        public CodexChatTarget Visible;
+        public CodexChatTarget? Visible;
+        private CodexChatTarget? _linked;
         public int Sends;
         public int Opens;
         public bool WaitForOpenCancellation;
+        public bool Interrupted;
         public CodexDeliveryResult Result = CodexDeliveryResult.Sent;
         private bool _complete;
-        public CheckCodexService() => Visible = A;
-        public Task<CodexChatSelection> GetVisibleAsync(CancellationToken token) => Task.FromResult(new CodexChatSelection(Visible, false));
+        public CheckCodexService() => _linked = Visible = A;
+        public Task<CodexChatSelection> GetVisibleAsync(CancellationToken token) => throw new InvalidOperationException("The conversation view must not follow Codex's visible selection.");
+        public Task<CodexChatSelection> GetLinkedAsync(CancellationToken token) => Task.FromResult(new CodexChatSelection(_linked, _linked is null));
+        public Task ClearLinkedAsync(CancellationToken token) { _linked = null; return Task.CompletedTask; }
         public Task<CodexChatHistory> ReadAsync(CodexChatTarget target, CancellationToken token)
         {
             List<CodexChatTurn> turns = [new("before", "completed", [new("old", "Codex", target == A ? "A previous reply" : "B reply")])];
-            if (target == A && Sends > 0) turns.Add(new("ours", _complete ? "completed" : "inProgress",
+            if (target == A && Sends > 0) turns.Add(new("ours", _complete ? "completed" : Interrupted ? "interrupted" : "inProgress",
                 [new("user", "YOU", "serialized input"), .. _complete ? new[] { new CodexChatMessage("reply", "Codex", "A recovered reply") } : []]));
             return Task.FromResult(new CodexChatHistory(target, turns));
         }
         public Task<CodexChatSubmission> SendAsync(CodexChatTarget? expected, string text, CancellationToken token)
-        { Sends++; return Task.FromResult(new CodexChatSubmission(Result, expected, "before")); }
+        { Sends++; if (Result == CodexDeliveryResult.Sent) _linked = expected ?? B; return Task.FromResult(new CodexChatSubmission(Result, _linked, "before")); }
         public void Complete() => _complete = true;
         public async Task<bool> OpenChatAsync(CodexChatTarget? target, CancellationToken token)
         {
@@ -227,6 +302,8 @@ public sealed partial class MainPage
     {
         private string? _created;
         public Task<CodexChatSelection> GetVisibleAsync(CancellationToken token) => service.GetVisibleAsync(token);
+        public Task<CodexChatSelection> GetLinkedAsync(CancellationToken token) => service.GetLinkedAsync(token);
+        public Task ClearLinkedAsync(CancellationToken token) => service.ClearLinkedAsync(token);
         public Task<CodexChatHistory> ReadAsync(CodexChatTarget target, CancellationToken token) => service.ReadAsync(target, token);
         public async Task<CodexChatSubmission> SendAsync(CodexChatTarget? expected, string text, CancellationToken token)
         {

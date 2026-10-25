@@ -5,7 +5,7 @@ namespace Habitat.Services;
 internal sealed record VSCodeProjectChoice(VSCodeFolder? Folder, VSCodeProject? Project)
 {
     public bool IsPicker => Folder is null;
-    public string Label => Folder is null ? "Choose folder…" : Project?.Label ?? Folder.Name;
+    public string Label => Folder is null ? UiText.Get("ChooseFolder") : Project?.Label ?? Folder.Name;
 }
 
 internal static class VSCodeFolders

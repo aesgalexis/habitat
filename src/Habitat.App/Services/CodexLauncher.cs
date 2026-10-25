@@ -28,16 +28,22 @@ internal sealed class CodexLauncher(Action<string>? trace = null, AppDataPaths? 
     private async Task<CodexChatService> GetChatAsync(CancellationToken token)
     {
         if (_chat is not null) return _chat;
-        var package = await GetPackageAsync(token) ?? throw new IOException("Install Codex to use this destination.");
+        var package = await GetPackageAsync(token) ?? throw new IOException(UiText.Get("InstallCodexToUseThisDestination"));
         _desktop ??= new CodexDesktopAutomation(package.Family, async uri =>
             await Launcher.LaunchUriAsync(uri, new LauncherOptions { TargetApplicationPackageFamilyName = package.Family }),
             package.Executable, trace);
         return _chat ??= new CodexChatService(_desktop, new CodexReadClient(package.Reader),
             (text, cancellation) => new CodexDelivery(_desktop, trace: trace).SendAsync(text, cancellation),
-            new CodexChatOrigins((paths ?? AppDataPaths.Production).CodexChatsPath));
+            new CodexChatOrigins((paths ?? AppDataPaths.Production).CodexChatsPath), trace);
     }
 
     public async Task<CodexChatSelection> GetVisibleAsync(CancellationToken token) => await (await GetChatAsync(token)).GetVisibleAsync(token);
+    public async Task<CodexChatSelection> GetLinkedAsync(CancellationToken token) => await (await GetChatAsync(token)).GetLinkedAsync(token);
+    public async Task ClearLinkedAsync(CancellationToken token) => await (await GetChatAsync(token)).ClearLinkedAsync(token);
+    public async Task<IReadOnlyList<CodexScheduleTarget>> ListScheduleTargetsAsync(CancellationToken token) =>
+        await (await GetChatAsync(token)).ListScheduleTargetsAsync(token);
+    public async Task<CodexScheduledAttempt> SendScheduledAsync(CodexChatTarget? target, string text, CancellationToken token, string? interruptedTurnId = null) =>
+        await (await GetChatAsync(token)).SendScheduledAsync(target, text, token, interruptedTurnId);
     public async Task<CodexChatHistory> ReadAsync(CodexChatTarget target, CancellationToken token) => await (await GetChatAsync(token)).ReadAsync(target, token);
     public async Task<CodexChatSubmission> SendAsync(CodexChatTarget? expected, string text, CancellationToken token) =>
         await (await GetChatAsync(token)).SendAsync(expected, text, token);

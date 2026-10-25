@@ -2,14 +2,9 @@
 
 ## Unreleased
 
-- Facebook: diagnóstico local por fases de conexión y lectura, con versión del worker y contadores estructurales sin datos personales; el popup distingue contactos recibidos, panel vacío y error de lectura.
-
-- Facebook: el popup distingue permiso concedido y conexión al escritorio, conecta al habilitar el acceso y ofrece Reconnect Facebook o recarga de la extensión si el worker en ejecución es anterior. Se recuperan sockets abiertos sin ticks y se comprueba el worker JavaScript contra el puente C# con HTTP/WebSocket reales en un puerto aislado.
-
-- Corregidos el icono de Facebook (vectorial monocromo, sin fondo azul) y la barra contigua de contactos: ancho fijo de 40 píxeles, solo avatares y scroll vertical, independiente del sidebar principal. La falta de conexión ofrece recuperación visible en lugar de quedar oculta en un icono con tooltip.
-
-- Widget Facebook: segunda barra de avatares a partir del panel Contacts cargado en Chrome, con nombres originales en tooltips, enlaces cuando existen y lectura mediante la extensión, sin Graph API. Acceso opcional y revocable, canal local independiente, cancelación y datos en memoria. Verificación con Facebook real pendiente.
-- Aviso de actualización modal con el botón Update centrado, bloqueo de navegación y captura global, aplazamiento con Later y recuperación desde el menú. Progreso accesible como porcentaje para evitar el fallo del control ProgressBar en el runtime WinUI incluido.
+- Recuperadas las 16 revisiones consolidadas hasta 0.16.1 mediante fusión con la rama de Facebook: fondos e ilustraciones, mensajes programados de Codex, chat persistente, Mercados, sidebar configurable, destinos personales y mejoras de lectura y ventana.
+- Conservados Facebook y las correcciones locales de la extensión 0.10.3, su barra de avatares y los avisos modales de actualización. La personalización del sidebar mantiene Facebook; la actualización conserva borradores y espera los envíos de Codex en curso.
+- Interfaz en inglés conforme a la regla vigente; los perfiles bilingües conservan sus datos y usan las etiquetas inglesas.
 
 ## 0.16.1 — 2026-10-23
 
