@@ -20,6 +20,6 @@ La rama de Facebook partía de 4faa5e9 (0.10.0). Cambiar a esa rama sin integrar
 
 ## Distribución y decisiones
 
-La versión fuente sigue declarando 0.16.1; la extensión local declara 0.10.3. La versión instalada y las publicaciones son comprobaciones independientes. Las guías de Chrome Web Store y WinGet describen observaciones fechadas. La firma sigue aplazada conforme a [SIGNING.md](SIGNING.md).
+La versión fuente declara **0.16.2** y reúne la recuperación completa con Facebook; la extensión incluida declara **0.10.3**. La etiqueta y los paquetes se consultan en la [publicación 0.16.2](https://github.com/aesgalexis/habitat/releases/tag/v0.16.2). Los scripts de distribución generan un release.json con el commit exacto de la etiqueta y verifican ambas instalaciones en CI. La versión instalada y las publicaciones son comprobaciones independientes. Las guías de Chrome Web Store y WinGet describen observaciones fechadas. La firma sigue aplazada conforme a [SIGNING.md](SIGNING.md).
 
 Las comprobaciones de esta recuperación se registran en [RECOVERY_2026-10-25.md](RECOVERY_2026-10-25.md), sin atribuir a este árbol validaciones de otras revisiones.

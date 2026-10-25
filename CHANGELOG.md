@@ -1,10 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.16.2 — 2026-10-25
 
 - Recuperadas las 16 revisiones consolidadas hasta 0.16.1 mediante fusión con la rama de Facebook: fondos e ilustraciones, mensajes programados de Codex, chat persistente, Mercados, sidebar configurable, destinos personales y mejoras de lectura y ventana.
 - Conservados Facebook y las correcciones locales de la extensión 0.10.3, su barra de avatares y los avisos modales de actualización. La personalización del sidebar mantiene Facebook; la actualización conserva borradores y espera los envíos de Codex en curso.
 - Interfaz en inglés conforme a la regla vigente; los perfiles bilingües conservan sus datos y usan las etiquetas inglesas.
+- Corregida la preparación de paquetes bajo OneDrive: se reconocen sus metadatos Cloud Files y se mantiene el rechazo de enlaces, junctions y etiquetas desconocidas en todos los ancestros de las rutas de instalación.
 
 ## 0.16.1 — 2026-10-23
 

@@ -17,15 +17,15 @@ La solicitud de alta del paquete está abierta en
 [microsoft/winget-pkgs#455544](https://github.com/microsoft/winget-pkgs/pull/455544).
 Mientras se revisa, puedes descargar el instalador directamente de GitHub Releases.
 
-1. Descarga `HABITAT-0.16.1-x64-setup.exe` y su SHA-256 desde [GitHub Releases](https://github.com/aesgalexis/habitat/releases/latest), comprueba el hash y ejecuta el instalador desde tu sesión normal de Windows. Usa los assets de la publicación; el ZIP **Source code** no contiene la aplicación compilada.
+1. Descarga `HABITAT-0.16.2-x64-setup.exe` y su SHA-256 desde [GitHub Releases](https://github.com/aesgalexis/habitat/releases/latest), comprueba el hash y ejecuta el instalador desde tu sesión normal de Windows. Usa los assets de la publicación; el ZIP **Source code** no contiene la aplicación compilada.
 2. Instala en `%LOCALAPPDATA%\Programs\HABITAT`, añade HABITAT al menú Inicio y registra su desinstalador. Incluye .NET y Windows App SDK; no requiere SDK ni permisos de administrador. Compatible con Windows x64, Windows 10 2004 o posterior y Windows 11.
 3. Abre **Set up HABITAT…** (aparece la primera vez y permanece en el menú). Detecta Chrome, abre la extensión de [Chrome Web Store](https://chromewebstore.google.com/detail/ennnldolgdbbkgmpjjpkafeajihpimii) y muestra el estado de cada conexión. Aprueba la instalación en Chrome y pulsa **Enable connection**.
 4. La extensión 0.9.0 está enviada como Unlisted y pendiente de revisión de Google al preparar esta versión. Si el enlace aún no está disponible, el asistente abre la carpeta incluida y `chrome://extensions` para cargarla descomprimida. Chrome no se instala ni añade extensiones silenciosamente.
 5. Para ChatGPT, inicia sesión y abre una conversación en Chrome. Google, YouTube y Translate no requieren cuenta de ChatGPT. Gmail, VS Code y Codex son opcionales; el asistente explica su configuración.
 
-El paquete incluye browser bridge **0.9.0** y el VSIX **HABITAT Terminal 0.2.0**. El instalador todavía no tiene firma de código. Consulta la [guía para otro PC](docs/GETTING_STARTED.md) y los [detalles de distribución](docs/RELEASING.md). Si prefieres trabajar desde el código fuente, clona el repositorio y sigue **Compilar**.
+El paquete incluye browser bridge **0.10.3** y el VSIX **HABITAT Terminal 0.2.0**. El instalador todavía no tiene firma de código. Consulta la [guía para otro PC](docs/GETTING_STARTED.md) y los [detalles de distribución](docs/RELEASING.md). Si prefieres trabajar desde el código fuente, clona el repositorio y sigue **Compilar**.
 
-Como alternativa, extrae todo `HABITAT-0.16.1-win-x64.zip` y ejecuta `Install-HABITAT.cmd`. Usa siempre el mismo formato para actualizar: EXE y ZIP mantienen disposiciones distintas y rechazan sobrescribirse entre sí. Ambos conservan los datos de usuario; el ZIP conserva además la publicación anterior para recuperación. La preparación para WinGet se documenta en [WINGET.md](docs/WINGET.md).
+Como alternativa, extrae todo `HABITAT-0.16.2-win-x64.zip` y ejecuta `Install-HABITAT.cmd`. Usa siempre el mismo formato para actualizar: EXE y ZIP mantienen disposiciones distintas y rechazan sobrescribirse entre sí. Ambos conservan los datos de usuario; el ZIP conserva además la publicación anterior para recuperación. La preparación para WinGet se documenta en [WINGET.md](docs/WINGET.md).
 
 HABITAT busca versiones estables nuevas para Windows al arrancar y cada seis horas mientras permanece abierto. Pulsa **Actualizar HABITAT**, al final del sidebar, para descargar el EXE o ZIP correspondiente, verificar su SHA-256, instalarlo y reabrir la app. Puedes cancelar la descarga; HABITAT espera las acciones en curso y conserva borradores, tareas y preferencias. Los fallos se reintentan tras una hora. Las versiones anteriores a 0.15.0 necesitan una actualización manual para incorporar esta función. Consulta [las actualizaciones desde la app](docs/AUTO_UPDATES.md).
 
@@ -109,7 +109,7 @@ Las preferencias se organizan mediante una barra lateral con **Appearance**, **L
 
 Los destinos web, resultados de búsquedas, Gmail, el inicio de sesión de Google y los enlaces del terminal de VS Code se abren siempre en Google Chrome, donde está instalada la extensión. No hay selector de navegador ni dependencia del navegador predeterminado de Windows. Los protocolos de aplicaciones conservan su manejador de Windows. Las preferencias antiguas de navegador se ignoran sin perder los demás ajustes.
 
-ChatGPT, Google, YouTube y Translate dentro de HABITAT necesitan la extensión **HABITAT · browser bridge 0.9.0** en Chrome y su consentimiento **Enable connection**. La conexión se autentica con la clave local y funciona también con paquetes anteriores, sin filtros asociados a una preferencia de navegador.
+ChatGPT, Google, YouTube y Translate dentro de HABITAT necesitan la extensión **HABITAT · browser bridge 0.10.3** en Chrome y su consentimiento **Enable connection**. La conexión se autentica con la clave local y funciona también con paquetes anteriores, sin filtros asociados a una preferencia de navegador.
 
 El editor está centrado cuando el destino seleccionado no tiene contenido. Al empezar una conversación, pasa a la parte inferior y deja espacio al historial de texto. El historial de OpenAI solo se muestra en su destino: al cambiar se oculta, incluidas las respuestas que lleguen mientras se usa otro destino, y se recupera completo al volver. Pulsar en el fondo de la ventana devuelve el foco al editor.
 
