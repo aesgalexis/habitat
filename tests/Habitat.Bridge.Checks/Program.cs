@@ -6,13 +6,24 @@ using System.Text.Json;
 
 var checks = 0;
 void Check(bool success, string message) { if (!success) throw new Exception(message); checks++; }
-await using var bridge = new BridgeService(0); // Never use the real app's port.
+var messengerTracePath = Path.Combine(AppContext.BaseDirectory, "isolated-messenger", Guid.NewGuid().ToString("N"), "facebook-messaging.jsonl");
+await using var bridge = new BridgeService(0, facebookTracePath: messengerTracePath); // Never use the real app's port.
 await bridge.StartAsync();
 var address = bridge.Address ?? throw new Exception("The synthetic bridge did not start.");
 using var http = new HttpClient { BaseAddress = new Uri(address), Timeout = TimeSpan.FromSeconds(5) };
 using var deniedStatus = await http.GetAsync("/status");
 Check(deniedStatus.StatusCode == HttpStatusCode.Forbidden, "Diagnostics must require the pairing key.");
 http.DefaultRequestHeaders.Add("X-Habitat-Key", bridge.PairKey);
+using (var missingIntent = await http.PostAsync("/facebook/message", new StringContent("{}", System.Text.Encoding.UTF8, "application/json")))
+    Check(missingIntent.StatusCode == HttpStatusCode.Forbidden && !bridge.FacebookMessaging.IsBusy, "A diagnostic read cannot become a send without explicit native-client intent.");
+using (var crossOrigin = new HttpRequestMessage(HttpMethod.Post, "/facebook/message"))
+{
+    crossOrigin.Headers.Add("Origin", "https://example.test");
+    crossOrigin.Headers.Add("X-Habitat-Action", "send-facebook-message");
+    crossOrigin.Content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
+    using var response = await http.SendAsync(crossOrigin);
+    Check(response.StatusCode == HttpStatusCode.Forbidden && !bridge.FacebookMessaging.IsBusy, "Browser-origin requests cannot use the native diagnostic submission path.");
+}
 async Task<JsonDocument> Status() => JsonDocument.Parse(await http.GetStringAsync("/status"));
 using (var status = await Status()) Check(!status.RootElement.GetProperty("connected").GetBoolean() && !bridge.IsConnected,
     "Reading status must never manufacture a heartbeat.");
@@ -304,6 +315,12 @@ using (var facebook = new ClientWebSocket())
     await Send(facebook, new { key = bridge.PairKey, facebookProtocol = 1, extensionVersion = "0.10.2" });
     using (var tick = await Receive(facebook)) Check(tick!.RootElement.GetProperty("kind").GetString() == "facebook-tick", "Facebook uses its own snapshot protocol.");
     await WaitUntil(() => bridge.Facebook.IsConnected);
+    try
+    {
+        await bridge.FacebookMessaging.SendAsync("https://www.facebook.com/messages/t/synthetic.a", "Synthetic A", "Synthetic only", default);
+        throw new Exception("An old extension unexpectedly accepted a message.");
+    }
+    catch (InvalidOperationException exception) { Check(exception.Message.Contains("Reload"), "Messaging needs an explicitly advertised extension capability before anything is queued."); }
     async Task<string> FacebookRequest()
     {
         while (true)
@@ -332,6 +349,16 @@ using (var facebook = new ClientWebSocket())
     var contacts = await snapshot.WaitAsync(TimeSpan.FromSeconds(3));
     Check(contacts.Count == 1 && contacts[0].Name == "Amiga ☕ 雪" && contacts[0].Link is null,
         "Contact names keep their original language and links are optional.");
+    Check(contacts[0].IsOnline is null, "Older extensions without presence leave the online state unknown.");
+    foreach (var online in new[] { true, false })
+    {
+        snapshot = bridge.Facebook.ReadAsync(default);
+        requestId = await FacebookRequest();
+        await Send(facebook, new { kind = "facebook-result", id = requestId, contacts = new[] {
+            new { name = "Amiga ☕ 雪", photoUrl = "https://scontent.fbcdn.net/avatar.jpg", isOnline = online } } });
+        contacts = await snapshot.WaitAsync(TimeSpan.FromSeconds(3));
+        Check(contacts[0].IsOnline == online, "The bridge preserves explicit online and offline states.");
+    }
     using (var status = await Status())
     {
         var metadata = status.RootElement.GetProperty("facebook");
@@ -375,6 +402,99 @@ using (var facebook = new ClientWebSocket())
 }
 Console.WriteLine($"Facebook bridge checks passed: {checks}. Synthetic snapshots only.");
 
+using (var messaging = new ClientWebSocket())
+{
+    await messaging.ConnectAsync(facebookUrl, default);
+    await Send(messaging, new { key = bridge.PairKey, facebookProtocol = 1, facebookMessagingProtocol = 1, extensionVersion = "0.10.5" });
+    await WaitUntil(() => bridge.Facebook.Status.ExtensionVersion == "0.10.5");
+    async Task<string> MessageRequest(bool inspection = false)
+    {
+        while (true)
+        {
+            using var tick = await Receive(messaging);
+            var message = tick!.RootElement.GetProperty("message");
+            if (message.ValueKind != JsonValueKind.Null)
+            {
+                Check(message.GetProperty("inspectOnly").GetBoolean() == inspection, "The wire protocol keeps inspection distinct from explicit sending.");
+                return message.GetProperty("id").GetString()!;
+            }
+        }
+    }
+    const string target = "https://www.facebook.com/messages/e2ee/t/synthetic.a";
+    var pending = bridge.FacebookMessaging.SendAsync(target, "Synthetic A", "Synthetic exact text ☕\nsecond line", default);
+    var messengerOperationId = await MessageRequest();
+    await Send(messaging, new { kind = "facebook-message-progress", id = "stale", stage = "send" });
+    await Task.Delay(30);
+    Check(bridge.FacebookMessaging.LastDiagnostic?.Stage == "queued", "Stale progress cannot rewrite the current Messenger trace.");
+    await Send(messaging, new { kind = "facebook-message-progress", id = messengerOperationId, stage = "resolve",
+        diagnostic = new { page = "profile", mains = 1, nameMatches = 0, messageButtons = 1, editors = -1,
+            privateText = "MUST NOT BE LOGGED", url = "https://private.test/" } });
+    await WaitUntil(() => bridge.FacebookMessaging.LastDiagnostic?.Stage == "resolve");
+    Check(bridge.FacebookMessaging.LastDiagnostic?.Details is { Page: "profile", NameMatches: 0, MessageButtons: 1, Editors: null },
+        "The trace preserves useful structural counts while rejecting invalid diagnostic values.");
+    Check(bridge.HasMessageInFlight, "Pending Messenger operations participate in update handoff protection.");
+    await Send(messaging, new { kind = "facebook-message-result", id = "stale", status = "submitted" });
+    await Task.Delay(30);
+    Check(!pending.IsCompleted, "A stale submission result cannot clear the current recipient's draft.");
+    try
+    {
+        await bridge.FacebookMessaging.SendAsync(target, "Synthetic A", "Concurrent synthetic text", default);
+        throw new Exception("A concurrent Messenger operation was admitted.");
+    }
+    catch (InvalidOperationException exception) { Check(exception.Message.Contains("Wait"), "Only one explicit Messenger submission can be in flight."); }
+    await Send(messaging, new { kind = "facebook-message-result", id = messengerOperationId, status = "submitted" });
+    Check((await pending.WaitAsync(TimeSpan.FromSeconds(3))).Status == "submitted" && !bridge.HasMessageInFlight,
+        "A matching acknowledgement completes exactly the pending operation.");
+    var traceText = File.ReadAllText(messengerTracePath);
+    Check(traceText.Contains("resolve") && traceText.Contains("submitted") && !traceText.Contains("Synthetic A") &&
+        !traceText.Contains("Synthetic exact text") && !traceText.Contains("private.test") && !traceText.Contains("MUST NOT BE LOGGED"),
+        "The bounded local trace records the full attempt without names, message text or URLs.");
+    using (var native = new HttpRequestMessage(HttpMethod.Post, "/facebook/message"))
+    {
+        native.Headers.Add("X-Habitat-Action", "send-facebook-message");
+        native.Content = new StringContent(JsonSerializer.Serialize(new { contactName = "Synthetic Native A", text = "Synthetic native diagnostic message" }), System.Text.Encoding.UTF8, "application/json");
+        var nativePending = http.SendAsync(native);
+        while (true)
+        {
+            using var tick = await Receive(messaging);
+            var lookup = tick!.RootElement.GetProperty("request");
+            if (lookup.ValueKind == JsonValueKind.Null) continue;
+            await Send(messaging, new { kind = "facebook-result", id = lookup.GetProperty("id").GetString(), contacts = new[] {
+                new { name = "Synthetic Native A", photoUrl = "https://scontent.fbcdn.net/native.jpg", link = target } } });
+            break;
+        }
+        var nativeOperation = await MessageRequest();
+        await Send(messaging, new { kind = "facebook-message-result", id = nativeOperation, status = "submitted" });
+        using var response = await nativePending;
+        using var result = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Check(result.RootElement.GetProperty("status").GetString() == "submitted", "The native tool resolves a unique contact and uses the same messaging service, with synthetic sockets only.");
+    }
+    pending = bridge.FacebookMessaging.InspectAsync(target, "Synthetic A", default);
+    messengerOperationId = await MessageRequest(true);
+    await Send(messaging, new { kind = "facebook-message-result", id = messengerOperationId, status = "not-sent", error = "inspected" });
+    Check((await pending.WaitAsync(TimeSpan.FromSeconds(3))) is { Status: "not-sent", Error: "inspected" },
+        "A read-only inspection preserves its non-send outcome in the native diagnostics.");
+    pending = bridge.FacebookMessaging.SendAsync(target, "Synthetic A", "Another synthetic draft", default);
+    messengerOperationId = await MessageRequest();
+    await Send(messaging, new { kind = "facebook-message-result", id = messengerOperationId, status = "uncertain" });
+    Check((await pending.WaitAsync(TimeSpan.FromSeconds(3))).Status == "uncertain", "Uncertain delivery is preserved and never automatically retried.");
+    using var cancelMessage = new CancellationTokenSource();
+    pending = bridge.FacebookMessaging.SendAsync(target, "Synthetic A", "Canceled synthetic draft", cancelMessage.Token);
+    await MessageRequest(); cancelMessage.Cancel();
+    try { await pending; throw new Exception("Canceled message remained active."); }
+    catch (OperationCanceledException) { Check(!bridge.FacebookMessaging.IsBusy, "Cancellation discards the pending operation without retrying."); }
+    pending = bridge.FacebookMessaging.SendAsync(target, "Synthetic A", "Disconnect synthetic draft", default);
+    await MessageRequest(); messaging.Abort();
+    Check((await pending.WaitAsync(TimeSpan.FromSeconds(3))).Status == "uncertain", "A disconnected worker leaves delivery uncertain instead of resending.");
+}
+Console.WriteLine($"Facebook messaging bridge checks passed: {checks}. Synthetic sockets only; no Facebook tab or message.");
+var rotationPath = Path.Combine(Path.GetDirectoryName(messengerTracePath)!, "rotation.jsonl");
+File.WriteAllText(rotationPath, new string('x', 512 * 1024 + 1));
+var rotationTrace = new Habitat.Features.Facebook.FacebookMessageTrace(TimeProvider.System, rotationPath);
+rotationTrace.Write(Guid.NewGuid().ToString("N"), "queued");
+Check(File.Exists(rotationPath + ".previous") && new FileInfo(rotationPath).Length < 1024,
+    "Messenger logging rotates a bounded previous file without touching application data.");
+
 var workerInfo = new System.Diagnostics.ProcessStartInfo("node")
 {
     UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true, RedirectStandardOutput = true
@@ -388,7 +508,7 @@ using (var worker = System.Diagnostics.Process.Start(workerInfo) ?? throw new Ex
     {
         await WaitUntil(() => bridge.Facebook.IsConnected);
         var result = await bridge.Facebook.ReadAsync(default).WaitAsync(TimeSpan.FromSeconds(5));
-        Check(result.Count == 1 && result[0].Name == "Real wire · synthetic contact ☕",
+        Check(result.Count == 1 && result[0].Name == "Real wire · synthetic contact ☕" && result[0].IsOnline == true,
             "The actual JavaScript Facebook worker pairs, authenticates and returns a snapshot through the real C# WebSocket bridge.");
     }
     finally

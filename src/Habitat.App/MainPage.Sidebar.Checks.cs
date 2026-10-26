@@ -43,7 +43,7 @@ public sealed partial class MainPage
                 var settings = view.Sidebar;
                 if (!Descendants(settings).OfType<TextBlock>().Any(text => text.Text == UiText.Get("SidebarFixedWeather")))
                     throw new InvalidOperationException("Fixed Weather explanation is missing.");
-                var choices = Descendants(settings).OfType<ComboBox>().Single();
+                var choices = Descendants(settings).OfType<ComboBox>().Single(choice => choice != settings.ContactCardSize);
                 if (choices.Items.Count != 1 || (choices.Items[0] as ComboBoxItem)?.Tag as string != SidebarCatalog.Markets)
                     throw new InvalidOperationException("Only disabled widgets should be available to add.");
                 await InvokeAsync(FindButton(settings, UiText.Get("SidebarAdd")));

@@ -23,6 +23,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Include="../../scripts/diagnose-facebook-messaging.ps1" Link="tools/diagnose-facebook-messaging.ps1" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../../scripts/install-release-update.ps1" Link="updater/install-release-update.ps1" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../../scripts/Habitat.Update.psm1" Link="updater/Habitat.Update.psm1" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../../scripts/Habitat.Release.psm1" Link="updater/Habitat.Release.psm1" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

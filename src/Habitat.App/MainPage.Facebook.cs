@@ -10,12 +10,12 @@ namespace Habitat;
 
 public sealed partial class MainPage
 {
-    private const double FacebookRailWidth = 40;
+    private bool FacebookCardsLarge => _preferences.FacebookCardSize == "large";
+    private double FacebookSidebarWidth => FacebookCardsLarge ? 240 : 200;
     private const double FacebookRailGap = 12;
-    private const double FacebookRailInset = FacebookRailWidth + FacebookRailGap;
-    private readonly Microsoft.UI.Xaml.Shapes.Path FacebookIcon = new()
+    private readonly FontIcon FacebookIcon = new()
     {
-        Width = 13, Height = 24, Stretch = Stretch.Uniform,
+        Glyph = "\uE716", FontSize = 24, Width = 24, Height = 24,
         HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center
     };
     private readonly Grid FacebookIconSlot = new() { Width = 24, Height = 24 };
@@ -31,16 +31,26 @@ public sealed partial class MainPage
         VerticalContentAlignment = VerticalAlignment.Center
     };
     private readonly TextBlock FacebookTitle = new() { Text = "Facebook", FontSize = 14, VerticalAlignment = VerticalAlignment.Center };
-    private readonly StackPanel FacebookAvatars = new() { Spacing = 10, HorizontalAlignment = HorizontalAlignment.Center };
+    private readonly StackPanel FacebookAvatars = new() { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Stretch };
+    private readonly TextBox FacebookContactSearch = new()
+    {
+        PlaceholderText = "Search contacts", MinWidth = 0, Margin = new Thickness(8, 8, 8, 0)
+    };
+    private readonly TextBlock FacebookNoMatches = new()
+    {
+        Text = "No contacts found.", TextWrapping = TextWrapping.Wrap,
+        Margin = new Thickness(8, 0, 8, 0), Visibility = Visibility.Collapsed
+    };
     private readonly ScrollViewer FacebookRail = new()
     {
-        Width = FacebookRailWidth, Padding = new Thickness(0), Visibility = Visibility.Collapsed,
-        HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top,
+        Padding = new Thickness(0, 0, 8, 0), Visibility = Visibility.Collapsed,
+        HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
+        VerticalAlignment = VerticalAlignment.Stretch,
         VerticalScrollBarVisibility = ScrollBarVisibility.Hidden, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
     };
     private readonly Grid FacebookSidebar = new()
     {
-        Width = FacebookRailWidth, Visibility = Visibility.Collapsed,
+        Width = 200, RowSpacing = 8, Visibility = Visibility.Collapsed, BorderThickness = new Thickness(0, 0, 1, 0),
         HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top
     };
     private CancellationTokenSource? _facebookCancellation;
@@ -58,20 +68,6 @@ public sealed partial class MainPage
         var content = new Grid { ColumnSpacing = 8, VerticalAlignment = VerticalAlignment.Center };
         content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        // Normalize the mark to its ink bounds and center it in the same 24px
-        // symbol slot and reserved badge line as Gmail and Tasks.
-        var mark = new PathFigure { StartPoint = new(4, 24), IsClosed = true };
-        foreach (var point in new Windows.Foundation.Point[] { new(4, 13), new(0, 13), new(0, 9), new(4, 9), new(4, 6) })
-            mark.Segments.Add(new LineSegment { Point = point });
-        mark.Segments.Add(new BezierSegment { Point1 = new(4, 2), Point2 = new(6, 0), Point3 = new(10, 0) });
-        foreach (var point in new Windows.Foundation.Point[] { new(13, 0), new(13, 4), new(11, 4) })
-            mark.Segments.Add(new LineSegment { Point = point });
-        mark.Segments.Add(new BezierSegment { Point1 = new(9, 4), Point2 = new(9, 5), Point3 = new(9, 6) });
-        foreach (var point in new Windows.Foundation.Point[] { new(9, 9), new(13, 9), new(12, 13), new(9, 13), new(9, 24) })
-            mark.Segments.Add(new LineSegment { Point = point });
-        var geometry = new PathGeometry();
-        geometry.Figures.Add(mark);
-        FacebookIcon.Data = geometry;
         FacebookIconSlot.Children.Add(FacebookIcon);
         FacebookSymbol.Children.Add(FacebookIconSlot);
         FacebookSymbol.Children.Add(new Border { Height = 18 });
@@ -111,8 +107,33 @@ public sealed partial class MainPage
         _widgets.Children.Add(FacebookButton);
         FacebookRail.Content = FacebookAvatars;
         AutomationProperties.SetName(FacebookRail, "Facebook contacts");
+        AutomationProperties.SetName(FacebookContactSearch, "Search contacts by name");
+        FacebookContactSearch.TextChanged += (_, _) =>
+        {
+            ApplyFacebookContactFilter();
+            FacebookRail.ChangeView(null, 0, null, true);
+        };
+        AutomationProperties.SetLiveSetting(FacebookNoMatches, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
+        FacebookSidebar.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        FacebookSidebar.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        FacebookSidebar.Children.Add(FacebookContactSearch);
+        Grid.SetRow(FacebookRail, 1);
         FacebookSidebar.Children.Add(FacebookRail);
+        Grid.SetRow(FacebookNoMatches, 1);
+        FacebookNoMatches.VerticalAlignment = VerticalAlignment.Top;
+        FacebookSidebar.Children.Add(FacebookNoMatches);
         surface.Children.Add(FacebookSidebar);
+        FacebookAvatars.Spacing = FacebookCardsLarge ? 4 : 2;
+    }
+
+    private void ApplyFacebookCardSize(bool wasLarge)
+    {
+        var rowOffset = FacebookRail.VerticalOffset / (wasLarge ? 56 : 38);
+        FacebookAvatars.Spacing = FacebookCardsLarge ? 4 : 2;
+        foreach (var item in FacebookAvatars.Children) SizeFacebookContact((Button)item);
+        UpdateWritingLayout();
+        FacebookRail.UpdateLayout();
+        FacebookRail.ChangeView(null, rowOffset * (FacebookCardsLarge ? 56 : 38), null, true);
     }
 
     private void SetFacebookOpen(bool open)
@@ -127,19 +148,21 @@ public sealed partial class MainPage
         AutomationProperties.SetItemStatus(FacebookButton, open ? "Expanded" : "Collapsed");
         _facebookCancellation?.Cancel();
         FacebookAvatars.Children.Clear();
+        FacebookContactSearch.Text = "";
+        ApplyFacebookContactFilter();
         _nextFacebookRefresh = DateTimeOffset.MinValue;
         UpdateWritingLayout();
         if (open) TickFacebook();
         else FocusComposer();
     }
 
-    private void SizeFacebook(TopWidgetLayout layout, double height)
+    private void SizeFacebook(TopWidgetLayout layout, double width, double height)
     {
         FacebookButton.Width = layout.WidgetWidth;
         FacebookTitle.Visibility = layout.Expanded ? Visibility.Visible : Visibility.Collapsed;
+        FacebookSidebar.Width = Math.Min(FacebookSidebarWidth, Math.Max(0, width - layout.WidgetWidth - FacebookRailGap - DestinationRailInset - 16));
         FacebookSidebar.Margin = new Thickness(layout.WidgetWidth + FacebookRailGap, 20, 0, 24);
         FacebookSidebar.Height = Math.Max(0, height - 44);
-        FacebookRail.Height = FacebookSidebar.Height;
     }
 
     private void TickFacebook()
@@ -177,6 +200,8 @@ public sealed partial class MainPage
             AutomationProperties.SetItemStatus(FacebookButton, $"{contacts.Count} contacts");
             FacebookAvatars.Children.Clear();
             foreach (var contact in contacts) AddFacebookAvatar(contact);
+            ApplyFacebookContactFilter();
+            PaintFacebook();
             if (contacts.Count == 0) ShowFacebookState("No contacts are loaded in Facebook. Open Friends → All friends in Chrome, wait for the profile photos, then retry.", true);
             _nextFacebookRefresh = DateTimeOffset.UtcNow.AddSeconds(30);
         }
@@ -194,7 +219,23 @@ public sealed partial class MainPage
         }
     }
 
-    private void AddFacebookAvatar(FacebookContact contact)
+    private void ApplyFacebookContactFilter()
+    {
+        var query = FacebookContactSearch.Text.Trim();
+        var visible = 0;
+        foreach (var card in FacebookAvatars.Children)
+        {
+            var matches = query.Length == 0 || System.Globalization.CultureInfo.InvariantCulture.CompareInfo.IndexOf(
+                AutomationProperties.GetName(card), query,
+                System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+            card.Visibility = matches ? Visibility.Visible : Visibility.Collapsed;
+            if (matches) visible++;
+        }
+        FacebookNoMatches.Visibility = FacebookAvatars.Children.Count > 0 && visible == 0
+            ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private Grid CreateFacebookAvatar(FacebookContact contact)
     {
         var avatar = new Grid { Width = 40, Height = 40 };
         var circle = new Ellipse { Fill = FacebookAvatarFallback() };
@@ -217,32 +258,76 @@ public sealed partial class MainPage
                     initial.Visibility = Visibility.Visible;
                 };
         }
-        FrameworkElement item = avatar;
-        if (contact.Link is { } link)
+        var presence = new Ellipse
         {
-            var button = new Button
-            {
-                Content = avatar, Width = 40, Height = 40, MinWidth = 0, MinHeight = 0,
-                Padding = new Thickness(0), BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(20)
-            };
-            UseStableWidgetButton(button);
-            button.Click += async (_, _) =>
-            {
-                if (!HasAppearanceOverlay && !_operations.IsStopping) await RunOperationAsync(async () =>
-                {
-                    if (!await _launchBrowser(new Uri(link))) ShowFacebookState("Could not open Facebook in Chrome. Try again.", true);
-                });
-            };
-            item = button;
-        }
-        AutomationProperties.SetName(item, contact.Name);
-        ToolTipService.SetToolTip(item, contact.Name);
-        FacebookAvatars.Children.Add(item);
+            Width = 9, Height = 9, StrokeThickness = 1.5, Tag = contact.IsOnline,
+            HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom,
+            IsHitTestVisible = false
+        };
+        PaintFacebookPresence(presence);
+        avatar.Children.Add(presence);
+        return avatar;
+    }
+
+    private void AddFacebookAvatar(FacebookContact contact)
+    {
+        var avatar = CreateFacebookAvatar(contact);
+        var row = new Grid { Height = 52, Padding = new Thickness(8, 6, 8, 6), ColumnSpacing = 10 };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.Children.Add(avatar);
+        var name = new TextBlock
+        {
+            Text = contact.Name, FontSize = 14, Foreground = TextBrush(),
+            VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis,
+            MaxLines = 1
+        };
+        Grid.SetColumn(name, 1);
+        row.Children.Add(name);
+        var card = new Button { Content = row, Tag = FacebookRecipientId(contact), MinWidth = 0, MinHeight = 0,
+            Padding = new Thickness(0), BorderThickness = new Thickness(2, 0, 0, 0), CornerRadius = new CornerRadius(6),
+            HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch };
+        UseStableWidgetButton(card);
+        AutomationProperties.SetName(card, contact.Name);
+        AutomationProperties.SetItemStatus(card, contact.IsOnline switch { true => "Online", false => "Offline", null => "Online status unavailable" });
+        AutomationProperties.SetHelpText(card, "Select as message destination");
+        card.Click += (_, _) => SelectFacebookContact(contact);
+        SizeFacebookContact(card);
+        FacebookAvatars.Children.Add(card);
+    }
+
+    private void SizeFacebookContact(Button item)
+    {
+        var row = (Grid)item.Content;
+        var avatarSize = FacebookCardsLarge ? 40 : 28;
+        row.Height = FacebookCardsLarge ? 52 : 36;
+        item.Height = row.Height;
+        row.Padding = FacebookCardsLarge ? new Thickness(8, 6, 8, 6) : new Thickness(6, 4, 6, 4);
+        row.ColumnSpacing = FacebookCardsLarge ? 10 : 8;
+        row.ColumnDefinitions[0].Width = new GridLength(avatarSize);
+        var avatar = (Grid)row.Children[0];
+        avatar.Width = avatar.Height = avatarSize;
+        ((TextBlock)avatar.Children[1]).FontSize = FacebookCardsLarge ? 17 : 13;
+        ((TextBlock)row.Children[1]).FontSize = FacebookCardsLarge ? 14 : 12;
+        ((Ellipse)avatar.Children[2]).Width = ((Ellipse)avatar.Children[2]).Height = FacebookCardsLarge ? 11 : 9;
+    }
+
+    private void PaintFacebookPresence(Ellipse presence)
+    {
+        presence.Fill = presence.Tag switch
+        {
+            true => new SolidColorBrush(Color(255, 0x21, 0xA3, 0x66)),
+            false => new SolidColorBrush(Color(255, 0x8C, 0x94, 0xA3)),
+            _ => FacebookAvatarFallback()
+        };
+        presence.Stroke = presence.Tag is null ? TextBrush() : new SolidColorBrush(RequestedTheme == ElementTheme.Dark
+            ? Color(255, 0x1B, 0x24, 0x34) : Color(255, 0xF4, 0xF6, 0xFA));
     }
 
     private void ShowFacebookState(string message, bool actionable)
     {
         FacebookAvatars.Children.Clear();
+        ApplyFacebookContactFilter();
         _facebookError = actionable ? message : null;
         AutomationProperties.SetHelpText(FacebookButton, message);
         AutomationProperties.SetItemStatus(FacebookButton, message);
@@ -264,24 +349,41 @@ public sealed partial class MainPage
     {
         var text = TextBrush();
         var transparent = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-        FacebookIcon.Fill = text;
+        FacebookIcon.Foreground = text;
         FacebookTitle.Foreground = FacebookButton.Foreground = text;
         FacebookButton.Background = transparent;
+        FacebookButton.CornerRadius = new CornerRadius(8);
         FacebookRecoveryMessage.Foreground = text;
         foreach (var key in new[] { "ButtonForeground", "ButtonForegroundPointerOver", "ButtonForegroundPressed" })
             FacebookButton.Resources[key] = text;
-        foreach (var key in new[] { "ButtonBackground", "ButtonBackgroundPointerOver", "ButtonBackgroundPressed" })
-            FacebookButton.Resources[key] = transparent;
-        FacebookRail.RequestedTheme = RequestedTheme;
+        FacebookButton.Resources["ButtonBackground"] = transparent;
+        var hover = new SolidColorBrush(RequestedTheme == ElementTheme.Dark ? Color(0x22, 255, 255, 255) : Color(0x12, 0, 0, 0));
+        foreach (var key in new[] { "ButtonBackgroundPointerOver", "ButtonBackgroundPressed" })
+            FacebookButton.Resources[key] = hover;
+        FacebookSidebar.RequestedTheme = FacebookRail.RequestedTheme = RequestedTheme;
+        FacebookNoMatches.Foreground = text;
+        PaintContactMessageHeader();
         FacebookSidebar.Background = new SolidColorBrush(RequestedTheme == ElementTheme.Dark ? Color(0x08, 255, 255, 255) : Color(0x06, 0, 0, 0));
+        FacebookSidebar.BorderBrush = new SolidColorBrush(RequestedTheme == ElementTheme.Dark ? Color(0x24, 255, 255, 255) : Color(0x20, 0, 0, 0));
         if (FacebookRecovery.Content is FrameworkElement recovery) recovery.RequestedTheme = RequestedTheme;
         foreach (var item in FacebookAvatars.Children)
         {
-            var avatar = item is Button button ? button.Content as Grid : item as Grid;
+            var card = (Button)item;
+            var row = card.Content as Grid;
+            if (row is null) continue;
+            var selected = card.Tag as string == _destination;
+            card.Background = transparent;
+            card.BorderBrush = selected ? new SolidColorBrush(RequestedTheme == ElementTheme.Dark ? Color(255, 0x89, 0x95, 0xFF) : Color(255, 0x66, 0x74, 0xF4)) : transparent;
+            card.Resources["ButtonBackground"] = transparent;
+            card.Resources["ButtonBackgroundPointerOver"] = card.Resources["ButtonBackgroundPressed"] = hover;
+            AutomationProperties.SetHelpText(card, selected ? "Selected Messenger recipient" : "Select as message destination");
+            foreach (var name in row.Children.OfType<TextBlock>()) name.Foreground = text;
+            var avatar = row.Children.OfType<Grid>().FirstOrDefault();
             if (avatar is null) continue;
             foreach (var child in avatar.Children)
             {
-                if (child is Ellipse { Fill: SolidColorBrush } circle) circle.Fill = FacebookAvatarFallback();
+                if (child is Ellipse presence && ReferenceEquals(child, avatar.Children[2])) PaintFacebookPresence(presence);
+                else if (child is Ellipse { Fill: SolidColorBrush } circle) circle.Fill = FacebookAvatarFallback();
                 if (child is TextBlock initial) initial.Foreground = text;
             }
         }

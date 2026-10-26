@@ -1,6 +1,6 @@
 namespace Habitat.Features.Facebook;
 
-internal sealed record FacebookContact(string Name, string PhotoUrl, string? Link = null);
+internal sealed record FacebookContact(string Name, string PhotoUrl, string? Link = null, bool? IsOnline = null);
 internal sealed record FacebookContactsRequest(string Id);
 internal sealed record FacebookReadDiagnostic(string Stage, int? Sections = null, int? Photos = null, int? Rows = null);
 internal sealed record FacebookStatus(bool Connected, string? ExtensionVersion, double? HeartbeatAgeSeconds,
@@ -142,7 +142,7 @@ internal sealed class FacebookContactsService(TimeProvider? clock = null) : IFac
         if (!Https(value, out var uri) || uri.Host is not ("www.facebook.com" or "facebook.com")) return false;
         var path = uri.AbsolutePath.Trim('/');
         if (path == "profile.php") return System.Text.RegularExpressions.Regex.IsMatch(uri.Query, @"^\?id=\d+$");
-        if (System.Text.RegularExpressions.Regex.IsMatch(path, @"^messages/t/[A-Za-z0-9._-]+$")) return uri.Query.Length == 0;
+        if (System.Text.RegularExpressions.Regex.IsMatch(path, @"^messages/(?:e2ee/)?t/[A-Za-z0-9._-]+$")) return uri.Query.Length == 0;
         return uri.Query.Length == 0 && System.Text.RegularExpressions.Regex.IsMatch(path, @"^[A-Za-z0-9.]+$") &&
             path is not ("login" or "checkpoint" or "recover" or "friends" or "groups" or "marketplace" or "watch" or "reel" or "stories" or "settings" or "logout.php" or "l.php" or "help" or "notifications");
     }

@@ -77,6 +77,7 @@ internal sealed class AppServices : IAsyncDisposable
     internal ISearchService Search { get; set; }
     internal ISearchService YouTubeSearch { get; set; }
     internal Habitat.Features.Facebook.IFacebookContactsService Facebook { get; set; }
+    internal Habitat.Features.Facebook.IFacebookMessagingService FacebookMessaging { get; set; }
     internal Func<Uri, ImageSource?> FacebookPhoto { get; set; }
     internal Func<Uri, ImageSource?> SearchThumbnail { get; set; }
     internal bool CopyText(string text)
@@ -118,7 +119,7 @@ internal sealed class AppServices : IAsyncDisposable
         Paths = paths;
         Wallpapers = new WallpaperService(paths);
         GlobalHotkey = new GlobalHotkeyService(paths);
-        Bridge = new BridgeService(paths.IsIsolated ? 0 : 8765);
+        Bridge = new BridgeService(paths.IsIsolated ? 0 : 8765, facebookTracePath: paths.FacebookMessageTracePath);
         Tasks = paths.IsIsolated ? new TaskStore(paths.TasksPath) : new TaskStore();
         TaskSession = new TaskSession(Tasks);
         if (paths.IsIsolated) _isolatedHttp = new HttpClient(new DisabledNetwork());
@@ -136,6 +137,7 @@ internal sealed class AppServices : IAsyncDisposable
         Search = Bridge.Search;
         YouTubeSearch = Bridge.YouTubeSearch;
         Facebook = Bridge.Facebook;
+        FacebookMessaging = Bridge.FacebookMessaging;
         FacebookPhoto = paths.IsIsolated ? _ => null : uri => new BitmapImage { DecodePixelWidth = 80, DecodePixelHeight = 80, AutoPlay = false, UriSource = uri };
         SearchThumbnail = paths.IsIsolated ? _ => null : CreateSearchThumbnail;
         var browser = paths.IsIsolated ? new BrowserLauncher(() => null, _ => false)

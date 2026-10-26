@@ -1,7 +1,7 @@
 {
-    "version":  "0.16.2",
-    "runtime":  "win-x64",
-    "sourceCommit":  "245217377b5815518892c976a750666110747234",
-    "browserExtensionVersion":  "0.10.3",
-    "vscodeExtensionVersion":  "0.2.0"
+  "version": "0.16.3",
+  "runtime": "win-x64",
+  "sourceCommit": "07496ef24c75470d5302fee5ef84bd47135006ee",
+  "browserExtensionVersion": "0.10.7",
+  "vscodeExtensionVersion": "0.2.0"
 }

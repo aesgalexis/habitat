@@ -82,7 +82,7 @@ internal sealed class PreferencesView : Grid
         AddCategory("Destinations", "\uE8A7", UiText.Get("ChooseAndOrderYourDestinationsRemovingOneKeeps"), Destinations);
         Markets = new MarketsPreferencesView(saved.Markets);
         AddCategory("Markets", "\uE9D2", UiText.Get("MarketsPreferencesDescription"), Markets);
-        Sidebar = new SidebarPreferencesView(saved.SidebarWidgets);
+        Sidebar = new SidebarPreferencesView(saved.SidebarWidgets, saved.FacebookCardSize);
         AddCategory("Sidebar", "\uE700", UiText.Get("SidebarDescription"), Sidebar);
         Categories.SelectionChanged += (_, _) =>
         {

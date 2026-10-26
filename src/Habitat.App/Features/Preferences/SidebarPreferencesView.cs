@@ -1,5 +1,6 @@
 using Habitat.Services;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Habitat.Features.Preferences;
@@ -11,8 +12,14 @@ internal sealed class SidebarPreferencesView : StackPanel
     private readonly ComboBox _available = new() { HorizontalAlignment = HorizontalAlignment.Stretch };
     private readonly Button _add = new();
     internal string[] EnabledWidgets => _enabled.ToArray();
+    internal ComboBox ContactCardSize { get; } = new()
+    {
+        Header = "Contact card size", HorizontalAlignment = HorizontalAlignment.Stretch,
+        ItemsSource = new[] { "Small cards (default)", "Large cards" }
+    };
+    internal string FacebookCardSize => ContactCardSize.SelectedIndex == 1 ? "large" : "small";
 
-    public SidebarPreferencesView(IEnumerable<string>? enabled)
+    public SidebarPreferencesView(IEnumerable<string>? enabled, string facebookCardSize = "small")
     {
         Spacing = 12;
         _enabled = new SidebarCatalog(enabled).Enabled.ToList();
@@ -32,6 +39,9 @@ internal sealed class SidebarPreferencesView : StackPanel
             Refresh(id);
         };
         Children.Add(_add);
+        ContactCardSize.SelectedIndex = facebookCardSize == "large" ? 1 : 0;
+        AutomationProperties.SetName(ContactCardSize, "Contact card size");
+        Children.Add(ContactCardSize);
         Refresh();
     }
 

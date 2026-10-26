@@ -78,12 +78,12 @@ public sealed partial class MainPage
     {
         var previous = _destination;
         _destinationCatalog = new(_preferences.EnabledDestinations, _preferences.WindowsApps);
-        _destination = _destinationCatalog.Select(previous);
+        _destination = IsFacebookDestination(previous) ? previous : _destinationCatalog.Select(previous);
         if (previous == ComposerDestination.Codex && _destination != previous) CancelPendingCodexSend();
         ConfigureComposerRoutes();
         RebuildDestinationRail();
         RestoreComposerDraft();
-        _preferences = _preferences with { Destination = _destination };
+        if (!IsFacebookDestination(_destination)) _preferences = _preferences with { Destination = _destination };
         UpdateDestinationPresentation();
     }
 
@@ -133,6 +133,7 @@ public sealed partial class MainPage
             row.Children.Add(button);
             DestinationRail.Children.Add(row);
         }
+        AddFacebookDestination();
     }
 
     internal void RegisterDestinationWheel(UIElement element) => element.AddHandler(
@@ -167,9 +168,11 @@ public sealed partial class MainPage
     {
         if (_updateDialogOpen || _updateHandoff) return;
         if (_destination == ComposerDestination.Codex && destination != _destination) CancelPendingCodexSend();
-        _destination = _destinationCatalog.Select(destination);
+        _destination = IsFacebookDestination(destination) ? destination : _destinationCatalog.Select(destination);
+        if (IsFacebookDestination(_destination) && _lastFacebookRecipient != _destination)
+        { _lastFacebookRecipient = _destination; RebuildDestinationRail(); }
         RestoreComposerDraft();
-        _preferences = _preferences with { Destination = _destination };
+        if (!IsFacebookDestination(_destination)) _preferences = _preferences with { Destination = _destination };
         SavePreferences();
         UpdateDestinationPresentation();
         if (_destinationButtons.TryGetValue(_destination, out var button)) button.StartBringIntoView();
@@ -191,7 +194,7 @@ public sealed partial class MainPage
             foreach (var key in new[] { "ButtonBackgroundPointerOver", "ButtonBackgroundPressed" })
                 button.Resources[key] = transparent;
             UiLanguage.SetItemStatus(button, () => active ? UiText.Get("Selected") : UiText.Get("NotSelected"));
-            var external = _externalDestinationButtons[destination];
+            if (!_externalDestinationButtons.TryGetValue(destination, out var external)) continue;
             external.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
             external.Foreground = accent;
             external.Resources["ButtonForegroundPointerOver"] = accent;
@@ -203,13 +206,16 @@ public sealed partial class MainPage
 
     private void UpdateDestinationPresentation()
     {
+        UpdateContactMessagePresentation();
         PaintDestinations();
+        PaintFacebook();
         PresentDestinationSection();
         Composer.PlaceholderText = string.Empty;
-        ComposerHint.Text = _destinationCatalog.Placeholder(_destination);
+        ComposerHint.Text = _facebookRecipients.TryGetValue(_destination, out var recipient)
+            ? "Message " + recipient.Name + "…" : _destinationCatalog.Placeholder(_destination);
         AutomationProperties.SetName(Composer, ComposerHint.Text);
         UpdateWritingLayout();
-        SendButton.Content = UiLanguage.Value(SendButton, "Content", () => _destination switch
+        SendButton.Content = UiLanguage.Value(SendButton, "Content", () => IsFacebookDestination(_destination) ? "Send message" : _destination switch
         {
             ComposerDestination.Notepad => UiText.Get("OpenInNotepad"),
             ComposerDestination.Translate => UiText.Get("Translate"),

@@ -40,6 +40,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Interface localization checks failed.' }
     node tests/extension-facebook.checks.cjs
     if ($LASTEXITCODE -ne 0) { throw 'Facebook extension checks failed.' }
+    node tests/extension-facebook-messaging.checks.cjs
+    if ($LASTEXITCODE -ne 0) { throw 'Facebook messaging checks failed.' }
     foreach ($suite in 'Appearance', 'Bridge', 'Core', 'Destination', 'Gmail', 'Tasks', 'Weather', 'Hotkey', 'Window') {
         dotnet run --project "tests/Habitat.$suite.Checks" --configuration Release --no-restore `
             "-p:BaseOutputPath=$verifyOutput/$suite/"

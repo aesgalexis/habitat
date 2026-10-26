@@ -84,6 +84,7 @@ public sealed partial class MainPage
             Wallpaper = view.Wallpaper.Settings,
             Markets = view.Markets.Settings.Normalize(),
             SidebarWidgets = view.Sidebar.EnabledWidgets,
+            FacebookCardSize = view.Sidebar.FacebookCardSize,
             WeatherCity = view.WeatherCity.Text.Trim(), UseDeviceLocation = view.UseDeviceLocation.IsOn,
             EnabledDestinations = view.Destinations.EnabledDestinations,
             WindowsApps = view.Destinations.Applications, DefaultDestination = view.Destinations.DefaultDestination
@@ -101,7 +102,9 @@ public sealed partial class MainPage
             return;
         }
         view.Wallpaper.Complete(true, _preferences.Wallpaper);
+        var previousFacebookCardsLarge = FacebookCardsLarge;
         _preferences = updatedPreferences;
+        ApplyFacebookCardSize(previousFacebookCardsLarge);
         _marketsSession.Configure(_preferences.Markets);
         ApplyInterfaceLanguage();
         ApplyDestinationPreferences();

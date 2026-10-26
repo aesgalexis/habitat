@@ -10,13 +10,17 @@ const rect = {getBoundingClientRect:()=>({width:40,height:40})};
 const heading = (label,order) => ({...rect,textContent:label,order,compareDocumentPosition:other=>other.order>order?4:2});
 function photo(name, source, order, href=null, options={}) {
   const anchor = href ? {getAttribute:()=>href} : null;
-  const row = {textContent:name,getAttribute:()=>name,matches:()=>false,querySelector:()=>anchor,querySelectorAll:()=>[image]};
+  const statuses = (options.statuses || []).map(status => ({...rect,textContent:status.text || '',matches:()=>false,
+    getAttribute:key=>key==='aria-label'?status.label || '':key==='title'?status.title || '':key==='role'?status.role || '':'',
+    getBoundingClientRect:()=>({width:status.hidden?0:9,height:9})}));
+  const row = {textContent:name,getAttribute:()=>name,matches:()=>false,querySelector:()=>anchor,
+    querySelectorAll:selector=>selector==='img,svg image'?[image]:statuses};
   const image = {...rect,order,currentSrc:source,getAttribute:()=>'',closest:()=>options.noRow?null:row,
     compareDocumentPosition:other=>other.order>order?4:2};
   if(options.hidden)image.getBoundingClientRect=()=>({width:0,height:0});
   return image;
 }
-let rows=[], label='Contacts', login=false, missing=false;
+let rows=[], homeRows=null, label='Contacts', login=false, missing=false;
 let friendsMissing=null;
 const location={origin:'https://www.facebook.com',href:'https://www.facebook.com/',pathname:'/'};
 const region={...rect,contains:()=>true,getAttribute:()=>'',querySelectorAll:selector=>selector==='h2,h3,[role="heading"]'?
@@ -37,7 +41,9 @@ const chrome={alarms:{onAlarm:signal(),create:async()=>{}},storage:{onChanged:si
     update:()=>{throw Error('Personal Facebook tabs must never be navigated.');},remove:()=>{throw Error('Personal Facebook tabs must never be closed.');}},
   scripting:{executeScript:async args=>{injections++;const tab=tabs.get(args.target.tabId);const url=new URL(tab.url);
     Object.assign(location,{origin:url.origin,href:url.href,pathname:url.pathname});
-    const result=args.func();if(held){const wait=held;held=null;await wait;}return [{result}];}}};
+    const original=rows;if(url.pathname==='/'&&homeRows)rows=homeRows;
+    let result;try{result=args.func();}finally{rows=original;}
+    if(held){const wait=held;held=null;await wait;}return [{result}];}}};
 const sockets=[];
 class Socket {static OPEN=1;constructor(url){this.url=url;this.sent=[];this.readyState=1;sockets.push(this);queueMicrotask(()=>this.onopen?.());}
   send(value){this.sent.push(JSON.parse(value));}close(){this.readyState=3;this.onclose?.();}}
@@ -69,6 +75,22 @@ async function dispatch(){context.request={id:(++number).toString(16).padStart(3
   const reads=injections;await vm.runInContext('facebookTransport.dispatch(socket,request)',context);
   check(injections===reads,'Repeated bridge ticks do not read the same request twice.');
   label='Contactos';result=await dispatch();check(result.contacts.length===3,'The Contacts panel can use its Spanish heading.');
+  const originalRows=rows;
+  rows=[photo('Ana, Active now','https://scontent.fbcdn.net/ana.jpg',20,'/ana.person'),
+    photo('Pepe','https://scontent.fbcdn.net/pepe.jpg',21,null,{statuses:[{label:'En línea'}]}),
+    photo('Diego','https://scontent.fbcdn.net/diego.jpg',22,null,{statuses:[{title:'Offline'}]}),
+    photo('Unknown','https://scontent.fbcdn.net/unknown.jpg',23),
+    photo('Hidden status','https://scontent.fbcdn.net/hidden.jpg',24,null,{statuses:[{label:'Active now',hidden:true}]}),
+    photo('Online','https://scontent.fbcdn.net/named-online.jpg',25),
+    photo('Ambiguous','https://scontent.fbcdn.net/mixed.jpg',26,null,{statuses:[{label:'Online'},{label:'Offline'}]}),
+    photo('Recent','https://scontent.fbcdn.net/recent.jpg',27,null,{statuses:[{label:'Active 5 minutes ago'}]})];
+  result=await dispatch();
+  check(result.contacts[0].name==='Ana'&&result.contacts[0].isOnline===true&&result.contacts[1].isOnline===true,
+    'Read explicit English/Spanish online labels and remove presence suffixes from names.');
+  check(result.contacts[2].isOnline===false,'Explicit offline labels remain distinct from unavailable presence.');
+  check(result.contacts.slice(3).every(contact=>contact.isOnline===null),
+    'Missing, hidden, ambiguous, name-only and recent-activity signals never invent a current online/offline state.');
+  rows=originalRows;
   login=true;result=await dispatch();check(result.error==='login','A login page is surfaced without reading contacts or filling credentials.');login=false;
   tabs.delete(2);tabs.set(3,{id:3,url:'https://www.facebook.com/login/',status:'complete'});
   result=await dispatch();check(result.error==='login'&&created===0,'Reuse an existing login tab instead of opening another on every refresh.');
@@ -88,6 +110,12 @@ async function dispatch(){context.request={id:(++number).toString(16).padStart(3
   result=await dispatch();
   check(result.contacts.length===2&&result.contacts[1].link==='https://www.facebook.com/profile.php?id=123',
     'Read real friends after the total-count heading, deduplicate by profile and reject suggestions or missing profile links.');
+  tabs.set(2,{id:2,url:'https://www.facebook.com/',status:'complete',active:true});
+  homeRows=[photo('Ana, Active now','https://scontent.fbcdn.net/home-ana.jpg',20,'/ana.person')];
+  result=await dispatch();
+  check(result.contacts.length===2&&result.contacts[0].isOnline===true&&result.contacts[1].isOnline===null&&created===1,
+    'Enrich the friends list from explicit Home presence by matching profile links, without opening tabs or assuming absent contacts are offline.');
+  homeRows=null;tabs.delete(2);
   tabs.delete(11);delete session.habitatFacebookTab;
   tabs.set(2,{id:2,url:'https://www.facebook.com/',status:'complete',active:true});
   missing=true;friendsMissing=false;result=await dispatch();

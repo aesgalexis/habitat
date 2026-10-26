@@ -7,10 +7,12 @@ internal sealed class ComposerDrafts
     internal sealed record Snapshot(string Shared, Dictionary<string, string> Local);
 
     private readonly Dictionary<string, Draft> _local = new();
+    private readonly HashSet<string> _isolated = new();
     private Draft _shared = new("", 0);
     private long _revision;
 
-    private Draft Get(string destination) => _local.GetValueOrDefault(destination, _shared);
+    private Draft Get(string destination) => _local.GetValueOrDefault(destination, _isolated.Contains(destination) ? new("", 0) : _shared);
+    internal void Isolate(string destination) => _isolated.Add(destination);
     public string Text(string destination) => Get(destination).Text;
 
     internal Snapshot SaveForRestart() => new(_shared.Text, _local.ToDictionary(item => item.Key, item => item.Value.Text));
@@ -26,7 +28,8 @@ internal sealed class ComposerDrafts
     {
         if (Get(destination).Text == text) return;
         var draft = new Draft(text, ++_revision);
-        if (!_local.ContainsKey(destination)) _shared = draft;
+        if (_isolated.Contains(destination)) _local[destination] = draft;
+        else if (!_local.ContainsKey(destination)) _shared = draft;
         // Clearing a used field starts a shared draft if no other draft is waiting.
         else if (text.Length == 0 && _shared.Text.Length == 0) _local.Remove(destination);
         else _local[destination] = draft;

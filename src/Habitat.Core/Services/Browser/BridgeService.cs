@@ -25,7 +25,7 @@ public sealed partial class BridgeService : IAsyncDisposable
     private string _connectionIssue = UiText.Get("ReconnectingToChatGPT");
     private static readonly JsonSerializerOptions SocketJson = new(JsonSerializerDefaults.Web);
 
-    public BridgeService(int port = 8765, TimeProvider? timeProvider = null)
+    public BridgeService(int port = 8765, TimeProvider? timeProvider = null, string? facebookTracePath = null)
     {
         _port = port;
         _time = timeProvider ?? TimeProvider.System;
@@ -34,6 +34,7 @@ public sealed partial class BridgeService : IAsyncDisposable
         Search = new Features.Search.BrowserSearchService(_time);
         YouTubeSearch = new Features.Search.BrowserSearchService(_time, ComposerDestination.YouTube);
         Facebook = new Features.Facebook.FacebookContactsService(_time);
+        FacebookMessaging = new Features.Facebook.FacebookMessagingService(_time, facebookTracePath);
         PairKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24))
             .TrimEnd('=').Replace('+', '-').Replace('/', '_');
     }
@@ -49,7 +50,7 @@ public sealed partial class BridgeService : IAsyncDisposable
 
     public bool HasMessageInFlight
     {
-        get { lock (_stateLock) return _session.Message is not null; }
+        get { lock (_stateLock) return _session.Message is not null || FacebookMessaging.IsBusy; }
     }
 
     public event EventHandler<BridgeEvent>? EventReceived;
@@ -71,6 +72,7 @@ public sealed partial class BridgeService : IAsyncDisposable
             server.Map("/search-bridge", HandleSearchSocketAsync);
             server.Map("/youtube-bridge", context => HandleSearchSocketAsync(context, YouTubeSearch));
             server.Map("/facebook-bridge", HandleFacebookSocketAsync);
+            server.MapPost("/facebook/message", HandleFacebookMessageAsync);
             server.MapGet("/status", (HttpRequest request) =>
             {
                 if (!IsAuthorized(request)) return Results.Json(new { error = "Unauthorized" }, statusCode: 403);
@@ -79,11 +81,12 @@ public sealed partial class BridgeService : IAsyncDisposable
                     // Read-only diagnostics: must not create a heartbeat or
                     // dequeue/acknowledge messages during verification.
                     return Results.Json(new { connected = UtcNow - _lastPoll < BridgeProtocol.ConnectionLifetime,
-                        hasMessageInFlight = _session.Message is not null, translationConnected = Translation.IsConnected,
+                        hasMessageInFlight = _session.Message is not null || FacebookMessaging.IsBusy, translationConnected = Translation.IsConnected,
                         searchConnected = Search.IsConnected,
                         youtubeConnected = YouTubeSearch.IsConnected,
                         facebookConnected = Facebook.IsConnected,
                         facebook = Facebook.Status,
+                        facebookMessaging = FacebookMessaging.LastDiagnostic,
                         protocolVersion = BridgeProtocol.Version, processId = Environment.ProcessId,
                         deliveryPhase = _session.Phase.ToString(),
                         transport = _connectionOwner is null ? "page-http" : "worker-websocket",

@@ -175,9 +175,12 @@ public sealed partial class MainPage
             _sidebarManualExpanded = null;
         }
         var layout = TopWidgetLayout.Calculate(contentWidth, _tasksPanelOpen, _sidebarManualExpanded);
+        if (_facebookPanelOpen && layout.Expanded &&
+            contentWidth - layout.WidgetWidth - FacebookRailGap - DestinationRailInset - 16 < 160)
+            layout = TopWidgetLayout.Calculate(contentWidth, _tasksPanelOpen, false);
         _sidebarExpanded = layout.Expanded;
-        SizeFacebook(layout, surface.ActualHeight);
-        var facebookInset = _facebookPanelOpen ? FacebookRailInset : 0;
+        SizeFacebook(layout, contentWidth, surface.ActualHeight);
+        var facebookInset = _facebookPanelOpen ? FacebookSidebar.Width + FacebookRailGap : 0;
         SizeWeatherWidget(layout);
         MarketsButton.Width = layout.WidgetWidth;
         MarketsDetails.Visibility = layout.Expanded ? Visibility.Visible : Visibility.Collapsed;
@@ -204,7 +207,7 @@ public sealed partial class MainPage
         _taskArea.Margin = new Thickness(layout.TaskLeft + (_sidebarExpanded ? 0 : facebookInset), tasksTop, 0, 0);
         _taskArea.Width = layout.TaskWidth;
         _taskArea.MaxHeight = Math.Max(0, surface.ActualHeight - tasksTop - 24);
-        _sidebarDivider.Margin = new Thickness(layout.ContentInset + facebookInset - 12, 20, 0, 24);
+        _sidebarDivider.Margin = new Thickness(_facebookPanelOpen ? layout.WidgetWidth + 4 : layout.ContentInset - 12, 20, 0, 24);
         // On narrow windows an open task drawer takes the content slot. Keep
         // the draft/history intact and restore them when the drawer closes.
         var drawerOnly = (_tasksPanelOpen || expanded || _facebookPanelOpen) && contentWidth - layout.ContentInset - facebookInset - DestinationRailInset < 200;

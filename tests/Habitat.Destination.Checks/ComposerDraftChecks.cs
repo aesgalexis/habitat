@@ -5,6 +5,16 @@ internal static class ComposerDraftChecks
     internal static void Run(Action<bool, string> check)
     {
         const string original = "  café ☕\nsecond line  ";
+        var privateDrafts = new ComposerDrafts();
+        privateDrafts.Edit(ComposerDestination.OpenAI, "Unrelated OpenAI draft");
+        privateDrafts.Isolate("contact:a"); privateDrafts.Isolate("contact:b");
+        check(privateDrafts.Text("contact:a") == "" && privateDrafts.Text("contact:b") == "", "Contact editors never inherit shared drafts");
+        privateDrafts.Edit("contact:a", original);
+        check(privateDrafts.Text("contact:b") == "" && privateDrafts.Text(ComposerDestination.OpenAI) == "Unrelated OpenAI draft", "Private recipient text cannot leak into another destination");
+        var privateSubmission = privateDrafts.Capture("contact:a");
+        privateDrafts.Accept(privateSubmission); privateDrafts.Clear(privateSubmission);
+        privateDrafts.Edit("contact:a", "A second private message");
+        check(privateDrafts.Text("contact:b") == "" && privateDrafts.Text(ComposerDestination.OpenAI) == "Unrelated OpenAI draft", "Cleared contacts remain isolated when composing another message");
         var destinations = ComposerDestinations.Ordered.ToArray();
         var drafts = new ComposerDrafts();
         drafts.Edit(ComposerDestination.OpenAI, original);

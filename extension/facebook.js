@@ -43,10 +43,31 @@ function readFacebookContacts() {
     // A section-wide button/list item must never become an invented contact.
     if (row.querySelectorAll("img,svg image").length !== 1) continue;
     rowCount++;
-    let name = text(row.getAttribute("aria-label")) || text(row.textContent) || text(photo.getAttribute("alt"));
+    const rowLabel = text(row.getAttribute("aria-label"));
+    let name = rowLabel || text(row.textContent) || text(photo.getAttribute("alt"));
     // Facebook's photo-only profile link can take its accessible name from SVG.
     if (!name) name = text(photo.closest('[aria-label]')?.getAttribute("aria-label"));
-    name = name.replace(/(?:[,·]?\s*(?:Active now|Activo ahora|Activa ahora|En línea))$/i, "").trim();
+    const active = /^(?:active now|online|activo ahora|activa ahora|en línea|en linea|disponible)$/i;
+    const offline = /^(?:offline|not active|desconectado|desconectada|sin conexión|sin conexion|no disponible)$/i;
+    const suffix = /(?:[,·]\s*(Active now|Online|Activo ahora|Activa ahora|En línea|En linea|Offline|Desconectado|Desconectada|Sin conexión)|\s+(Active now|Activo ahora|Activa ahora|En línea|En linea))$/i;
+    const activity = rowLabel.match(suffix);
+    let isOnline = activity ? active.test(activity[1] || activity[2]) : null;
+    const states = [];
+    if (isOnline !== null) states.push(isOnline);
+    // Only explicit, visible presence labels count. A loaded photo, a green
+    // decorative pixel or membership in Contacts never implies online status.
+    for (const element of [...row.querySelectorAll('[aria-label],[title],[role="status"]')].slice(0,50)) {
+      if (element === photo || !visible(element) || element.matches('a[href]')) continue;
+      const values = [element.getAttribute("aria-label"),element.getAttribute("title"),
+        element.getAttribute("role") === "status" ? element.textContent : null].map(text);
+      for (const value of values) {
+        if (value.toLowerCase() === name.toLowerCase()) continue;
+        if (active.test(value)) states.push(true);
+        else if (offline.test(value)) states.push(false);
+      }
+    }
+    isOnline = states.length && states.every(value => value === states[0]) ? states[0] : null;
+    name = name.replace(suffix, "").trim();
     if (!name || name.length > 200 || /^(?:profile picture|foto del perfil|imagen del perfil)$/i.test(name)) continue;
     let link = null;
     const anchor = row.matches("a[href]") ? row : row.querySelector("a[href]");
@@ -59,7 +80,7 @@ function readFacebookContacts() {
           const reserved = new Set(["login","checkpoint","recover","friends","groups","marketplace","watch","reel","stories","settings","logout.php","l.php","help","notifications"]);
           if (path === "profile.php" && /^\d+$/.test(url.searchParams.get("id") || ""))
             link = "https://www.facebook.com/profile.php?id=" + url.searchParams.get("id");
-          else if (/^messages\/t\/[A-Za-z0-9._-]+$/.test(path) || /^[A-Za-z0-9.]+$/.test(path) && !reserved.has(path))
+          else if (/^messages\/(?:e2ee\/)?t\/[A-Za-z0-9._-]+$/.test(path) || /^[A-Za-z0-9.]+$/.test(path) && !reserved.has(path))
             link = "https://www.facebook.com/" + path;
         }
       } catch (_) {}
@@ -68,7 +89,7 @@ function readFacebookContacts() {
     const identity = link || name + "\n" + image.href;
     if (seen.has(identity)) continue;
     seen.add(identity);
-    contacts.push({name,photoUrl:image.href,link});
+    contacts.push({name,photoUrl:image.href,link,isOnline});
     if (contacts.length === 200) break;
   }
   return {contacts,diagnostic:{stage:"section-read",sections:regions.length,photos:photos.length,rows:rowCount}};
@@ -119,6 +140,7 @@ const facebookTransport = (() => {
       readiness = new Promise(resolve => { ready = resolve; });
       watch(current);
       current.onopen = () => current.send(JSON.stringify({key:auth.key,facebookProtocol:1,
+        facebookMessagingProtocol:typeof facebookMessaging === "undefined" ? 0 : 1,
         extensionVersion:chrome.runtime?.getManifest?.().version || "unknown"}));
       current.onmessage = event => {
         if (socket !== current) return;
@@ -127,6 +149,7 @@ const facebookTransport = (() => {
           if (packet.kind !== "facebook-tick") return;
           lastTick = Date.now(); issue = null; ready?.(); ready = null;
           current.send(JSON.stringify({kind:"facebook-pong"}));
+          if (typeof facebookMessaging !== "undefined") void facebookMessaging.handle(current,packet.message);
           if (!packet.request) { job = cache = null; return; }
           void dispatch(current, packet.request);
         } catch (_) {}
@@ -210,6 +233,26 @@ const facebookTransport = (() => {
           if (Array.isArray(page?.contacts) && (page.contacts.length || new URL(tab.url).pathname !== "/")) {
             let size = 0;
             result = {contacts:page.contacts.slice(0,200).filter(contact => (size += new TextEncoder().encode(JSON.stringify(contact)).length) <= 180000)};
+            // All friends often omits presence. Enrich matching profile links
+            // from an already-open Home tab, without navigating or opening one.
+            if (new URL(tab.url).pathname.startsWith("/friends/list")) {
+              try {
+                const homes = await chrome.tabs.query({url:["https://www.facebook.com/","https://facebook.com/"]});
+                const home = homes.find(item => isFacebook(item.url) && new URL(item.url).pathname === "/" && item.status === "complete");
+                if (home && valid()) {
+                  const extra = await chrome.scripting.executeScript({target:{tabId:home.id},func:readFacebookContacts});
+                  const presence = new Map();
+                  const duplicates = new Set();
+                  for (const contact of extra[0]?.result?.contacts || []) {
+                    if (!contact.link || typeof contact.isOnline !== "boolean") continue;
+                    if (presence.has(contact.link) && presence.get(contact.link) !== contact.isOnline) duplicates.add(contact.link);
+                    presence.set(contact.link,contact.isOnline);
+                  }
+                  for (const contact of result.contacts)
+                    if (contact.isOnline == null && presence.has(contact.link) && !duplicates.has(contact.link)) contact.isOnline = presence.get(contact.link);
+                }
+              } catch (_) { /* Presence is optional; keep the friends snapshot. */ }
+            }
             break;
           }
           if (new URL(tab.url).pathname === "/" && Date.now() >= homeDeadline) {

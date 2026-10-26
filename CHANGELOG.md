@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.16.3 — 2026-10-26
+
+- Mensajería explícita a contactos de Facebook desde HABITAT, con identidad verificada, borradores separados por contacto y protección frente a envíos duplicados o inciertos.
+- Seleccionar un contacto cierra su panel y mantiene su foto y nombre arriba a la izquierda, además del destino activo en la barra. La acción Send message muestra Facebook debajo para identificar el canal.
+- Las pestañas temporales de envío y diagnóstico se cierran al terminar correctamente. Los borradores, las verificaciones de acceso y los envíos inciertos permanecen disponibles para revisión.
+- Icono de contactos con el hover del sidebar, búsqueda local por nombre, tarjetas pequeñas por defecto, tamaño en Preferences y presencia online/offline cuando Facebook la indica explícitamente.
+- Registro local acotado del ciclo de envío y comando de inspección que verifica la conversación y su editor sin insertar ni enviar texto.
+
 ## 0.16.2 — 2026-10-25
 
 - Recuperadas las 16 revisiones consolidadas hasta 0.16.1 mediante fusión con la rama de Facebook: fondos e ilustraciones, mensajes programados de Codex, chat persistente, Mercados, sidebar configurable, destinos personales y mejoras de lectura y ventana.

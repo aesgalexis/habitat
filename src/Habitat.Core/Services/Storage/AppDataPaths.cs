@@ -15,6 +15,7 @@ internal sealed class AppDataPaths
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HABITAT");
     public string DesktopDirectory => _isolatedRoot ?? Path.Combine(DesktopLocalDirectory(), "HABITAT");
     public string PreferencesPath => Path.Combine(LocalDirectory, "preferences.json");
+    internal string FacebookMessageTracePath => Path.Combine(LocalDirectory, "facebook-messaging.jsonl");
     public string WallpapersDirectory => Path.Combine(LocalDirectory, "Wallpapers");
     internal string UpdatesDirectory => Path.Combine(LocalDirectory, "Updates");
     internal string UpdateDraftsPath => Path.Combine(LocalDirectory, "update-drafts.json");

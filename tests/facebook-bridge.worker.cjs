@@ -17,7 +17,7 @@ const chrome={runtime:{getManifest:()=>({version:'synthetic'})},alarms:{onAlarm:
   storage:{onChanged:signal(),local:{get:async()=>({habitatConsentVersion:1})},session:{get:async()=>({}),set:async()=>{}}},
   permissions:{contains:async()=>true,onRemoved:signal(),onAdded:signal()},
   tabs:{query:async()=>[{id:1,url:'https://www.facebook.com/',status:'complete'}],get:async()=>({id:1,url:'https://www.facebook.com/',status:'complete'})},
-  scripting:{executeScript:async()=>[{result:{contacts:[{name:'Real wire · synthetic contact ☕',photoUrl:'https://scontent.fbcdn.net/synthetic.jpg',link:null}]}}]}};
+  scripting:{executeScript:async()=>[{result:{contacts:[{name:'Real wire · synthetic contact ☕',photoUrl:'https://scontent.fbcdn.net/synthetic.jpg',link:null,isOnline:true}]}}]}};
 const context=vm.createContext({chrome,WebSocket:LocalSocket,URL,AbortSignal,TextEncoder,Date,Promise,setTimeout,
   habitatConnectionEnabled:async()=>true,
   fetch:(url,options)=>{

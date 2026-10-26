@@ -13,7 +13,7 @@ try {
         throw 'The store package must use MV3 and scoped permissions.'
     }
     foreach ($required in @($manifest.background.service_worker, $manifest.action.default_popup,
-        'connection.js', 'transport.js', 'translation.js', 'search-transport.js', 'search.js', 'youtube.js', 'facebook.js',
+        'connection.js', 'transport.js', 'translation.js', 'search-transport.js', 'search.js', 'youtube.js', 'facebook.js', 'facebook-messaging.js',
         'welcome.html', 'welcome.css', 'welcome.js', 'privacy.html', 'LICENSE.txt') + @($manifest.content_scripts.js)) {
         if ($null -eq $archive.GetEntry($required)) { throw "Missing runtime resource: $required" }
     }
