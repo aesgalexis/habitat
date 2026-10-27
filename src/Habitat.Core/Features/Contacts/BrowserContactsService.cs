@@ -133,6 +133,7 @@ internal sealed class BrowserContactsService(TimeProvider? time = null)
         var candidates = new Dictionary<string, ContactCandidate>();
         foreach (var row in snapshot.Contacts)
         {
+            if (row.Email is not null && ContactChannels.IsNoReply(row.Email)) continue;
             string remote;
             if (snapshot.Provider == "facebook") remote = row.ProfileUrl ?? "snapshot:" + ContactBook.Hash(row.Name + "\n" + row.PhotoUrl);
             else

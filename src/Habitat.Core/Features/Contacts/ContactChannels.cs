@@ -1,5 +1,6 @@
 using Habitat.Features.Facebook;
 using System.Net.Mail;
+using System.Text.RegularExpressions;
 
 namespace Habitat.Features.Contacts;
 
@@ -9,15 +10,19 @@ internal static class ContactChannels
     internal static ContactChannel[] For(ContactBook book, ContactPerson person) => book.For(person)
         .OrderByDescending(record => book.Source(record).Connected).ThenByDescending(record => record.Current.ObservedAt)
         .SelectMany(record => record.Current.Values.Select(value => (record, value)))
-        .Where(x => x.value.Kind == "email" && IsEmail(x.value.Value) ||
+        .Where(x => x.value.Kind == "email" && IsEmail(x.value.Value) && !IsNoReply(x.value.Value) ||
             x.value.Kind == "messenger" && FacebookContactsService.SafeLink(x.value.Value))
         .Select(x => new ContactChannel(x.value.Kind, x.value.Value,
-            x.value.Kind == "email" ? "Open email draft" : "Message in Messenger", x.record.SourceId))
+            x.value.Kind == "email" ? "Write email" : "Message in Messenger", x.record.SourceId))
         .DistinctBy(c => (c.Kind, c.Kind == "messenger" ? ContactBook.FacebookProfileIdentity(c.Address) ?? c.Address :
             ContactBook.NormalizeEmail(c.Address))).ToArray();
 
     internal static bool IsEmail(string value) => value.Length <= 320 && !value.Any(char.IsControl) &&
         MailAddress.TryCreate(value, out var address) && address.Address.Equals(value, StringComparison.OrdinalIgnoreCase);
+
+    internal static bool IsNoReply(string value) => IsEmail(value) && Regex.IsMatch(value[..value.LastIndexOf('@')],
+        @"(?:^|[._+\-])(?:no[._\-]*repl(?:y|ies)|do[._\-]*not[._\-]*reply)(?:$|[._+\-\d])",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     internal static Uri GmailDraft(string email, string? sender, string body = "")
     {

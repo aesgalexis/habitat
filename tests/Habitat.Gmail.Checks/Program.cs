@@ -119,6 +119,25 @@ var longSubject = string.Concat(Enumerable.Repeat("😀", 100));
 var encodedLong = GmailDraft.EncodeMessage("body", longSubject, "test@habitat.local");
 var decodedLong = Encoding.UTF8.GetString(Convert.FromBase64String(encodedLong.Replace('-', '+').Replace('_', '/').PadRight((encodedLong.Length + 3) / 4 * 4, '=')));
 Check(decodedLong.Split("\r\n").TakeWhile(line => line.Length > 0).All(line => line.Length < 998), "Fold long Unicode subject headers safely.");
+await draftService.CreateDraftAsync(draftBody, CancellationToken.None, "friend@example.com");
+Check(postedMime!.Contains("\r\nTo: friend@example.com\r\n") && !postedMime.Contains("\r\nBcc:") &&
+    Encoding.UTF8.GetString(Convert.FromBase64String(postedMime.Split("\r\n\r\n", 2)[1])) == draftBody,
+    "A contact draft must include only its fixed recipient and preserve the exact Unicode body.");
+var recipientCalls = draftCalls;
+foreach (var invalidRecipient in new[] { "friend@example.com\r\nBcc: other@example.com", "friend@example.com,other@example.com", "Friend <friend@example.com>", "invalid" })
+    await Reject<InvalidDataException>(() => draftService.CreateDraftAsync(draftBody, CancellationToken.None, invalidRecipient),
+        "Malformed recipients and injected headers must be rejected before any draft POST.");
+Check(draftCalls == recipientCalls, "Rejected contact recipients must never reach Gmail.");
+using (var contactSession = new GmailSession(() => new GmailAuthService(new MemoryStore(freshAccount), draftHttp),
+    auth => new GmailService(auth, draftHttp), exception => exception.Message))
+{
+    await contactSession.CreateContactDraftAsync(draftBody, "friend@example.com", "SAMPLE@example.com", CancellationToken.None);
+    Check(postedMime!.Contains("\r\nTo: friend@example.com\r\n"), "The contact draft uses the matching authorized sender account.");
+    var beforeWrongSender = draftCalls;
+    await Reject<GmailDraftAuthorizationException>(() => contactSession.CreateContactDraftAsync(draftBody, "friend@example.com", "other@example.com", CancellationToken.None),
+        "A selected sender must not silently fall back to a different authorized Gmail account.");
+    Check(draftCalls == beforeWrongSender, "A mismatched sender must not create a draft in another account.");
+}
 draftStatus = HttpStatusCode.Forbidden;
 await Reject<GmailDraftAuthorizationException>(() => draftService.CreateDraftAsync(draftBody, CancellationToken.None), "Missing compose permission requests explicit authorization without opening the browser.");
 draftStatus = HttpStatusCode.ServiceUnavailable;

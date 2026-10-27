@@ -271,7 +271,34 @@ await noOpSession.ChangeAsync(bk => BrowserContactsService.Apply(bk, fbSnapshot)
 var autoRevision = noOpSession.Book.Revision;
 await noOpSession.ChangeAsync(bk => BrowserContactsService.Apply(bk, fbSnapshot));
 Check(noOpSession.Book.Revision == autoRevision, "Identical automatic syncs do not write new storage revisions.");
-Console.WriteLine($"PASS: {checks} contact checks; opt-in sources, lossless import, merge/undo, suggestions, storage conflicts, Google pagination and channel routing. Synthetic data: {root}");
+foreach (var address in new[] { "noreply@example.com", "No-Reply@example.com", "no_reply@example.com", "no.reply@example.com",
+    "donotreply@example.com", "do-not-reply@example.com", "no-replies@example.com", "noreply+account@example.com", "service.noreply@example.com", "noreply123@example.com" })
+    Check(ContactChannels.IsNoReply(address), "No-reply address variants must be excluded: " + address);
+foreach (var address in new[] { "reply@example.com", "support@example.com", "jane@noreply.example.com", "jane.noreplying@example.com" })
+    Check(!ContactChannels.IsNoReply(address), "A real address must not be excluded because of its domain or an unrelated name: " + address);
+var automatedCandidate = Candidate("auto-noreply", "Automated company", "no-reply@example.com");
+var automatedBook = ContactBook.Empty.Import(google, [automatedCandidate]);
+Check(!automatedBook.ListedPeople.Any() && automatedBook.Records.Single().Current.Raw == automatedCandidate.Raw &&
+    ContactChannels.For(automatedBook, automatedBook.People[0]).Length == 0,
+    "Previously saved no-reply-only contacts must disappear from the agenda and channel choices without deleting original data.");
+automatedBook = automatedBook.Import(secondGoogle, [automatedCandidate]);
+Check(automatedBook.Suggestions().Length == 0, "Hidden automated senders must not generate duplicate suggestions.");
+var automatedPath = Path.Combine(root, "automated-senders.json");
+var automatedStore = new ContactStore(automatedPath);
+await automatedStore.SaveAsync(automatedBook, 0);
+var automatedSession = new ContactSession(automatedStore);
+await automatedSession.LoadAsync();
+Check(!automatedSession.Book.ListedPeople.Any() && automatedSession.Book.Records.Length == 2 && automatedSession.Book.Revision == 1,
+    "The no-reply filter must apply after restart without rewriting or destroying the original agenda.");
+var mixedBook = ContactBook.Empty.Import(google, [automatedCandidate with { Values = [new("name", "Real person"),
+    new("email", "noreply@example.com"), new("email", "real@example.com")] }]);
+Check(mixedBook.ListedPeople.Count() == 1 && ContactChannels.For(mixedBook, mixedBook.People[0]).Single().Address == "real@example.com",
+    "A contact with a real address must stay visible while its no-reply address is excluded as an email channel.");
+var automatedSnapshot = googleSnapshot with { Contacts = [new(null, "Automated sender", "do-not-reply@example.com", Page: "Gmail")] };
+var ignored = BrowserContactsService.Apply(ContactBook.Empty, automatedSnapshot);
+Check(ignored.Records.Length == 0 && !ignored.ListedPeople.Any() && ReferenceEquals(ignored, BrowserContactsService.Apply(ignored, automatedSnapshot)),
+    "New browser no-reply rows must not become contact records or cause repeated storage writes.");
+Console.WriteLine($"PASS: {checks} contact checks; opt-in sources, lossless import, merge/undo, suggestions, storage conflicts, Google pagination, no-reply filtering and channel routing. Synthetic data: {root}");
 
 static HttpResponseMessage Response(string json, HttpStatusCode status = HttpStatusCode.OK) => new(status) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
 sealed class Handler(Func<HttpRequestMessage, HttpResponseMessage> send) : HttpMessageHandler

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.17.3 — 2026-10-27
+
+- Los contactos de correo abren el editor de HABITAT, con destinatario fijado, cuenta remitente elegida y borrador independiente por dirección y remitente. Elegir el contacto no abre Gmail ni copia el texto de otro destino.
+- **Draft email** guarda el correo dirigido a ese contacto mediante la integración de Gmail y muestra el resultado en HABITAT, conservando el texto. Las autorizaciones pendientes se ofrecen bajo acción explícita; una cuenta distinta de la elegida no puede guardar el borrador. El navegador se abre únicamente mediante **Open in browser**.
+- Filtro para `noreply`, `no-reply`, `no_reply`, `no.reply`, `donotreply`, `do-not-reply` y variantes con etiquetas o sufijos. No se añaden desde nuevas lecturas; los registros anteriores con solo una dirección automática se omiten de agenda, sugerencias, canales y recuentos sin borrar sus datos originales.
+- Comprobaciones de destinatario MIME y rechazo de cabeceras inyectadas, cuenta remitente, conservación de texto Unicode, filtro tras reiniciar y controles WinUI con guardado de correo interceptado. No se envía correo en estas pruebas.
+
 ## 0.17.2 — 2026-10-27
 
 - Una sola persona por perfil de Facebook, incluso si ya estaba importado antes de activar la lectura automática. Las agendas existentes se reparan conservando los registros, cuentas, valores originales e historial. La agrupación se puede deshacer y respeta las decisiones de mantener separados los contactos. Los nombres, correos, teléfonos e identificadores de conversación no se usan para agrupar automáticamente.

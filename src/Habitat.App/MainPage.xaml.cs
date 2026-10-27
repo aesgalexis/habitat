@@ -69,7 +69,7 @@ public sealed partial class MainPage : Page
             { Margin = new Thickness(-12, 0, -30, 0) };
         _composer = new(_composerDrafts, RestoreComposerDraft);
         _composer.StateChanged += UpdateSendState;
-        _composer.IsEnabled = id => _destinationCatalog.Enabled.Contains(id) || IsFacebookDestination(id);
+        _composer.IsEnabled = id => _destinationCatalog.Enabled.Contains(id) || IsContactDestination(id);
         _conversationView = new(_conversation, ToneBrush, TextBrush);
         _windowHost = windowHost;
         _preferences = Preferences.Load(services.Paths.PreferencesPath);
@@ -307,7 +307,7 @@ public sealed partial class MainPage : Page
         var composerHeight = Composer.ActualHeight > 0 ? Composer.ActualHeight : Composer.MinHeight;
         var composerTop = Math.Max(0, (height - composerHeight) / 2);
         var sendTop = Math.Max(height * 2 / 3 - sendHeight / 2, composerTop + composerHeight + 12);
-        sendTop = Math.Min(sendTop, Math.Max(0, height - sendHeight - (IsFacebookDestination(_destination) ? 20 : 0)));
+        sendTop = Math.Min(sendTop, Math.Max(0, height - sendHeight - (IsContactDestination(_destination) ? 20 : 0)));
         Composer.Margin = new Thickness(0, composerTop, 0, 0);
         UpdateComposerHintLayout(composerTop);
         SendButton.Margin = new Thickness(0, sendTop, 0, 0);
@@ -553,6 +553,8 @@ public sealed partial class MainPage : Page
             SetStatus(recipient.Link is null ? "This contact has no verified Facebook link. Reload contacts before sending." : "Messenger · " + recipient.Name,
                 recipient.Link is null ? StatusTone.Warning : StatusTone.Success);
         }
+        else if (_emailRecipients.TryGetValue(_destination, out var emailRecipient))
+            SetStatus("Gmail · " + emailRecipient.Address, StatusTone.Success);
         else if (_destination == ComposerDestination.OpenAI)
         {
             if (_bridge?.HasMessageInFlight == true || _bridgeStartupFailed)

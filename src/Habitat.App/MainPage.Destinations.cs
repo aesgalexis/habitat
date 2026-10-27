@@ -78,12 +78,12 @@ public sealed partial class MainPage
     {
         var previous = _destination;
         _destinationCatalog = new(_preferences.EnabledDestinations, _preferences.WindowsApps);
-        _destination = IsFacebookDestination(previous) ? previous : _destinationCatalog.Select(previous);
+        _destination = IsContactDestination(previous) ? previous : _destinationCatalog.Select(previous);
         if (previous == ComposerDestination.Codex && _destination != previous) CancelPendingCodexSend();
         ConfigureComposerRoutes();
         RebuildDestinationRail();
         RestoreComposerDraft();
-        if (!IsFacebookDestination(_destination)) _preferences = _preferences with { Destination = _destination };
+        if (!IsContactDestination(_destination)) _preferences = _preferences with { Destination = _destination };
         UpdateDestinationPresentation();
     }
 
@@ -167,9 +167,9 @@ public sealed partial class MainPage
     {
         if (_updateDialogOpen || _updateHandoff) return;
         if (_destination == ComposerDestination.Codex && destination != _destination) CancelPendingCodexSend();
-        _destination = IsFacebookDestination(destination) ? destination : _destinationCatalog.Select(destination);
+        _destination = IsContactDestination(destination) ? destination : _destinationCatalog.Select(destination);
         RestoreComposerDraft();
-        if (!IsFacebookDestination(_destination)) _preferences = _preferences with { Destination = _destination };
+        if (!IsContactDestination(_destination)) _preferences = _preferences with { Destination = _destination };
         SavePreferences();
         UpdateDestinationPresentation();
         if (_destinationButtons.TryGetValue(_destination, out var button)) button.StartBringIntoView();
@@ -209,10 +209,12 @@ public sealed partial class MainPage
         PresentDestinationSection();
         Composer.PlaceholderText = string.Empty;
         ComposerHint.Text = _facebookRecipients.TryGetValue(_destination, out var recipient)
-            ? "Message " + recipient.Name + "…" : _destinationCatalog.Placeholder(_destination);
+            ? "Message " + recipient.Name + "…" : _emailRecipients.TryGetValue(_destination, out var emailRecipient)
+            ? "Email " + emailRecipient.Name + "…" : _destinationCatalog.Placeholder(_destination);
         AutomationProperties.SetName(Composer, ComposerHint.Text);
         UpdateWritingLayout();
-        SendButton.Content = UiLanguage.Value(SendButton, "Content", () => IsFacebookDestination(_destination) ? "Send message" : _destination switch
+        SendButton.Content = UiLanguage.Value(SendButton, "Content", () => IsFacebookDestination(_destination) ? "Send message" :
+            IsEmailContactDestination(_destination) ? UiText.Get("DraftEmail") : _destination switch
         {
             ComposerDestination.Notepad => UiText.Get("OpenInNotepad"),
             ComposerDestination.Translate => UiText.Get("Translate"),

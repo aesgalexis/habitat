@@ -161,7 +161,7 @@ public sealed partial class MainPage
         _renderedContactLimit = _contactVisibleLimit;
         FacebookAvatars.Children.Clear();
         _facebookError = error;
-        var matches = book.People.Where(p => query.Length == 0 || ContactBook.Matches(book.Name(p), query) ||
+        var matches = book.ListedPeople.Where(p => query.Length == 0 || ContactBook.Matches(book.Name(p), query) ||
             book.For(p).Any(r => r.Current.Values.Any(v => v.Kind is "email" or "phone" && ContactBook.Matches(v.Value, query))))
             .OrderBy(book.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
         if (_facebookError is null)
@@ -170,7 +170,7 @@ public sealed partial class MainPage
         var count = book.Suggestions().Length;
         ContactsDuplicates.Content = $"Possible duplicates ({count})";
         ContactsDuplicates.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        AutomationProperties.SetItemStatus(FacebookButton, $"{book.People.Length} contacts");
+        AutomationProperties.SetItemStatus(FacebookButton, $"{book.ListedPeople.Count()} contacts");
         AutomationProperties.SetHelpText(FacebookButton, _facebookError ?? "Open your unified address book");
         ApplyFacebookContactFilter(); PaintFacebook();
     }
@@ -224,7 +224,7 @@ public sealed partial class MainPage
         catch (Exception) { ShowContactProfile(personId, anchor, "Could not open this channel. Your text was kept. Try again."); }
     }
 
-    private async Task OpenContactChannelAsync(ContactBook book, ContactPerson person, ContactChannel channel, string? sender = null)
+    private Task OpenContactChannelAsync(ContactBook book, ContactPerson person, ContactChannel channel, string? sender = null)
     {
         if (channel.Kind == "messenger")
         {
@@ -237,10 +237,10 @@ public sealed partial class MainPage
         }
         else
         {
-            if (!await _launchBrowser(ContactChannels.GmailDraft(channel.Address, sender, Composer.Text)))
-                throw new InvalidOperationException("Could not open the Gmail draft. Your text was kept.");
             ContactProfile.Hide();
+            SelectEmailContact(book, person, channel.Address, sender);
         }
+        return Task.CompletedTask;
     }
 
     private void ShowContactProfile(string personId, FrameworkElement anchor, string? error = null)

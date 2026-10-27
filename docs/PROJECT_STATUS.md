@@ -1,6 +1,6 @@
 # Estado verificable del proyecto
 
-Revisión: **27 de octubre de 2026**. La versión fuente 0.17.2 repara las copias del mismo perfil de Facebook conservando todos los registros y su historial, abre directamente el único canal del contacto y facilita conceder el permiso pendiente de Gmail. Conserva la agenda unificada, fuentes automáticas opcionales, fusiones revisables y la extensión 0.10.8, junto a compatibilidad ZIP y diagnósticos persistentes del actualizador.
+Revisión: **27 de octubre de 2026**. La versión fuente 0.17.3 mantiene la escritura a contactos de correo dentro de HABITAT, con destinatario fijado y borradores independientes, y filtra direcciones no-reply tanto de nuevas lecturas como de la agenda anterior. Conserva la reparación de duplicados de Facebook, fuentes automáticas opcionales, fusiones revisables y la extensión 0.10.8, junto a compatibilidad ZIP y diagnósticos persistentes del actualizador.
 
 ## Recuperación de las funciones consolidadas
 
@@ -21,6 +21,6 @@ La rama de Facebook partía de 4faa5e9 (0.10.0). Cambiar a esa rama sin integrar
 
 ## Distribución y decisiones
 
-La versión fuente declara **0.17.2**, la extensión de Chrome **0.10.8** y la de VS Code **0.2.0**. Las publicaciones se consultan en [GitHub Releases](https://github.com/aesgalexis/habitat/releases). Los scripts generan un release.json con el commit exacto de la etiqueta y verifican ambas instalaciones en CI. La versión instalada y las publicaciones son comprobaciones independientes. Las guías de Chrome Web Store y WinGet describen observaciones fechadas. La firma sigue aplazada conforme a [SIGNING.md](SIGNING.md).
+La versión fuente declara **0.17.3**, la extensión de Chrome **0.10.8** y la de VS Code **0.2.0**. Las publicaciones se consultan en [GitHub Releases](https://github.com/aesgalexis/habitat/releases). Los scripts generan un release.json con el commit exacto de la etiqueta y verifican ambas instalaciones en CI. La versión instalada y las publicaciones son comprobaciones independientes. Las guías de Chrome Web Store y WinGet describen observaciones fechadas. La firma sigue aplazada conforme a [SIGNING.md](SIGNING.md).
 
 Las comprobaciones de esta recuperación se registran en [RECOVERY_2026-10-25.md](RECOVERY_2026-10-25.md), sin atribuir a este árbol validaciones de otras revisiones.

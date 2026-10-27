@@ -236,7 +236,7 @@ public sealed partial class MainPage
             card.Visibility = matches ? Visibility.Visible : Visibility.Collapsed;
             if (matches) visible++;
         }
-        FacebookNoMatches.Text = _facebookError ?? (_services.Contacts.Book.People.Length == 0
+        FacebookNoMatches.Text = _facebookError ?? (!_services.Contacts.Book.ListedPeople.Any()
             ? "Your address book is empty. Choose Manage contacts to connect a source or create a contact." : "No contacts found.");
         FacebookNoMatches.Visibility = _facebookPanelOpen && visible == 0
             ? Visibility.Visible : Visibility.Collapsed;

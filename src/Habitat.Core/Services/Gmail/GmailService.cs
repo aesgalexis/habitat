@@ -65,13 +65,13 @@ internal sealed class GmailService : IDisposable
         return Api + "messages/" + id;
     }
 
-    public async Task<GmailDraft> CreateDraftAsync(string text, CancellationToken cancellationToken)
+    public async Task<GmailDraft> CreateDraftAsync(string text, CancellationToken cancellationToken, string? recipient = null)
     {
         if (string.IsNullOrWhiteSpace(text)) throw new ArgumentException(UiText.Get("WriteAnEmailBeforeSavingADraft"), nameof(text));
         if (!_auth.IsSignedIn) throw new GmailDraftAuthorizationException(UiText.Get("AuthorizeGmailDraftsThenPressDraftEmailAgain"));
         var subject = GmailDraft.SubjectFrom(text);
         var messageId = Guid.NewGuid().ToString("N") + "@habitat.local";
-        var raw = GmailDraft.EncodeMessage(text, subject, messageId);
+        var raw = GmailDraft.EncodeMessage(text, subject, messageId, recipient);
         for (var attempt = 0; ; attempt++)
         {
             var token = await _auth.GetAccessTokenAsync(cancellationToken, attempt > 0).ConfigureAwait(false);

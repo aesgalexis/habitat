@@ -21,7 +21,7 @@ internal sealed class GmailDraftSection : IDestinationSection
     private readonly AsyncOperationScope _operations = new();
     private GmailDraft? _saved;
     private bool _disposed;
-    public string Destination => ComposerDestination.Gmail;
+    public string Destination { get; }
     public FrameworkElement View => _view;
     public bool IsBusy { get; private set; }
     public bool HasContent { get; private set; }
@@ -29,8 +29,9 @@ internal sealed class GmailDraftSection : IDestinationSection
     internal event Action? ClearRequested;
 
     public GmailDraftSection(Func<string, CancellationToken, Task<GmailDraft>> save, Func<Task> authorizeDrafts,
-        Func<string?> email, Func<Uri, Task<bool>> open, Action<Exception> reportError)
+        Func<string?> email, Func<Uri, Task<bool>> open, Action<Exception> reportError, string destination = ComposerDestination.Gmail)
     {
+        Destination = destination;
         _save = save; _authorizeDrafts = authorizeDrafts; _email = email; _open = open; _reportError = reportError;
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
         actions.Children.Add(_browser);

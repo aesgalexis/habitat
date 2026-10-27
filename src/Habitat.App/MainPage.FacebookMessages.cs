@@ -80,11 +80,16 @@ public sealed partial class MainPage
 
     private void UpdateContactMessagePresentation()
     {
-        var active = _facebookRecipients.TryGetValue(_destination, out var contact);
+        var facebook = _facebookRecipients.TryGetValue(_destination, out var contact);
+        var email = _emailRecipients.GetValueOrDefault(_destination);
+        contact ??= email?.Display;
+        var active = contact is not null;
         ContactMessageHeader.Visibility = ContactMessageChannel.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
         if (!active) return;
+        ContactMessageChannel.Text = facebook ? "Facebook" : "Gmail";
+        AutomationProperties.SetName(ContactMessageChannel, "Message channel: " + ContactMessageChannel.Text);
         ContactMessageName.Text = contact!.Name;
-        AutomationProperties.SetName(ContactMessageHeader, contact.Name + ", active message destination");
+        AutomationProperties.SetName(ContactMessageHeader, contact.Name + (email is null ? "" : ", " + email.Address) + ", active message destination");
         if (!ReferenceEquals(_displayedContact, contact))
         {
             if (ContactMessageHeader.Children.Count > 1) ContactMessageHeader.Children.RemoveAt(1);
@@ -105,7 +110,7 @@ public sealed partial class MainPage
         ContactMessageHeader.Margin = new Thickness(left, 20, 0, 0);
         ContactMessageHeader.Width = Math.Min(280, Math.Max(0,
             surface.ActualWidth - surface.Padding.Left - surface.Padding.Right - DestinationRailInset - left));
-        ContactMessageHeader.Visibility = IsFacebookDestination(_destination) && _root.Visibility == Visibility.Visible
+        ContactMessageHeader.Visibility = IsContactDestination(_destination) && _root.Visibility == Visibility.Visible
             ? Visibility.Visible : Visibility.Collapsed;
     }
 

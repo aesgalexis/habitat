@@ -1,6 +1,6 @@
 # Agenda unificada
 
-La agenda de la versión 0.17.2 se completa automáticamente con las fuentes activadas y abiertas en Chrome. **Contacts** abre los datos guardados localmente. **Manage contacts** lleva a **Preferences → Contacts**, con **Sources**, **People** y **Possible duplicates**. Requiere la extensión 0.10.8 o posterior; los límites de lectura se detallan abajo.
+La agenda de la versión 0.17.3 se completa automáticamente con las fuentes activadas y abiertas en Chrome. **Contacts** abre los datos guardados localmente. **Manage contacts** lleva a **Preferences → Contacts**, con **Sources**, **People** y **Possible duplicates**. Requiere la extensión 0.10.8 o posterior; los límites de lectura se detallan abajo.
 
 ## Fuentes y primer uso
 
@@ -41,13 +41,15 @@ Las copias del mismo perfil de Facebook se muestran como una sola persona, aunqu
 
 ## Ficha y canales
 
-Pulsar una tarjeta con un solo canal abre directamente ese canal: Messenger selecciona el destinatario y el editor de HABITAT; correo abre el borrador en Gmail. No aparece un aviso informativo y no se envía ningún mensaje. Si hay varios canales o cuentas remitentes se puede elegir en la ficha. **Contact details**, en el menú contextual de la tarjeta, mantiene accesibles los datos y su procedencia.
+Pulsar una tarjeta con un solo canal selecciona su destinatario y abre el editor de HABITAT, tanto para Messenger como para correo. No se abre Gmail ni aparece un aviso informativo al elegir un contacto. Si hay varios canales o cuentas remitentes se puede elegir en la ficha. **Contact details**, en el menú contextual de la tarjeta, mantiene accesibles los datos y su procedencia.
 
 El buscador local admite nombre, correo y teléfono, ignora acentos/mayúsculas y busca en toda la agenda. La barra presenta hasta 100 coincidencias a la vez; **Load more contacts** añade otras 100. El tamaño sigue en **Preferences → Sidebar → Contact card size**. Si falta el permiso de Google, **Enable Gmail contacts** abre su concesión en Chrome: es necesario pulsar **Enable access** una vez; después las pestañas abiertas se leen automáticamente.
 
-- **Open email draft** abre Gmail con destinatario, cuenta remitente elegida y texto actual del editor. El borrador original de HABITAT se conserva; hay que revisar y enviar en Gmail. No es envío de correo mediante API.
+- **Write email** selecciona un editor independiente por dirección y cuenta remitente. Empieza con **Email <name>…**, el editor centrado y **Draft email**, sin copiar el borrador de otro destino. El destinatario queda fijado en el correo guardado. **Draft email** utiliza la autorización existente de Gmail para guardar el borrador sin abrir el navegador; conserva el texto y muestra el resultado en HABITAT. Si falta autorización ofrece **Authorize Gmail drafts**, bajo acción explícita. La cuenta autorizada debe coincidir con la remitente elegida. **Open in browser** es una acción adicional explícita para revisar y enviar en Gmail; elegir el contacto y guardar el borrador no envían correo.
 - **Message in Messenger** utiliza la integración ya existente y la cuenta de Facebook actualmente abierta en Chrome. Elige un destino con indicación, editor centrado y **Send message**; seleccionar el canal no envía nada. La verificación usa el nombre y enlace originales de Facebook, aunque la ficha unificada tenga otro nombre principal. Se exige una extensión conectada con mensajería compatible.
 - Un teléfono, una URL o una dirección de mensajería importada no habilitan automáticamente iMessage, WhatsApp u otros servicios. Esos canales requieren una integración compatible; no se anuncian como disponibles.
+
+Las direcciones automáticas como `noreply`, `no-reply`, `no_reply`, `no.reply`, `donotreply` y `do-not-reply`, incluidas variantes con etiquetas o sufijos, se excluyen de las nuevas lecturas automáticas. Los registros anteriores cuyo único canal es una dirección de este tipo dejan de aparecer en la agenda, las sugerencias y los recuentos, conservándose los datos originales. Si una persona también tiene una dirección real u otro canal, permanece visible y solo se omite la dirección automática como canal de correo. El dominio o un nombre de empresa por sí solos no activan el filtro.
 
 ## Almacenamiento y privacidad
 

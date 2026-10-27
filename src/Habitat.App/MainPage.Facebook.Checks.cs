@@ -16,6 +16,7 @@ public sealed partial class MainPage
     {
         await CheckAutomaticContactsUiAsync(log);
         await CheckContactsSettingsUiAsync(log);
+        await CheckContactEmailUiAsync(log);
         await _services.Contacts.LoadAsync();
         var originalBook = _services.Contacts.Book;
         var service = _services.Facebook;

@@ -34,13 +34,8 @@ public sealed partial class MainPage
             if (_destination == Services.ComposerDestination.Translate) FocusComposer();
         };
         _destinationSections.Add(translate.Destination, translate);
-        var gmailDraft = new GmailDraftSection(_gmailSession.CreateDraftAsync, async () =>
-        {
-            _gmailSession.Initialize();
-            if (_gmailAuth?.IsConfigured != true) { await ShowGmailSetupAsync(); return; }
-            if (_gmailAuth?.IsConfigured == true)
-                await _gmailSession.SignInAsync(() => _preferences.GmailInboxOnly, _gmailCancellation.Token, authorizeDrafts: true);
-        }, () => _gmailAuth?.Email, uri => _launchBrowser(uri), exception => _services.ReportError("Gmail draft", exception));
+        var gmailDraft = new GmailDraftSection(_gmailSession.CreateDraftAsync, AuthorizeGmailDraftsAsync,
+            () => _gmailAuth?.Email, uri => _launchBrowser(uri), exception => _services.ReportError("Gmail draft", exception));
         gmailDraft.StateChanged += () => { PresentDestinationSection(); UpdateWritingLayout(); UpdateSendState(); };
         gmailDraft.ClearRequested += () =>
         {
@@ -87,6 +82,14 @@ public sealed partial class MainPage
         _launchCodex = async (text, token) => (await codex.SendAsync(text, token)).Result;
         _root.Children.Add(_destinationContent);
         ConfigureComposerRoutes();
+    }
+
+    private async Task AuthorizeGmailDraftsAsync()
+    {
+        _gmailSession.Initialize();
+        if (_gmailAuth?.IsConfigured != true) { await ShowGmailSetupAsync(); return; }
+        if (_gmailAuth?.IsConfigured == true)
+            await _gmailSession.SignInAsync(() => _preferences.GmailInboxOnly, _gmailCancellation.Token, authorizeDrafts: true);
     }
 
     private void ResetSearch(string target)

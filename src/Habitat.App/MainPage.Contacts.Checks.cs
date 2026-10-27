@@ -99,19 +99,26 @@ public sealed partial class MainPage
             _launchBrowser = uri => { openedDraft = uri; return Task.FromResult(true); };
             var contactCard = (Button)FacebookAvatars.Children[0];
             await InvokeAsync(contactCard);
-            if (ContactProfile.IsOpen || Composer.Text != keptDraft || _destination != destination ||
-                openedDraft?.Host != "mail.google.com" || !openedDraft.Query.Contains("amiga%40example.com", StringComparison.Ordinal))
-                throw new InvalidOperationException("A single email channel must open its draft directly without an informational flyout or changing the editor.");
+            if (ContactProfile.IsOpen || Composer.Text != "" || !IsEmailContactDestination(_destination) ||
+                openedDraft is not null || ComposerHint.Text != "Email Amiga José ☕…" || SendButton.Content as string != "Draft email")
+                throw new InvalidOperationException("A single email channel must select its own HABITAT editor without opening Gmail or copying another destination's draft.");
+            SelectDestination(destination);
+            if (Composer.Text != keptDraft) throw new InvalidOperationException("The previous destination's draft must remain intact after selecting an email contact.");
+            SetFacebookOpen(true); await WaitForUpdateUiAsync(() => !_facebookBusy);
+            FacebookContactSearch.Text = "Jose";
+            await WaitForUpdateUiAsync(() => FacebookAvatars.Children.Count == 1);
+            contactCard = (Button)FacebookAvatars.Children[0];
             if (contactCard.ContextFlyout is not MenuFlyout menu || menu.Items.OfType<MenuFlyoutItem>().Single().Text != "Contact details")
                 throw new InvalidOperationException("Contact details must remain available as an explicit secondary action.");
             ShowContactProfile((string)contactCard.Tag, contactCard);
             if (!ContactProfile.IsOpen) throw new InvalidOperationException("The explicit details action must open the contact profile.");
             var profile = (ScrollViewer)ContactProfile.Content;
             await WaitForUpdateUiAsync(() => Descendants(profile).OfType<Button>().Any());
-            if (!Descendants(profile).OfType<Button>().Any(b => (b.Content as string)?.StartsWith("Open email draft", StringComparison.Ordinal) == true) ||
+            if (!Descendants(profile).OfType<Button>().Any(b => (b.Content as string)?.StartsWith("Write email", StringComparison.Ordinal) == true) ||
                 Descendants(profile).OfType<Button>().Any(b => (b.Content as string)?.Contains("iMessage", StringComparison.Ordinal) == true))
                 throw new InvalidOperationException("Profiles must expose supported channels without inventing iMessage availability.");
             ContactProfile.Hide();
+            SetFacebookOpen(true); await WaitForUpdateUiAsync(() => !_facebookBusy);
             _launchBrowser = _ => throw new InvalidOperationException("Unexpected browser launch in contact checks.");
             var extra = Enumerable.Range(0, 150).Select(i => Candidate("extra-" + i, "Paged person " + i.ToString("D3"), "page" + i + "@example.com")).ToArray();
             await _services.Contacts.ChangeAsync(b => b.Import(source, extra));
@@ -119,7 +126,8 @@ public sealed partial class MainPage
             await WaitForUpdateUiAsync(() => FacebookAvatars.Children.Count == 100);
             if (ContactsLoadMore.Visibility != Visibility.Visible) throw new InvalidOperationException("Long agendas must offer bounded pages.");
             await InvokeAsync(ContactsLoadMore);
-            if (FacebookAvatars.Children.Count != 153) throw new InvalidOperationException("Load more must reveal remaining contacts.");
+            await WaitForUpdateUiAsync(() => FacebookAvatars.Children.Count == 153);
+            if (FacebookAvatars.Children.Count != 153) throw new InvalidOperationException($"Load more must reveal remaining contacts. Cards={FacebookAvatars.Children.Count}, people={_services.Contacts.Book.ListedPeople.Count()}, limit={_contactVisibleLimit}, open={_facebookPanelOpen}.");
             FacebookContactSearch.Text = "page149@example.com";
             await WaitForUpdateUiAsync(() => FacebookAvatars.Children.Count == 1);
             if (Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(FacebookAvatars.Children[0]) != "Paged person 149")

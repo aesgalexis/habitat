@@ -25,6 +25,12 @@ internal sealed record ContactBook(int Schema, long Revision, ContactSource[] So
     private static readonly ConditionalWeakTable<ContactBook, Index> Indices = new();
     private Index Lookup => Indices.GetValue(this, b => new(b.Records.ToDictionary(r => r.Id), b.Sources.ToDictionary(s => s.Id)));
     internal ContactRecord[] For(ContactPerson person) => person.RecordIds.Select(id => Lookup.Records[id]).ToArray();
+    internal IEnumerable<ContactPerson> ListedPeople => People.Where(person => !For(person).All(record =>
+    {
+        var emails = record.Current.Values.Where(v => v.Kind == "email").ToArray();
+        return emails.Length > 0 && emails.All(v => ContactChannels.IsNoReply(v.Value)) &&
+            !record.Current.Values.Any(v => v.Kind is "phone" or "messenger" or "profile");
+    }));
     internal string Name(ContactPerson person)
     {
         var records = For(person).OrderByDescending(r => r.Id == person.PreferredRecordId).ToArray();
@@ -161,9 +167,10 @@ internal sealed record ContactBook(int Schema, long Revision, ContactSource[] So
     internal ContactSuggestion[] Suggestions()
     {
         var owners = People.SelectMany(p => p.RecordIds.Select(r => (r, p))).ToDictionary(x => x.r, x => x.p);
+        var listed = ListedPeople.Select(p => p.Id).ToHashSet();
         var index = new Dictionary<string, List<ContactPerson>>(StringComparer.Ordinal);
-        foreach (var record in Records.Where(r => !r.Missing))
-        foreach (var field in record.Current.Values.Where(v => v.Kind is "email" or "phone" ||
+        foreach (var record in Records.Where(r => !r.Missing && listed.Contains(owners[r.Id].Id)))
+        foreach (var field in record.Current.Values.Where(v => v.Kind == "email" && !ContactChannels.IsNoReply(v.Value) || v.Kind == "phone" ||
             v.Kind is "profile" or "messenger" && Source(record).Kind == "facebook" &&
             Habitat.Features.Facebook.FacebookContactsService.SafeLink(v.Value) &&
             !new Uri(v.Value).AbsolutePath.StartsWith("/messages/", StringComparison.Ordinal)))

@@ -88,6 +88,15 @@ internal sealed class GmailSession(Func<GmailAuthService> createAuth, Func<Gmail
         return await _gmail!.CreateDraftAsync(text, token);
     }
 
+    internal async Task<GmailDraft> CreateContactDraftAsync(string text, string recipient, string? sender, CancellationToken token)
+    {
+        Initialize();
+        await Auth!.RestoreSavedSessionAsync(token);
+        if (sender is not null && !string.Equals(sender, Auth.Email, StringComparison.OrdinalIgnoreCase))
+            throw new GmailDraftAuthorizationException("Authorize Gmail drafts with " + sender + ", then press Draft email again. Your text was kept.");
+        return await _gmail!.CreateDraftAsync(text, token, recipient);
+    }
+
     public async Task SignInAsync(Func<bool> inboxOnly, CancellationToken token, bool authorizeDrafts = false)
     {
         if (IsBusy || Auth is null || token.IsCancellationRequested) return;

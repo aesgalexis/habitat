@@ -39,6 +39,8 @@ La versión **0.17.1** es la primera distribución instalable con agenda unifica
 
 La versión **0.17.2** repara las copias del mismo perfil de Facebook conservando sus fuentes e historial, abre directamente los contactos con un único canal y ofrece **Enable Gmail contacts** cuando falta el permiso de Google en Chrome. Las coincidencias de correo o teléfono siguen requiriendo revisión.
 
+La versión **0.17.3** mantiene la escritura a contactos de correo dentro de HABITAT, guarda borradores con destinatario fijado mediante la integración de Gmail y excluye direcciones automáticas de tipo no-reply. Elegir el contacto y guardar el borrador no abren Gmail ni envían correo.
+
 La publicación incluye dos alternativas: el instalador `HABITAT-<version>-x64-setup.exe`, con desinstalación registrada en Windows, y el ZIP con su instalador PowerShell. Ambos son autocontenidos, se instalan por usuario y tienen un SHA-256 adjunto. El EXE necesita Windows 10 2004 o posterior y admite instalación silenciosa. Consulta [la preparación para WinGet](WINGET.md).
 
 Usa siempre el mismo formato para actualizar una instalación. Los instaladores rechazan mezclar las disposiciones del EXE y el ZIP en una misma carpeta. Para cambiar de formato, cierra HABITAT y el residente, retira la instalación anterior conservando los datos de usuario y después instala el otro formato.

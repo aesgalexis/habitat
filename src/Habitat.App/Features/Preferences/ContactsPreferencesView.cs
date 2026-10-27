@@ -247,7 +247,7 @@ internal sealed class ContactsPreferencesView : StackPanel
             try { row.Toggle.IsOn = setting ?? state.Allowed; }
             finally { _updatingBrowserToggle = false; }
             var saved = _session.Book.Sources.Where(s => provider == "facebook" ? s.Kind == "facebook" : s.Kind == "google-browser").Select(s => s.Id).ToHashSet();
-            var count = _session.Book.People.Count(p => _session.Book.For(p).Any(r => saved.Contains(r.SourceId)));
+            var count = _session.Book.ListedPeople.Count(p => _session.Book.For(p).Any(r => saved.Contains(r.SourceId)));
             row.Status.Text = state.State switch
             {
                 "disabled" => "Off · saved contacts kept",
@@ -306,7 +306,7 @@ internal sealed class ContactsPreferencesView : StackPanel
         ContactPerson[] people = [];
         void Filter()
         {
-            people = book.People.Where(p => ContactBook.Matches(book.Name(p), _query) ||
+            people = book.ListedPeople.Where(p => ContactBook.Matches(book.Name(p), _query) ||
                 book.For(p).Any(r => r.Current.Values.Any(v => v.Kind is "email" or "phone" && ContactBook.Matches(v.Value, _query))))
                 .OrderBy(book.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
             results.ItemsSource = people.Select(p => book.Name(p) + " · " + book.For(p).Length + " source records").ToArray();
@@ -322,7 +322,7 @@ internal sealed class ContactsPreferencesView : StackPanel
         };
         Filter();
         _body.Children.Add(results);
-        if (book.People.Length == 0) _body.Children.Add(Text("Your address book is empty. Connect a source or create a contact."));
+        if (!book.ListedPeople.Any()) _body.Children.Add(Text("Your address book is empty. Connect a source or create a contact."));
         _body.Children.Add(detail);
         var create = Panel("New contact", "Create a contact in HABITAT.");
         var name = new TextBox { Header = "Name", MaxLength = 200 };
@@ -346,7 +346,7 @@ internal sealed class ContactsPreferencesView : StackPanel
         detail.Children.Clear();
         var book = _session.Book;
         detail.Children.Add(Profile(book, person));
-        var alternatives = book.People.Where(p => p.Id != person.Id).OrderBy(book.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
+        var alternatives = book.ListedPeople.Where(p => p.Id != person.Id).OrderBy(book.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
         var target = new ComboBox { Header = "Merge with", PlaceholderText = "Choose another person", HorizontalAlignment = HorizontalAlignment.Stretch,
             ItemsSource = alternatives.Select(p => book.Name(p) + " · " + string.Join(", ", book.For(p).Select(r => book.Source(r).Label).Distinct())).ToArray() };
         AutomationProperties.SetName(target, "Choose a person to merge with");
