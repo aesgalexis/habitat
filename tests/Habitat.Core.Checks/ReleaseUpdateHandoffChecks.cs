@@ -93,7 +93,7 @@ internal static class ReleaseUpdateHandoffChecks
                     var expectedPhase = scenario switch { "invalid-parent" => "parent-identity", "escaping-path" => "paths", "invalid-hash" => "package-integrity", _ => "wait-parent" };
                     check(diagnostic.Contains(expectedPhase) &&
                         !diagnostic.Contains(fixture, StringComparison.OrdinalIgnoreCase),
-                        "The real helper keeps a phase diagnostic with no private fixture paths before the app closes.");
+                        "The real helper keeps a phase diagnostic with no private fixture paths before the app closes: " + scenario);
                     if (!validRequest)
                     {
                         await helper.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));

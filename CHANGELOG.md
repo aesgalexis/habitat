@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.17.1 — 2026-10-27
+
+- Primera distribución instalable de la agenda unificada: fichas persistentes, procedencia de cada dato, fusiones manuales y sugeridas con confirmación y deshacer, y acceso a Gmail o Messenger cuando el contacto y la integración lo permiten.
+- La extensión de Chrome 0.10.8 incorpora fuentes opcionales automáticas desde Facebook, Gmail y Google Contacts abiertos. Se leen las personas cargadas con permisos concedidos; Gmail aporta corresponsales visibles sin asuntos ni cuerpos. Se incluyen la compatibilidad de los ZIP anteriores y los diagnósticos persistentes del actualizador.
+- El auxiliar del actualizador guarda la fase de espera antes de señalar que está preparado. Se elimina la condición de carrera detectada en CI entre esa señal y la lectura de sus diagnósticos, manteniendo la aplicación abierta hasta verificar la preparación.
+- Se conserva `v0.17.0` como etiqueta histórica sin paquetes publicados; las etiquetas ya subidas no se modifican.
+
 ## 0.17.0 — 2026-10-27
 
 - Agenda unificada persistente con fichas por persona, datos y versiones anteriores conservados por fuente, búsqueda por nombre/correo/teléfono y acceso a los canales compatibles.

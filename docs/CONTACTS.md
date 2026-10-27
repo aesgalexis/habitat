@@ -1,6 +1,6 @@
 # Agenda unificada
 
-La agenda de la versión 0.17.0 se completa automáticamente con las fuentes activadas y abiertas en Chrome. **Contacts** abre los datos guardados localmente. **Manage contacts** lleva a **Preferences → Contacts**, con **Sources**, **People** y **Possible duplicates**. Requiere la extensión 0.10.8 o posterior; los límites de lectura se detallan abajo.
+La agenda de la versión 0.17.1 se completa automáticamente con las fuentes activadas y abiertas en Chrome. **Contacts** abre los datos guardados localmente. **Manage contacts** lleva a **Preferences → Contacts**, con **Sources**, **People** y **Possible duplicates**. Requiere la extensión 0.10.8 o posterior; los límites de lectura se detallan abajo.
 
 ## Fuentes y primer uso
 

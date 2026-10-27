@@ -107,8 +107,8 @@ public static class HabitatReleaseUpdateProfile {
     Write-UpdatePhase 'parent-identity'
     $parent = Get-Process -Id $request.processId -ErrorAction Stop
     if ($parent.Path -ne $currentExe -or $parent.StartTime.ToUniversalTime().Ticks -ne [long]$request.processStartTicks) { throw 'The original application changed.' }
-    [IO.File]::WriteAllText((Join-Path $work 'ready'), 'ready')
     Write-UpdatePhase 'wait-parent'
+    [IO.File]::WriteAllText((Join-Path $work 'ready'), 'ready')
     if (-not $parent.WaitForExit(120000)) { throw 'HABITAT did not close. The update was not applied.' }
     $appExited = $true
     Write-UpdatePhase 'stop-companion'

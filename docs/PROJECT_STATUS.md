@@ -1,6 +1,6 @@
 # Estado verificable del proyecto
 
-Revisión: **27 de octubre de 2026**. La versión fuente 0.17.0 conserva las funciones consolidadas y añade agenda unificada, fuentes automáticas opcionales desde pestañas abiertas y fusiones revisables, con la extensión 0.10.8. Incluye también compatibilidad ZIP y diagnósticos persistentes del actualizador.
+Revisión: **27 de octubre de 2026**. La versión fuente 0.17.1 conserva las funciones consolidadas y añade agenda unificada, fuentes automáticas opcionales desde pestañas abiertas y fusiones revisables, con la extensión 0.10.8. Incluye también compatibilidad ZIP y diagnósticos persistentes del actualizador.
 
 ## Recuperación de las funciones consolidadas
 
@@ -21,6 +21,6 @@ La rama de Facebook partía de 4faa5e9 (0.10.0). Cambiar a esa rama sin integrar
 
 ## Distribución y decisiones
 
-La versión fuente declara **0.17.0**, la extensión de Chrome **0.10.8** y la de VS Code **0.2.0**. Las publicaciones se consultan en [GitHub Releases](https://github.com/aesgalexis/habitat/releases). Los scripts generan un release.json con el commit exacto de la etiqueta y verifican ambas instalaciones en CI. La versión instalada y las publicaciones son comprobaciones independientes. Las guías de Chrome Web Store y WinGet describen observaciones fechadas. La firma sigue aplazada conforme a [SIGNING.md](SIGNING.md).
+La versión fuente declara **0.17.1**, la extensión de Chrome **0.10.8** y la de VS Code **0.2.0**. Las publicaciones se consultan en [GitHub Releases](https://github.com/aesgalexis/habitat/releases). Los scripts generan un release.json con el commit exacto de la etiqueta y verifican ambas instalaciones en CI. La versión instalada y las publicaciones son comprobaciones independientes. Las guías de Chrome Web Store y WinGet describen observaciones fechadas. La firma sigue aplazada conforme a [SIGNING.md](SIGNING.md).
 
 Las comprobaciones de esta recuperación se registran en [RECOVERY_2026-10-25.md](RECOVERY_2026-10-25.md), sin atribuir a este árbol validaciones de otras revisiones.
