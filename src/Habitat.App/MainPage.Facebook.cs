@@ -107,18 +107,35 @@ public sealed partial class MainPage
         AutomationProperties.SetName(FacebookContactSearch, "Search contacts by name");
         FacebookContactSearch.TextChanged += (_, _) =>
         {
-            ApplyFacebookContactFilter();
+            _contactVisibleLimit = 100;
+            if (_facebookPanelOpen && _services.Contacts.Loaded) RenderUnifiedContacts();
+            else ApplyFacebookContactFilter();
             FacebookRail.ChangeView(null, 0, null, true);
         };
         AutomationProperties.SetLiveSetting(FacebookNoMatches, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         FacebookSidebar.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         FacebookSidebar.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        FacebookSidebar.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         FacebookSidebar.Children.Add(FacebookContactSearch);
         Grid.SetRow(FacebookRail, 1);
         FacebookSidebar.Children.Add(FacebookRail);
         Grid.SetRow(FacebookNoMatches, 1);
         FacebookNoMatches.VerticalAlignment = VerticalAlignment.Top;
         FacebookSidebar.Children.Add(FacebookNoMatches);
+        var actions = new StackPanel { Spacing = 6, Margin = new Thickness(8, 0, 8, 8) };
+        actions.Children.Add(ContactsSettings);
+        actions.Children.Add(ContactsDuplicates);
+        actions.Children.Add(ContactsLoadMore);
+        Grid.SetRow(actions, 2);
+        FacebookSidebar.Children.Add(actions);
+        ContactsSettings.Click += async (_, _) => await RunOperationAsync(() => ShowPreferencesAsync("Contacts"));
+        ContactsDuplicates.Click += async (_, _) =>
+        {
+            _reviewContactDuplicates = true;
+            await RunOperationAsync(() => ShowPreferencesAsync("Contacts"));
+        };
+        _services.Contacts.Changed += ContactsChanged;
+        ContactsLoadMore.Click += (_, _) => { _contactVisibleLimit += 100; RenderUnifiedContacts(); };
         surface.Children.Add(FacebookSidebar);
         FacebookAvatars.Spacing = FacebookCardsLarge ? 4 : 2;
     }
@@ -137,8 +154,10 @@ public sealed partial class MainPage
     {
         if (HasAppearanceOverlay || _updateHandoff || _operations.IsStopping) return;
         _facebookPanelOpen = open;
+        _renderedContactBook = null;
         _facebookShowRecovery = open;
         FacebookRecovery.Hide();
+        ContactProfile.Hide();
         FacebookRail.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
         FacebookSidebar.Visibility = FacebookRail.Visibility;
         AutomationProperties.SetName(FacebookButton, open ? "Hide contacts" : "Show contacts");
@@ -169,27 +188,23 @@ public sealed partial class MainPage
         _facebookCancellation = cancellation;
         try
         {
-            // Clear the previous snapshot before every read, including account changes.
-            ShowFacebookState("Loading Facebook contacts…", false);
-            var contacts = await _services.Facebook.ReadAsync(cancellation.Token);
+            if (!_services.Contacts.Loaded) await _services.Contacts.LoadAsync(cancellation.Token);
             if (!_facebookPanelOpen || cancellation.IsCancellationRequested) return;
-            _facebookError = null;
+            _facebookError = _services.Contacts.Error;
             _facebookShowRecovery = false;
             FacebookRecovery.Hide();
             ToolTipService.SetToolTip(FacebookButton, "Contacts");
             AutomationProperties.SetHelpText(FacebookButton, "Contacts");
-            AutomationProperties.SetItemStatus(FacebookButton, $"{contacts.Count} contacts");
-            FacebookAvatars.Children.Clear();
-            foreach (var contact in contacts) AddFacebookAvatar(contact);
-            ApplyFacebookContactFilter();
-            PaintFacebook();
-            if (contacts.Count == 0) ShowFacebookState("No contacts are loaded in Facebook. Open Friends → All friends in Chrome, wait for the profile photos, then retry.", true);
+            RenderUnifiedContacts();
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
-        catch (Exception exception)
+        catch (Exception)
         {
             if (_facebookPanelOpen && !cancellation.IsCancellationRequested)
-                ShowFacebookState(exception is InvalidOperationException ? exception.Message : "Could not load Facebook contacts. Open Facebook in Chrome, then retry.", true);
+            {
+                _facebookError = "Could not load contacts. Open Manage contacts to reload your address book.";
+                ApplyFacebookContactFilter();
+            }
         }
         finally
         {
@@ -207,13 +222,18 @@ public sealed partial class MainPage
         var visible = 0;
         foreach (var card in FacebookAvatars.Children)
         {
+            var person = _services.Contacts.Book.People.FirstOrDefault(p => p.Id == ((FrameworkElement)card).Tag as string);
             var matches = query.Length == 0 || System.Globalization.CultureInfo.InvariantCulture.CompareInfo.IndexOf(
                 AutomationProperties.GetName(card), query,
-                System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+                System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0 ||
+                person is not null && _services.Contacts.Book.For(person).Any(r => r.Current.Values.Any(v =>
+                    v.Kind is "email" or "phone" && Features.Contacts.ContactBook.Matches(v.Value, query)));
             card.Visibility = matches ? Visibility.Visible : Visibility.Collapsed;
             if (matches) visible++;
         }
-        FacebookNoMatches.Visibility = FacebookAvatars.Children.Count > 0 && visible == 0
+        FacebookNoMatches.Text = _facebookError ?? (_services.Contacts.Book.People.Length == 0
+            ? "Your address book is empty. Choose Manage contacts to connect a source or create a contact." : "No contacts found.");
+        FacebookNoMatches.Visibility = _facebookPanelOpen && visible == 0
             ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -229,7 +249,7 @@ public sealed partial class MainPage
             HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center
         };
         avatar.Children.Add(initial);
-        if (_services.FacebookPhoto(new Uri(contact.PhotoUrl)) is { } photo)
+        if (FacebookContactsService.SafePhoto(contact.PhotoUrl) && _services.FacebookPhoto(new Uri(contact.PhotoUrl)) is { } photo)
         {
             circle.Fill = new ImageBrush { ImageSource = photo, Stretch = Stretch.UniformToFill };
             initial.Visibility = Visibility.Collapsed;
@@ -358,7 +378,7 @@ public sealed partial class MainPage
             card.BorderBrush = selected ? new SolidColorBrush(RequestedTheme == ElementTheme.Dark ? Color(255, 0x89, 0x95, 0xFF) : Color(255, 0x66, 0x74, 0xF4)) : transparent;
             card.Resources["ButtonBackground"] = transparent;
             card.Resources["ButtonBackgroundPointerOver"] = card.Resources["ButtonBackgroundPressed"] = hover;
-            AutomationProperties.SetHelpText(card, selected ? "Selected Messenger recipient" : "Select as message destination");
+            AutomationProperties.SetHelpText(card, "Open contact details and communication channels");
             foreach (var name in row.Children.OfType<TextBlock>()) name.Foreground = text;
             var avatar = row.Children.OfType<Grid>().FirstOrDefault();
             if (avatar is null) continue;

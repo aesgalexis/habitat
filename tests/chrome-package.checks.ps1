@@ -14,6 +14,7 @@ try {
     }
     foreach ($required in @($manifest.background.service_worker, $manifest.action.default_popup,
         'connection.js', 'transport.js', 'translation.js', 'search-transport.js', 'search.js', 'youtube.js', 'facebook.js', 'facebook-messaging.js',
+        'browser-contacts.js', 'contacts-settings.html', 'contacts-settings.js',
         'welcome.html', 'welcome.css', 'welcome.js', 'privacy.html', 'LICENSE.txt') + @($manifest.content_scripts.js)) {
         if ($null -eq $archive.GetEntry($required)) { throw "Missing runtime resource: $required" }
     }

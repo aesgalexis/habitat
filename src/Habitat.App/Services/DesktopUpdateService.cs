@@ -39,34 +39,33 @@ internal sealed class DesktopUpdateService : IAppUpdateService
     {
         if (!_enabled || _installation is null) throw new InvalidOperationException("Updates are disabled for this session.");
         ReleaseUpdateClient.EnsureNoLinks(prepared.Directory);
-        foreach (var name in new[] { "install-release-update.ps1", "Habitat.Update.psm1", "Habitat.Release.psm1" })
-            File.Copy(Path.Combine(AppContext.BaseDirectory, "updater", name), Path.Combine(prepared.Directory, name));
-        using var current = Process.GetCurrentProcess();
-        var request = new
-        {
-            version = prepared.Release.Version, kind = prepared.Release.Kind.ToString(),
-            installRoot = _installation.Root, currentExe = _installation.Executable,
-            processId = Environment.ProcessId, processStartTicks = current.StartTime.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
-            packagePath = prepared.PackagePath, sha256 = prepared.Sha256, extractedDirectory = prepared.ExtractedDirectory
-        };
-        var requestPath = Path.Combine(prepared.Directory, "request.json");
-        await File.WriteAllTextAsync(requestPath, JsonSerializer.Serialize(request), token);
-        var info = AppUpdateInstall.CreateHelperStartInfo(
-            Path.Combine(prepared.Directory, "install-release-update.ps1"), "-RequestPath", requestPath);
-        using var helper = Process.Start(info) ?? throw new IOException("The update helper could not start.");
+        var diagnostics = UpdateDiagnosticLog.ForDirectory(prepared.Directory);
+        var phase = "helper-files";
         try
         {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
-            timeout.CancelAfter(TimeSpan.FromSeconds(45));
-            while (!File.Exists(Path.Combine(prepared.Directory, "ready")))
+            diagnostics.Record("helper-files");
+            foreach (var name in new[] { "install-release-update.ps1", "Habitat.Update.psm1", "Habitat.Release.psm1" })
+                File.Copy(Path.Combine(AppContext.BaseDirectory, "updater", name), Path.Combine(prepared.Directory, name));
+            using var current = Process.GetCurrentProcess();
+            var request = new
             {
-                if (helper.HasExited) throw new IOException("The update helper could not prepare the installation.");
-                await Task.Delay(100, timeout.Token);
-            }
+                version = prepared.Release.Version, kind = prepared.Release.Kind.ToString(),
+                installRoot = _installation.Root, currentExe = _installation.Executable,
+                processId = Environment.ProcessId, processStartTicks = current.StartTime.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
+                packagePath = prepared.PackagePath, sha256 = prepared.Sha256, extractedDirectory = prepared.ExtractedDirectory
+            };
+            var requestPath = Path.Combine(prepared.Directory, "request.json");
+            phase = "helper-request";
+            diagnostics.Record(phase);
+            await File.WriteAllTextAsync(requestPath, JsonSerializer.Serialize(request), token);
+            var info = AppUpdateInstall.CreateHelperStartInfo(
+                Path.Combine(prepared.Directory, "install-release-update.ps1"), "-RequestPath", requestPath);
+            phase = "helper-start";
+            await UpdateHelperHandoff.StartAsync(info, Path.Combine(prepared.Directory, "ready"), diagnostics, token);
         }
-        catch
+        catch (Exception exception)
         {
-            if (!helper.HasExited) helper.Kill();
+            diagnostics.Record(phase, exception);
             throw;
         }
     }

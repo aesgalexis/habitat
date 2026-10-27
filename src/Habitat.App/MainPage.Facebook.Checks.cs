@@ -1,5 +1,6 @@
 #if HABITAT_UI_CHECKS
 using Habitat.Features.Facebook;
+using Habitat.Features.Contacts;
 using Habitat.Features.Preferences;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -13,6 +14,10 @@ public sealed partial class MainPage
 {
     private async Task CheckFacebookUiAsync(string log)
     {
+        await CheckAutomaticContactsUiAsync(log);
+        await CheckContactsSettingsUiAsync(log);
+        await _services.Contacts.LoadAsync();
+        var originalBook = _services.Contacts.Book;
         var service = _services.Facebook;
         var photo = _services.FacebookPhoto;
         var launch = _launchBrowser;
@@ -24,18 +29,21 @@ public sealed partial class MainPage
         var surface = (Grid)Content;
         var surfaceWidth = surface.Width;
         var fake = new CheckedFacebook();
+        var source = new ContactSource(ContactBook.NewId(), "facebook", "Synthetic Facebook", "synthetic", false);
         try
         {
             _services.Facebook = fake;
             if (_preferences.FacebookCardSize != "small" || FacebookIcon.Glyph != "\uE716" || FacebookTitle.Text != "Contacts" ||
                 ToolTipService.GetToolTip(FacebookButton) as string != "Contacts" ||
                 AutomationProperties.GetName(FacebookRail) != "Contacts" ||
-                FacebookSidebar.Children.Count != 3 || FacebookSidebar.Children[0] != FacebookContactSearch ||
+                FacebookSidebar.Children.Count != 4 || FacebookSidebar.Children[0] != FacebookContactSearch ||
                 Grid.GetRow(FacebookContactSearch) != 0 || Grid.GetRow(FacebookRail) != 1 ||
                 FacebookContactSearch.PlaceholderText != "Search contacts" ||
                 AutomationProperties.GetName(FacebookContactSearch) != "Search contacts by name")
                 throw new InvalidOperationException("Contacts must start small with an accessible English search field above the list and size settings outside it.");
             _services.FacebookPhoto = _ => new Microsoft.UI.Xaml.Media.Imaging.WriteableBitmap(1, 1);
+            var candidates = await ReadFacebookCandidatesAsync(_operations.Token);
+            await _services.Contacts.ChangeAsync(b => b.Import(source, candidates));
             Composer.Text = "Synthetic draft preserved while viewing contacts";
             var expectedDraft = Composer.Text;
             Uri? opened = null;
@@ -58,11 +66,12 @@ public sealed partial class MainPage
             foreach (var (query, expected) in new[] { ("miGA", 1), (" 雪 ", 2), ("JOSE", 1), ("no matching contact", 0), ("   ", 3), ("", 3) })
             {
                 FacebookContactSearch.Text = query;
+                await Task.Delay(40);
                 await WaitForUpdateUiAsync(() => FacebookAvatars.Children.Count(card => card.Visibility == Visibility.Visible) == expected);
-                if (!FacebookAvatars.Children.SequenceEqual(originalCards) || fake.Reads != 1 ||
+                if (fake.Reads != 1 ||
                     FacebookNoMatches.Visibility != (expected == 0 ? Visibility.Visible : Visibility.Collapsed) ||
                     FacebookNoMatches.Text != "No contacts found." || Composer.Text != expectedDraft || _destination != destination)
-                    throw new InvalidOperationException("Name search must filter locally by substring, ignore case/accents and surrounding whitespace, preserve cards/drafts, and restore all rows when cleared.");
+                    throw new InvalidOperationException("Name search must filter locally by substring, ignore case/accents and surrounding whitespace, preserve drafts, and restore all rows when cleared.");
             }
             foreach (var large in new[] { false, true, false })
             {
@@ -72,7 +81,7 @@ public sealed partial class MainPage
                 if (!ReferenceEquals(FacebookAvatars.Children[0], originalContact) || fake.Reads != reads ||
                     Preferences.Load(_services.Paths.PreferencesPath).FacebookCardSize != (large ? "large" : "small") ||
                     Composer.Text != expectedDraft || _destination != destination)
-                    throw new InvalidOperationException("Changing contact size must persist immediately without reloading contacts or disturbing the draft/destination.");
+                    throw new InvalidOperationException($"Changing contact size must persist without reloading contacts or disturbing the draft/destination. Same row={ReferenceEquals(FacebookAvatars.Children[0], originalContact)}, reads={fake.Reads}/{reads}, saved={Preferences.Load(_services.Paths.PreferencesPath).FacebookCardSize}, large={large}, same draft={Composer.Text == expectedDraft}, same destination={_destination == destination}.");
                 foreach (var dark in new[] { false, true })
                 foreach (var expanded in new[] { false, true, false })
                 {
@@ -114,10 +123,8 @@ public sealed partial class MainPage
                     Descendants(item).Any(child => child is Button || ToolTipService.GetToolTip(child) is not null))
                     throw new InvalidOperationException("Recipient cards must have no tooltips or nested browser actions.");
             if (opened is not null || AutomationProperties.GetName(FacebookAvatars.Children[0]) != "Amiga ☕" ||
-                AutomationProperties.GetItemStatus(FacebookAvatars.Children[0]) != "Online" ||
-                AutomationProperties.GetItemStatus(FacebookAvatars.Children[1]) != "Offline" ||
-                AutomationProperties.GetItemStatus(FacebookAvatars.Children[2]) != "Online status unavailable")
-                throw new InvalidOperationException("Presence must distinguish explicit online/offline from unknown without opening a browser.");
+                FacebookAvatars.Children.Any(item => AutomationProperties.GetItemStatus(item) != source.Label))
+                throw new InvalidOperationException("Unified cards must expose source provenance without inventing durable presence or opening a browser.");
             _sidebarManualExpanded = true;
             surface.Width = 500;
             UpdateWritingLayout();
@@ -134,54 +141,64 @@ public sealed partial class MainPage
             surface.UpdateLayout();
             fake.Count = 30;
             FacebookContactSearch.Text = "Amiga";
-            await RefreshFacebookAsync();
+            var reloaded = await ReadFacebookCandidatesAsync(_operations.Token);
+            await _services.Contacts.ChangeAsync(b => b.Import(source, reloaded));
             if (FacebookContactSearch.Text != "Amiga" || FacebookAvatars.Children.Count(card => card.Visibility == Visibility.Visible) != 1)
                 throw new InvalidOperationException("Refreshing contacts must retain the query and apply it to the new snapshot.");
             FacebookContactSearch.Text = "";
-            await WaitForUpdateUiAsync(() => FacebookAvatars.Children.All(card => card.Visibility == Visibility.Visible));
+            await WaitForUpdateUiAsync(() => FacebookAvatars.Children.Count == 30 && FacebookAvatars.Children.All(card => card.Visibility == Visibility.Visible));
+            await WaitForUpdateUiAsync(() => FacebookAvatars.ActualHeight >= 30 * 36);
             FacebookRail.UpdateLayout();
             if (FacebookRail.ScrollableHeight <= 0 || FacebookSidebar.ActualWidth != 200 || FacebookAvatars.Children.Count != 30 ||
                 FacebookRail.ScrollableWidth > 0)
                 throw new InvalidOperationException("Contact rows must scroll vertically within the second sidebar without horizontal scrolling.");
-            FacebookRail.ChangeView(null, 5 * 38, null, true);
-            await Task.Delay(80);
+            var smallOffset = Math.Min(5 * 38, FacebookRail.ScrollableHeight);
+            var scrollAccepted = FacebookRail.ChangeView(null, smallOffset, null, true);
+            try { await WaitForUpdateUiAsync(() => Math.Abs(FacebookRail.VerticalOffset - smallOffset) <= 1); }
+            catch (InvalidOperationException)
+            { throw new InvalidOperationException($"Small contact scroll did not settle. Accepted={scrollAccepted}, actual={FacebookRail.VerticalOffset}, expected={smallOffset}, maximum={FacebookRail.ScrollableHeight}, extent={FacebookRail.ExtentHeight}, content={FacebookAvatars.ActualHeight}, viewport={FacebookRail.ViewportHeight}, large={FacebookCardsLarge}."); }
             var searchTop = FacebookContactSearch.TransformToVisual(this).TransformPoint(new()).Y;
             if (Math.Abs(searchTop - FacebookSidebar.TransformToVisual(this).TransformPoint(new()).Y - 8) > 0.5)
                 throw new InvalidOperationException("The contact search field must stay fixed above the scrolling list.");
+            var largeOffset = FacebookRail.VerticalOffset / 38 * 56;
             await ChangeFacebookCardsInPreferencesAsync(true);
-            await Task.Delay(80);
-            if (Math.Abs(FacebookRail.VerticalOffset - 5 * 56) > 1 || fake.Reads != 2)
-                throw new InvalidOperationException("Resizing a scrolled list must retain the current contact without another read.");
+            try { await WaitForUpdateUiAsync(() => Math.Abs(FacebookRail.VerticalOffset - largeOffset) <= 1); }
+            catch (InvalidOperationException)
+            { throw new InvalidOperationException($"Resizing a scrolled list must retain the current contact. Small={smallOffset}, actual={FacebookRail.VerticalOffset}, expected={largeOffset}, maximum={FacebookRail.ScrollableHeight}, viewport={FacebookRail.ViewportHeight}, reads={fake.Reads}."); }
+            if (fake.Reads != 2) throw new InvalidOperationException("Resizing contacts must not reread the provider.");
             await ChangeFacebookCardsInPreferencesAsync(false);
             FacebookContactSearch.Text = "no matching contact";
             await WaitForUpdateUiAsync(() => FacebookNoMatches.Visibility == Visibility.Visible);
             fake.Pending = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            var pending = RefreshFacebookAsync();
-            if (FacebookNoMatches.Visibility != Visibility.Collapsed)
-                throw new InvalidOperationException("Loading must clear the previous no-match state.");
+            using var readCancellation = new CancellationTokenSource();
+            var pending = ReadFacebookCandidatesAsync(readCancellation.Token);
+            readCancellation.Cancel();
+            try { await pending; throw new InvalidOperationException("The explicit source read was not cancelled."); }
+            catch (OperationCanceledException) { }
             ((IInvokeProvider)new ButtonAutomationPeer(FacebookButton).GetPattern(PatternInterface.Invoke)).Invoke();
-            await pending;
             if (FacebookRail.Visibility != Visibility.Collapsed || FacebookSidebar.Visibility != Visibility.Collapsed ||
                 FacebookAvatars.Children.Count != 0 || FacebookContactSearch.Text != "" || FacebookNoMatches.Visibility != Visibility.Collapsed ||
                 Composer.Text != expectedDraft || !fake.Canceled ||
                 AutomationProperties.GetName(FacebookButton) != "Show contacts")
-                throw new InvalidOperationException("Clicking Contacts again must close the sidebar, cancel the read, discard contacts and preserve the draft.");
+                throw new InvalidOperationException("Closing Contacts must hide its rows and preserve the draft; an explicit source read must support cancellation.");
             fake.Pending = null;
             fake.Fail = true;
             SetFacebookOpen(true);
             await WaitForUpdateUiAsync(() => !_facebookBusy);
-            if (FacebookAvatars.Children.Count != 0 ||
+            if (FacebookAvatars.Children.Count != 30 ||
                 FacebookSidebar.Visibility != Visibility.Visible || FacebookRail.Visibility != Visibility.Visible ||
-                !FacebookRecovery.IsOpen || !FacebookRecoveryMessage.Text.Contains("Enable Facebook contacts") ||
-                !_facebookError!.Contains("Enable Facebook contacts"))
-                throw new InvalidOperationException("Unavailable contacts must show visible connection recovery, leaving the avatar rail free of fake contacts and error icons.");
+                FacebookRecovery.IsOpen || _facebookError is not null || !fake.Canceled)
+                throw new InvalidOperationException("A failed or disconnected provider must not remove the saved agenda or trigger an automatic Facebook read.");
+            try { await ReadFacebookCandidatesAsync(_operations.Token); throw new InvalidOperationException("The explicit failing source read was accepted."); }
+            catch (InvalidOperationException exception) when (exception.Message.Contains("Enable Facebook contacts", StringComparison.Ordinal)) { }
             SetFacebookOpen(false);
             await CheckFacebookMessagingUiAsync(log);
-            File.AppendAllText(log, "PASS: Contacts toggle and English accessibility labels; idle snapshot preserved beyond 30 seconds with the app timer running; fixed local contact search, empty results and explicit reload; two-person icon; persistent card sizes and scroll; online/offline/unknown indicators in both themes; preserved draft, cancellation and recovery; no browser, network or user contacts\n");
+            File.AppendAllText(log, "PASS: unified Contacts and English accessibility labels; saved agenda preserved beyond 30 seconds with the app timer running; local search; explicit source imports; persistent card sizes and scroll; source provenance in both themes; preserved draft, source cancellation and saved data on provider failure; no browser, network or user contacts\n");
         }
         finally
         {
             SetFacebookOpen(false);
+            await _services.Contacts.ChangeAsync(_ => originalBook);
             var wasLarge = FacebookCardsLarge;
             _preferences = _preferences with { FacebookCardSize = cardSize };
             ApplyFacebookCardSize(wasLarge);
@@ -207,8 +224,7 @@ public sealed partial class MainPage
             var name = (TextBlock)row.Children[1];
             var avatarRight = avatar.TransformToVisual(row).TransformPoint(new(avatar.ActualWidth, 0)).X;
             var nameLeft = name.TransformToVisual(row).TransformPoint(new()).X;
-            var expectedName = ReferenceEquals(item, FacebookAvatars.Children[0]) ? "Amiga ☕" :
-                ReferenceEquals(item, FacebookAvatars.Children[1]) ? CheckedFacebook.LongName : "Friend 雪 2";
+            var expectedName = _services.Contacts.Book.Name(_services.Contacts.Book.People.Single(p => p.Id == ((Button)item).Tag as string));
             var photoSize = FacebookCardsLarge ? 40 : 28;
             var presence = (Microsoft.UI.Xaml.Shapes.Ellipse)avatar.Children[2];
             if (name.Text != expectedName || name.Visibility != Visibility.Visible || name.ActualWidth <= 0 ||
@@ -216,8 +232,7 @@ public sealed partial class MainPage
                 nameLeft < avatarRight + (FacebookCardsLarge ? 9 : 7) || avatar.ActualWidth != photoSize || avatar.ActualHeight != photoSize ||
                 row.ActualHeight != (FacebookCardsLarge ? 52 : 36) || name.FontSize != (FacebookCardsLarge ? 14 : 12) ||
                 name.TextTrimming != TextTrimming.CharacterEllipsis ||
-                presence.Visibility != Visibility.Visible || presence.ActualWidth != (FacebookCardsLarge ? 11 : 9) ||
-                (presence.Tag is true) != (AutomationProperties.GetItemStatus(item) == "Online") ||
+                presence.Visibility != Visibility.Collapsed ||
                 ((Microsoft.UI.Xaml.Media.SolidColorBrush)name.Foreground).Color !=
                 ((Microsoft.UI.Xaml.Media.SolidColorBrush)TextBrush()).Color)
                 throw new InvalidOperationException($"Each size must show the original name beside its photo, with readable theme colors and bounded long names. Large={FacebookCardsLarge}; photo={avatar.ActualWidth}x{avatar.ActualHeight}; row={row.ActualHeight}; text={name.ActualWidth}, font={name.FontSize}, X={nameLeft}, photoRight={avatarRight}; textColor={((Microsoft.UI.Xaml.Media.SolidColorBrush)name.Foreground).Color}, themeColor={((Microsoft.UI.Xaml.Media.SolidColorBrush)TextBrush()).Color}.");

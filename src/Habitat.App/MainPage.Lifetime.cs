@@ -40,6 +40,8 @@ public sealed partial class MainPage
         _activeDialog?.Hide();
         _facebookCancellation?.Cancel();
         FacebookRecovery.Hide();
+        ContactProfile.Hide();
+        _services.Contacts.Changed -= ContactsChanged;
         _marketNewsCancellation?.Cancel();
         var sectionStops = _destinationSections.Values.Select(section => section.StopAsync()).ToArray();
         if (_bridge is not null)

@@ -85,6 +85,8 @@ public sealed partial class BridgeService : IAsyncDisposable
                         searchConnected = Search.IsConnected,
                         youtubeConnected = YouTubeSearch.IsConnected,
                         facebookConnected = Facebook.IsConnected,
+                        browserContacts = new { connected = BrowserContacts.Connected, supported = BrowserContacts.Supported,
+                            facebook = BrowserContacts.StateFor("facebook"), google = BrowserContacts.StateFor("google") },
                         facebook = Facebook.Status,
                         facebookMessaging = FacebookMessaging.LastDiagnostic,
                         protocolVersion = BridgeProtocol.Version, processId = Environment.ProcessId,

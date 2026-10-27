@@ -41,9 +41,10 @@ internal static class ReleaseUpdateHandoffChecks
                 check(compile.ExitCode == 0, "Compile the isolated parent used to exercise the production updater's readiness handshake.");
             }
 
-            foreach (var scenario in new[] { "clean-launch", "inherited-modules", "invalid-hash" })
+            foreach (var scenario in new[] { "clean-launch", "inherited-modules", "invalid-hash", "invalid-parent", "escaping-path" })
             {
                 var validHash = scenario != "invalid-hash";
+                var validRequest = validHash && scenario is not ("invalid-parent" or "escaping-path");
                 var installation = Path.Combine(fixture, scenario + " installation");
                 var work = Path.Combine(fixture, "updates", "update-" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(installation);
@@ -64,8 +65,9 @@ internal static class ReleaseUpdateHandoffChecks
                     await File.WriteAllTextAsync(request, JsonSerializer.Serialize(new
                     {
                         version = "0.16.3", kind = "Installer", installRoot = installation, currentExe = parentExe,
-                        processId = parent.Id, processStartTicks = parent.StartTime.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
-                        packagePath = package, sha256 = validHash ? Convert.ToHexString(SHA256.HashData(bytes)) : new string('0', 64),
+                        processId = parent.Id, processStartTicks = (parent.StartTime.ToUniversalTime().Ticks + (scenario == "invalid-parent" ? 1 : 0)).ToString(CultureInfo.InvariantCulture),
+                        packagePath = scenario == "escaping-path" ? Path.Combine(fixture, "outside.exe") : package,
+                        sha256 = validHash ? Convert.ToHexString(SHA256.HashData(bytes)) : new string('0', 64),
                         extractedDirectory = (string?)null
                     }));
                     var helperStart = AppUpdateInstall.CreateHelperStartInfo(
@@ -78,20 +80,26 @@ internal static class ReleaseUpdateHandoffChecks
                     var ready = Path.Combine(work, "ready");
                     var deadline = DateTimeOffset.UtcNow.AddSeconds(20);
                     while (!File.Exists(ready) && !helper.HasExited && DateTimeOffset.UtcNow < deadline) await Task.Delay(50);
-                    if (validHash && !File.Exists(ready))
+                    if (validRequest && !File.Exists(ready))
                     {
                         var error = Path.Combine(work, "update-error.log");
                         throw new IOException("The production updater did not become ready: " +
                             (File.Exists(error) ? await File.ReadAllTextAsync(error) : "No helper error log."));
                     }
-                    check(File.Exists(ready) == validHash && !parent.HasExited && (!validHash || !helper.HasExited),
-                        validHash ? "The real production helper verifies a valid request and waits without closing the app: " + scenario :
-                            "The real production helper rejects an invalid hash before readiness and leaves the parent running.");
-                    if (!validHash)
+                    check(File.Exists(ready) == validRequest && !parent.HasExited && (!validRequest || !helper.HasExited),
+                        validRequest ? "The real production helper verifies a valid request and waits without closing the app: " + scenario :
+                            "The real production helper rejects an unsafe request before readiness and leaves the parent running: " + scenario);
+                    var diagnostic = await File.ReadAllTextAsync(UpdateDiagnosticLog.ForDirectory(work).Path);
+                    var expectedPhase = scenario switch { "invalid-parent" => "parent-identity", "escaping-path" => "paths", "invalid-hash" => "package-integrity", _ => "wait-parent" };
+                    check(diagnostic.Contains(expectedPhase) &&
+                        !diagnostic.Contains(fixture, StringComparison.OrdinalIgnoreCase),
+                        "The real helper keeps a phase diagnostic with no private fixture paths before the app closes.");
+                    if (!validRequest)
                     {
                         await helper.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
                         var error = await File.ReadAllTextAsync(Path.Combine(work, "update-error.log"));
-                        check(helper.ExitCode == 1 && error.Contains("The update package failed verification."),
+                        var expectedError = scenario switch { "invalid-parent" => "The original application changed.", "escaping-path" => "Update path escapes its directory.", _ => "The update package failed verification." };
+                        check(helper.ExitCode == 1 && error.Contains(expectedError),
                             "A failed production-helper verification keeps its concrete diagnostic for recovery.");
                     }
                 }

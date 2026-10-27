@@ -38,3 +38,15 @@ try {
     if (-not $rejected) { throw 'Concurrent updates were accepted.' }
 } finally { $lock.Dispose() }
 Write-Host 'Release checks passed: complete manifests, preparation failure, startup rollback, previous versions, path boundaries and concurrent updates. Synthetic files only.'
+$portableRoot = Join-Path $releaseChecks 'portable ZIP'
+New-Item -ItemType Directory -Path (Join-Path $portableRoot 'artifacts/staged/app') -Force | Out-Null
+[IO.File]::WriteAllText((Join-Path $portableRoot 'artifacts/staged/app/payload.txt'), 'synthetic ZIP payload')
+$portableZip = Join-Path $releaseChecks 'portable.zip'
+New-HabitatReleaseArchive -Directory $portableRoot -ArchivePath $portableZip
+$portableArchive = [IO.Compression.ZipFile]::OpenRead($portableZip)
+try {
+    if ($portableArchive.Entries.Count -ne 1 -or $portableArchive.Entries[0].FullName -cne 'artifacts/staged/app/payload.txt') {
+        throw 'The production ZIP writer must emit forward slashes under Windows PowerShell, for compatibility with old clients.'
+    }
+} finally { $portableArchive.Dispose() }
+Write-Host 'Production ZIP names are canonical under Windows PowerShell.'

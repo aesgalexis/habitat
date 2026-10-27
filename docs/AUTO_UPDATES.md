@@ -1,5 +1,10 @@
 # Actualizaciones desde HABITAT
 
+Esta guía conserva detalles del mecanismo histórico `AppUpdateInstall/UpdateHelper`.
+El flujo vigente de `DesktopUpdateService/ReleaseUpdateClient/install-release-update`
+y los diagnósticos se describen en [UPDATES.md](UPDATES.md). Para la instalación de
+desarrollo 0.16.1 afectada, usa la [reproducción y recuperación específica](UPDATE_MIGRATION_0_16_1.md).
+
 Desde 0.15.0, pulsar el icono **Actualizar HABITAT / Update HABITAT** descarga e instala la nueva versión y reabre la aplicación. Las versiones anteriores solo abren GitHub: necesitan una instalación manual de 0.15.0 para incorporar esta función.
 
 La detección consulta la última publicación estable al arrancar y cada seis horas. Los fallos reintentan tras una hora sin borrar un aviso conocido. Pulsar el icono refresca los metadatos aunque no haya vencido ese intervalo. No se descargan paquetes hasta pulsarlo.

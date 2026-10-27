@@ -13,9 +13,14 @@ public sealed partial class MainPage
     private async Task ShowPreferencesAsync(string? category)
     {
         if (HasAppearanceOverlay || _operations.IsStopping) return;
+        var contacts = CreateContactsPreferences();
+        _contactsPreferences = contacts;
+        await contacts.InitializeAsync();
+        if (_contactToManage is { } personId) { contacts.SelectPerson(personId); _contactToManage = null; }
+        if (_reviewContactDuplicates) { contacts.SelectDuplicates(); _reviewContactDuplicates = false; }
         var view = new PreferencesView(_preferences, _services.DiscoverWindowsAppsAsync,
             () => _services.PickWindowsAppAsync(_windowHost?.Handle ?? 0), _services.Wallpapers,
-            () => _services.PickWallpapersAsync(_windowHost?.Handle ?? 0))
+            () => _services.PickWallpapersAsync(_windowHost?.Handle ?? 0), contacts)
         {
             Width = Math.Max(280, Math.Min(740, XamlRoot.Size.Width - 96)),
             Height = Math.Max(180, Math.Min(480, XamlRoot.Size.Height - 180))
@@ -72,7 +77,7 @@ public sealed partial class MainPage
             // A file picker/import may still be finishing when the window closes.
             await view.Wallpaper.PendingImport;
         }
-        finally { _appearanceDialogOpen = false; previewRevision++; }
+        finally { _contactsPreferences = null; await contacts.StopAsync(); _appearanceDialogOpen = false; previewRevision++; }
 
         var locationChanged = _preferences.WeatherCity != view.WeatherCity.Text.Trim() ||
             _preferences.UseDeviceLocation != view.UseDeviceLocation.IsOn;

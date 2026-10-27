@@ -11,6 +11,7 @@ Entrada para usuarios y colaboradores. La documentación combina inglés y espa�
 | Resolver un problema o preparar una incidencia | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) |
 | Actualizar y conocer qué se conserva | [UPDATES.md](UPDATES.md) |
 | Autorizar Gmail | [GMAIL_SETUP.md](GMAIL_SETUP.md) |
+| Agenda unificada, fuentes opcionales y fusiones | [CONTACTS.md](CONTACTS.md) |
 | Captura de selección con Ctrl+H | [GLOBAL_SHORTCUT.md](GLOBAL_SHORTCUT.md) |
 | Contactos de Facebook, integración en desarrollo en esta copia | [FACEBOOK.md](FACEBOOK.md) |
 | Datos del escritorio y de la extensión | [PRIVACY.md](PRIVACY.md), [EXTENSION_PRIVACY.md](EXTENSION_PRIVACY.md) |

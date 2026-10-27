@@ -26,6 +26,12 @@ El auxiliar usa Windows PowerShell 5.1 y carga exclusivamente los módulos inclu
 
 ### Recuperar una versión anterior que no puede actualizarse
 
+Para el PC de desarrollo `C:\proyectos\habitat` con 0.16.1 y el puntero informado,
+consulta la [investigación y recuperación específica](UPDATE_MIGRATION_0_16_1.md).
+Se ha reproducido un rechazo de las rutas del ZIP oficial antes de lanzar el
+auxiliar; no se atribuye automáticamente a `Get-FileHash`. La recuperación usa
+el mismo formato ZIP y preserva el código fuente del checkout.
+
 La corrección requiere instalar una versión que ya la incluya; descargar un paquete nuevo desde una versión anterior no cambia el actualizador que sigue ejecutándose en esa versión. Reintentar **Update** puede repetir el mismo error.
 
 1. Descarga la versión corregida desde [GitHub Releases](https://github.com/aesgalexis/habitat/releases). Comprueba la versión publicada; un cambio local o un commit no publica el instalador.

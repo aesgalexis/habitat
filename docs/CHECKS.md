@@ -18,7 +18,7 @@ Requiere Windows, SDK .NET 10 y Node.js; CI utiliza Node.js 24.
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify.ps1
 ```
 
-El [script](../scripts/verify.ps1) ejecuta comprobaciones JavaScript, las suites .NET Appearance, Bridge, Core, Destination, Gmail, Tasks, Weather y Hotkey, pruebas de paquetes, actualizaciones y preparación de firma, y una compilación Release. Se comparte con [pre-push](../.githooks/pre-push) y [GitHub Actions](../.github/workflows/verify.yml).
+El [script](../scripts/verify.ps1) ejecuta comprobaciones JavaScript, las suites .NET Appearance, Bridge, Core, Destination, Gmail, Contacts, Tasks, Weather, Hotkey y Window, pruebas de paquetes, actualizaciones y preparación de firma, y una compilación Release. Se comparte con [pre-push](../.githooks/pre-push) y [GitHub Actions](../.github/workflows/verify.yml).
 
 `-NoRestore` reutiliza dependencias restauradas. `-SkipBuild` omite únicamente la compilación final, no las compilaciones necesarias para ejecutar las suites. Las salidas y los datos de tareas quedan bajo `artifacts/verification`; nunca se utiliza la lista real del usuario. Puente y OAuth sintético pueden necesitar sockets de bucle local; un bloqueo del sandbox debe distinguirse de un fallo del producto.
 

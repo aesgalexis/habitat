@@ -73,6 +73,7 @@ public sealed partial class MainPage : Page
         _conversationView = new(_conversation, ToneBrush, TextBrush);
         _windowHost = windowHost;
         _preferences = Preferences.Load(services.Paths.PreferencesPath);
+        services.Bridge.BrowserContacts.Configure(_preferences.BrowserContacts);
         UiText.SetLanguage(_preferences.InterfaceLanguage);
         _destinationCatalog = new(_preferences.EnabledDestinations, _preferences.WindowsApps);
         _taskStore = services.Tasks;
@@ -388,6 +389,7 @@ public sealed partial class MainPage : Page
     {
         TickUpdates();
         TickGmail();
+        TickBrowserContacts();
         TickTasks(DateTimeOffset.UtcNow);
         TickMarkets();
         TickCodexSchedules(DateTimeOffset.UtcNow);

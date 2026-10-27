@@ -11,7 +11,7 @@ HABITAT usa **SemVer: MAJOR.MINOR.PATCH**. `VERSION` es la fuente de la versión
 
 La primera distribución instalable del escritorio es **0.9.1**: recoge el estado funcional de 0.9.0 y corrige su comprobación del changelog en clones Windows con CRLF. `v0.9.0` se conserva como etiqueta histórica sin paquetes publicados. La versión 1.0.0 queda para un estado con compatibilidad y distribución consideradas estables. Una etiqueta publicada es inmutable: si una publicación requiere cambios, se incrementa la versión. Las etiquetas siguen el formato `vMAJOR.MINOR.PATCH` y apuntan a un commit de `main` ya verificado.
 
-La extensión de Chrome (`extension/manifest.json`, actualmente 0.10.7) y la de VS Code (`vscode-extension/package.json`, actualmente 0.2.0) tienen versiones independientes porque se instalan y actualizan por separado. Cada paquete registra las versiones incluidas en `release.json`. La versión del protocolo del puente es un contrato independiente de la versión de producto.
+La extensión de Chrome (`extension/manifest.json`, actualmente 0.10.8) y la de VS Code (`vscode-extension/package.json`, actualmente 0.2.0) tienen versiones independientes porque se instalan y actualizan por separado. Cada paquete registra las versiones incluidas en `release.json`. La versión del protocolo del puente es un contrato independiente de la versión de producto.
 
 La versión 0.10.0 añade la guía de primera puesta en marcha y utiliza exclusivamente Chrome para los destinos web. La extensión 0.9.0 está enviada a Chrome Web Store como Unlisted; el enlace estará disponible tras la aprobación de Google. Se mantiene la carga manual incluida mientras tanto. Consulta [la guía para otro PC](GETTING_STARTED.md).
 
@@ -35,7 +35,7 @@ La versión **0.16.1** corrige la pérdida del chat vinculado al navegar por Cod
 
 La versión **0.16.2** reúne todas las funciones consolidadas de 0.16.1 con Facebook y la extensión Chrome 0.10.3: fondos, programación y persistencia de Codex, Mercados, sidebar y destinos configurables. Conserva el modal de actualización, recupera borradores al reiniciar y mantiene la interfaz en inglés. También permite empaquetar bajo OneDrive conservando la comprobación de enlaces de todos los ancestros. Véase [el registro de recuperación](RECOVERY_2026-10-25.md).
 
-La versión **0.16.4** renombra el widget a **Contacts**, acerca el destinatario al sidebar y retira los contactos de la barra derecha. La presencia se consulta al abrir o reintentar, sin refrescos periódicos. También corrige los auxiliares de actualización cuando heredan rutas de módulos incompatibles con Windows PowerShell 5.1.
+La versión **0.17.0** añade la agenda unificada y fuentes automáticas opcionales desde Facebook, Gmail y Google Contacts abiertos, con procedencia y fusiones revisables. También normaliza los separadores ZIP de distribución y conserva diagnósticos del actualizador. La extensión incluida es 0.10.8; su lectura se limita a las personas cargadas y nunca envía mensajes por sincronizar contactos.
 
 La publicación incluye dos alternativas: el instalador `HABITAT-<version>-x64-setup.exe`, con desinstalación registrada en Windows, y el ZIP con su instalador PowerShell. Ambos son autocontenidos, se instalan por usuario y tienen un SHA-256 adjunto. El EXE necesita Windows 10 2004 o posterior y admite instalación silenciosa. Consulta [la preparación para WinGet](WINGET.md).
 

@@ -3,6 +3,7 @@ importScripts("connection.js", "transport.js");
 importScripts("translation.js");
 importScripts("search-transport.js", "search.js", "youtube.js");
 importScripts("facebook-messaging.js", "facebook.js");
+importScripts("browser-contacts.js");
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   (async () => {
     if (!await habitatConnectionEnabled()) return {error:"Open the HABITAT extension and enable the connection first"};

@@ -22,6 +22,8 @@ internal sealed class AppServices : IAsyncDisposable
     public BridgeService Bridge { get; }
     public TaskStore Tasks { get; }
     public TaskSession TaskSession { get; }
+    internal Habitat.Features.Contacts.ContactSession Contacts { get; }
+    private readonly Dictionary<string, IGmailCredentialStore> _contactsTestCredentials = new();
     public WeatherService Weather { get; }
     internal MarketsService Markets { get; set; }
     internal IAppUpdateService Updates { get; set; }
@@ -122,6 +124,7 @@ internal sealed class AppServices : IAsyncDisposable
         Bridge = new BridgeService(paths.IsIsolated ? 0 : 8765, facebookTracePath: paths.FacebookMessageTracePath);
         Tasks = paths.IsIsolated ? new TaskStore(paths.TasksPath) : new TaskStore();
         TaskSession = new TaskSession(Tasks);
+        Contacts = new(new Habitat.Features.Contacts.ContactStore(paths.ContactsPath));
         if (paths.IsIsolated) _isolatedHttp = new HttpClient(new DisabledNetwork());
         Weather = new WeatherService(_isolatedHttp);
         Markets = new MarketsService(_isolatedHttp);
@@ -179,6 +182,30 @@ internal sealed class AppServices : IAsyncDisposable
             if (!await LaunchBrowser(new Uri(url))) throw new InvalidOperationException(UiText.Get("CouldNotOpenChromeCheckThatGoogleChromeMessage"));
         });
     public GmailService CreateGmail(GmailAuthService auth) => new(auth, _isolatedHttp);
+    internal IGmailCredentialStore ContactsCredentials(string sourceId)
+    {
+        if (!Guid.TryParseExact(sourceId, "N", out _)) throw new ArgumentException("Invalid contact source identifier.");
+        if (!Paths.IsIsolated) return new GmailCredentialStore(
+            Path.Combine(Paths.DesktopDirectory, "Contacts", sourceId + ".bin"), "HABITAT/Contacts/Google/" + sourceId);
+        if (!_contactsTestCredentials.TryGetValue(sourceId, out var credentials))
+            _contactsTestCredentials[sourceId] = credentials = new MemoryCredentials();
+        return credentials;
+    }
+    internal GmailAuthService CreateContactsAuth(IGmailCredentialStore? credentials = null) =>
+        new(credentials ?? new MemoryCredentials(), _isolatedHttp, async url =>
+        {
+            if (Paths.IsIsolated) throw new InvalidOperationException("Google sign-in is disabled in checks.");
+            if (!await LaunchBrowser(new Uri(url))) throw new InvalidOperationException("Could not open Google sign-in in Chrome.");
+        }, contactsOnly: true);
+    internal Habitat.Features.Contacts.GoogleContactsService CreateGoogleContacts(GmailAuthService auth) => new(auth, _isolatedHttp);
+    internal async Task<string?> PickContactsFileAsync(nint owner, bool client = false)
+    {
+        if (Paths.IsIsolated || owner == 0) return null;
+        var picker = new Windows.Storage.Pickers.FileOpenPicker { CommitButtonText = client ? "Select Google client" : "Select contacts" };
+        picker.FileTypeFilter.Add(client ? ".json" : ".vcf");
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, owner);
+        return (await picker.PickSingleFileAsync())?.Path;
+    }
     public bool NeedsLocationPermission => !Paths.IsIsolated && (_location?.NeedsPermission ?? true);
     public void ResetLocationAccess() => _location?.ResetAccess();
     public Task<DeviceLocationResult> GetLocationAsync(bool foreground, CancellationToken token) => Paths.IsIsolated

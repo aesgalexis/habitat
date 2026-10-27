@@ -89,9 +89,12 @@ public sealed partial class MainPage
             Composer.Text = "Synthetic draft B";
             SelectDestination(aId);
             if (Composer.Text != textA || fake.Calls != 0) throw new InvalidOperationException("Selecting destinations must preserve drafts without sending.");
+            SelectFacebookContact(a, "Unified person A");
+            if (ContactMessageName.Text != "Unified person A" || Composer.Text != textA)
+                throw new InvalidOperationException("A unified display name must preserve the recipient's draft and original Facebook identity.");
             fake.Result = new("not-sent", "recipient");
             await LaunchDestinationAsync(aId, Composer.Text);
-            if (Composer.Text != textA || fake.Link != a.Link || fake.Text != textA || !_destinationSections[aId].HasContent)
+            if (Composer.Text != textA || fake.Link != a.Link || fake.Name != a.Name || fake.Text != textA || !_destinationSections[aId].HasContent)
                 throw new InvalidOperationException("A rejected synthetic submission must preserve the recipient's draft.");
             CheckContactMessageIndicatorLayout();
             fake.Result = new("uncertain");
@@ -118,6 +121,7 @@ public sealed partial class MainPage
             foreach (var id in _facebookRecipients.Keys.ToArray())
                 if (_destinationSections.Remove(id, out var section)) { await section.StopAsync(); section.Dispose(); }
             _facebookRecipients.Clear();
+            _facebookSendRecipients.Clear();
             FacebookAvatars.Children.Clear();
             RebuildDestinationRail(); UpdateDestinationPresentation();
         }
@@ -143,11 +147,12 @@ public sealed partial class MainPage
 
     private sealed class CheckedFacebookMessaging : IFacebookMessagingService
     {
+        public bool IsAvailable => true;
         public int Calls;
-        public string? Link, Text;
+        public string? Link, Name, Text;
         public FacebookMessageResult Result = new("not-sent", "unsupported");
         public Task<FacebookMessageResult> SendAsync(string targetLink, string targetName, string text, CancellationToken token)
-        { Calls++; Link = targetLink; Text = text; return Task.FromResult(Result); }
+        { Calls++; Link = targetLink; Name = targetName; Text = text; return Task.FromResult(Result); }
     }
 }
 #endif

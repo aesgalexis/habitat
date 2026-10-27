@@ -280,6 +280,35 @@ using var login = new GmailAuthService(loginStore, loginHttp, async url =>
 await login.SignInAsync(CancellationToken.None);
 Check(login.IsSignedIn && login.Email == "sample@example.com" && loginStore.Saves == 1, "Save only a fully authenticated account.");
 
+// Contacts consent is a separate credential and cannot silently grant Gmail access.
+var contactsLoginStore = new MemoryStore(new GmailAccount(clientConfig, null, null));
+var verifiedContactsEmail = true;
+using var contactsLoginHttp = new HttpClient(new FakeHandler(request =>
+{
+    if (request.RequestUri!.Host == "oauth2.googleapis.com")
+        return Task.FromResult(Json(JsonSerializer.Serialize(new { access_token = "contacts-test", refresh_token = "contacts-offline-test", expires_in = 3600,
+            scope = GmailAuthService.ContactsScope + " " + GmailAuthService.EmailScope })));
+    Check(request.RequestUri.AbsoluteUri == "https://www.googleapis.com/oauth2/v2/userinfo", "Contacts identity must use userinfo, without accessing the Gmail mailbox.");
+    return Task.FromResult(Json(JsonSerializer.Serialize(new { email = "contacts@example.com", verified_email = verifiedContactsEmail })));
+}));
+async Task AcceptContactsLogin(string url)
+{
+    var query = QueryHelpers.ParseQuery(new Uri(url).Query);
+    Check(query["scope"].ToString() == GmailAuthService.ContactsScope + " " + GmailAuthService.EmailScope, "Contacts login requests only read-only contacts and account identity.");
+    using var local = new HttpClient();
+    using var response = await local.GetAsync(query["redirect_uri"] + "?code=synthetic-contacts-code&state=" + query["state"]);
+    Check(response.IsSuccessStatusCode, "Contacts login accepts the matching loopback state.");
+}
+using var contactsLogin = new GmailAuthService(contactsLoginStore, contactsLoginHttp, AcceptContactsLogin, contactsOnly: true);
+await contactsLogin.SignInAsync(CancellationToken.None);
+Check(contactsLogin.IsSignedIn && contactsLogin.Email == "contacts@example.com" && contactsLoginStore.Saves == 1 && loginStore.Account.Email == "sample@example.com",
+    "Contacts authorization must save the correct source account without altering Gmail's authorization.");
+verifiedContactsEmail = false;
+var unverifiedStore = new MemoryStore(new GmailAccount(clientConfig, null, null));
+using var unverifiedLogin = new GmailAuthService(unverifiedStore, contactsLoginHttp, AcceptContactsLogin, contactsOnly: true);
+await Reject<InvalidDataException>(() => unverifiedLogin.SignInAsync(CancellationToken.None), "Unverified account identities must not be attached to contact sources.");
+Check(unverifiedStore.Saves == 0, "Unverified contacts authorization must not persist tokens.");
+
 using var cancellation = new CancellationTokenSource();
 var cancelledStore = new MemoryStore(new GmailAccount(clientConfig, null, null));
 using var cancelled = new GmailAuthService(cancelledStore, loginHttp, _ => { cancellation.Cancel(); return Task.CompletedTask; });

@@ -79,7 +79,7 @@ internal static class ReleaseUpdateChecks
         zipFixture.Package = ZipPackage(version: "0.12.0");
         zipRelease = (await zipClient.CheckAsync(default))!;
         await Reject(() => zipClient.PrepareAsync(zipRelease, progress, default), "Package version mismatches are rejected.");
-        foreach (var bad in new[] { "../escape.txt", "/absolute.txt", "folder/../../escape.txt", "folder\\escape.txt", "C:/escape.txt", "trailing./file" })
+        foreach (var bad in new[] { "../escape.txt", "/absolute.txt", "folder/../../escape.txt", "folder\\..\\..\\escape.txt", "\\absolute.txt", "\\\\server\\share.txt", "C:/escape.txt", "trailing./file" })
         {
             var archive = Path.Combine(root, Guid.NewGuid().ToString("N") + ".zip");
             using (var stream = File.Create(archive))

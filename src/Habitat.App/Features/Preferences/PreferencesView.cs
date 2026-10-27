@@ -21,12 +21,13 @@ internal sealed class PreferencesView : Grid
     internal DestinationsView Destinations { get; }
     internal MarketsPreferencesView Markets { get; }
     internal SidebarPreferencesView Sidebar { get; }
+    internal ContactsPreferencesView? Contacts { get; }
     internal string Category => ((ListViewItem)Categories.SelectedItem).Tag as string ?? "Appearance";
     private readonly ScrollViewer _scroll = ScrollEdgeFade.Enable(new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
 
     public PreferencesView(Habitat.Preferences saved, Func<Task<IReadOnlyList<WindowsAppDestination>>>? discoverApps = null,
         Func<Task<string?>>? browseApp = null, WallpaperService? wallpapers = null,
-        Func<Task<IReadOnlyList<string>>>? pickWallpapers = null)
+        Func<Task<IReadOnlyList<string>>>? pickWallpapers = null, ContactsPreferencesView? contacts = null)
     {
         ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(148) });
         ColumnDefinitions.Add(new ColumnDefinition());
@@ -84,6 +85,9 @@ internal sealed class PreferencesView : Grid
         AddCategory("Markets", "\uE9D2", UiText.Get("MarketsPreferencesDescription"), Markets);
         Sidebar = new SidebarPreferencesView(saved.SidebarWidgets, saved.FacebookCardSize);
         AddCategory("Sidebar", "\uE700", UiText.Get("SidebarDescription"), Sidebar);
+        Contacts = contacts;
+        AddCategory("Contacts", "\uE716", "Connect sources, review contact details and merge people without changing the original accounts.",
+            contacts is null ? new TextBlock { Text = "Contact sources are unavailable in this view." } : contacts);
         Categories.SelectionChanged += (_, _) =>
         {
             _scroll.Content = ((ListViewItem)Categories.SelectedItem).Content is StackPanel label ? label.Tag : null;

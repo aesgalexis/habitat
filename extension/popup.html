@@ -6,10 +6,11 @@
 <p>Connect Chrome to the HABITAT desktop app on this computer.</p>
 <button id="settings" type="button">Connection and privacy</button>
 <button id="automatic" type="button" disabled>Connect automatically</button>
-<p>Optional Facebook access reads photos and names from its Contacts panel or loaded All friends list while you open it in HABITAT. It does not read messages.</p>
+<p>Optional sources update HABITAT contacts automatically from open tabs. Only loaded people are read; messages are not collected.</p>
 <button id="facebook" type="button">Enable Facebook contacts</button>
 <button id="facebook-reconnect" type="button">Reconnect Facebook</button>
 <p id="facebook-status" role="status" aria-live="polite"></p>
+<button id="google-contacts" type="button">Enable Gmail and Google Contacts</button>
 <details><summary>Manual pairing</summary><p>Use the app code only if automatic connection fails.</p><label for="key">App code</label><input id="key" placeholder="Paste the code from HABITAT" autocomplete="off" disabled><button id="bind" type="button" disabled>Connect this tab</button></details>
 <button id="unbind" type="button">Disconnect</button>
 <p id="msg" role="status" aria-live="polite">Review the connection settings to enable HABITAT.</p>

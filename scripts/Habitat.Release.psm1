@@ -181,4 +181,20 @@ function Install-HabitatRelease {
     } finally { $lock.Dispose() }
 }
 
-Export-ModuleMember -Function New-HabitatBuildManifest, Test-HabitatBuildManifest, Get-HabitatActiveDirectory, Install-HabitatRelease, Assert-HabitatNoLinks
+function New-HabitatReleaseArchive([string]$Directory, [string]$ArchivePath) {
+    Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+    $root = [IO.Path]::GetFullPath($Directory).TrimEnd('\', '/')
+    $archive = [IO.Compression.ZipFile]::Open($ArchivePath, [IO.Compression.ZipArchiveMode]::Create)
+    try {
+        foreach ($file in Get-ChildItem -LiteralPath $root -Recurse -File -Force) {
+            if ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Archive files cannot be filesystem links.' }
+            # Windows PowerShell 5.1's CreateFromDirectory emits backslashes,
+            # which older HABITAT clients reject. Write portable ZIP names.
+            $name = $file.FullName.Substring($root.Length + 1).Replace('\', '/')
+            [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $file.FullName, $name,
+                [IO.Compression.CompressionLevel]::Optimal) | Out-Null
+        }
+    } finally { $archive.Dispose() }
+}
+
+Export-ModuleMember -Function New-HabitatBuildManifest, Test-HabitatBuildManifest, Get-HabitatActiveDirectory, Install-HabitatRelease, Assert-HabitatNoLinks, New-HabitatReleaseArchive

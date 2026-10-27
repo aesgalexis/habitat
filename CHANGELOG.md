@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.17.0 — 2026-10-27
+
+- Agenda unificada persistente con fichas por persona, datos y versiones anteriores conservados por fuente, búsqueda por nombre/correo/teléfono y acceso a los canales compatibles.
+- Fuentes automáticas en **Preferences → Contacts**: Facebook, Gmail y Google Contacts aportan las personas cargadas en pestañas abiertas, sin vistas previas ni importaciones repetidas. Se reutilizan permisos existentes de Chrome; el acceso nuevo se concede una vez. Desactivar conserva la agenda y bloquea las observaciones pendientes.
+- La extensión 0.10.8 lee solo nombres, direcciones y datos de las filas compatibles: Gmail aporta corresponsales visibles, sin asuntos ni cuerpos; Google Contacts y Facebook aportan sus listas cargadas. No se promete una agenda completa ni se abren o desplazan páginas para la lectura automática.
+- Fusiones manuales y sugerencias por correo, teléfono o enlace de perfil de Facebook, con comparación, confirmación, deshacer y rechazo recordado. Las coincidencias entre fuentes no se fusionan automáticamente.
+- Las fichas abren borradores en Gmail con cuenta remitente elegida o permiten seleccionar Messenger con verificación del destinatario original. Se conservan los borradores; iMessage y otros canales requieren una integración compatible. Importación vCard y acceso completo por Google API siguen disponibles como opciones adicionales.
+- ZIP de distribución con separadores portables y lectura compatible con archivos anteriores de Windows PowerShell. Diagnósticos persistentes y redactados para preparación, auxiliar, activación y recuperación del actualizador; se conserva la protección de rutas y hashes.
+- Pruebas sintéticas de sincronización automática, permisos, identidad, procedencia, almacenamiento, fusiones, paginación, controles WinUI y migración del actualizador. Ninguna prueba de publicación envía mensajes reales ni utiliza los contactos del usuario.
+
 ## 0.16.4 — 2026-10-27
 
 - El widget de contactos se llama **Contacts**, con etiquetas accesibles en inglés. El destinatario seleccionado queda junto al sidebar incluso en ventanas anchas y ya no ocupa un destino fijo en la barra derecha.

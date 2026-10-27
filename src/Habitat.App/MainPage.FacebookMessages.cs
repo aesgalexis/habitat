@@ -15,6 +15,7 @@ namespace Habitat;
 public sealed partial class MainPage
 {
     private readonly Dictionary<string, FacebookContact> _facebookRecipients = new();
+    private readonly Dictionary<string, FacebookContact> _facebookSendRecipients = new();
     private FacebookContact? _displayedContact;
     private readonly Grid ContactMessageHeader = new()
     {
@@ -37,15 +38,20 @@ public sealed partial class MainPage
     private static string FacebookRecipientId(FacebookContact contact) => "facebook-contact:" +
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(contact.Link ?? contact.Name + "\n" + contact.PhotoUrl)));
 
-    private void SelectFacebookContact(FacebookContact contact)
+    private void SelectFacebookContact(FacebookContact contact, string? displayName = null)
     {
         if (HasAppearanceOverlay || _updateHandoff || _operations.IsStopping) return;
         var id = FacebookRecipientId(contact);
-        _facebookRecipients[id] = contact;
+        _facebookRecipients[id] = displayName is null ? contact : contact with { Name = displayName };
+        _facebookSendRecipients[id] = contact;
         _composerDrafts.Isolate(id);
         if (!_destinationSections.ContainsKey(id))
         {
-            var section = new MessengerSection(id, (text, token) => _services.FacebookMessaging.SendAsync(contact.Link!, contact.Name, text, token));
+            var section = new MessengerSection(id, (text, token) =>
+            {
+                var recipient = _facebookSendRecipients[id];
+                return _services.FacebookMessaging.SendAsync(recipient.Link!, recipient.Name, text, token);
+            });
             section.StateChanged += () => { PresentDestinationSection(); UpdateWritingLayout(); UpdateSendState(); };
             section.ClearRequested += () =>
             {
@@ -54,7 +60,7 @@ public sealed partial class MainPage
             };
             _destinationSections.Add(id, section);
             _composer.Register(id, false, SubmitFacebookMessageAsync,
-                _ => section.IsBusy || contact.Link is null, exclusive: true);
+                _ => section.IsBusy || _facebookSendRecipients[id].Link is null || !_services.FacebookMessaging.IsAvailable, exclusive: true);
         }
         SelectDestination(id);
         SetFacebookOpen(false);

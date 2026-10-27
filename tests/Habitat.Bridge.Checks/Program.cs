@@ -405,8 +405,25 @@ Console.WriteLine($"Facebook bridge checks passed: {checks}. Synthetic snapshots
 using (var messaging = new ClientWebSocket())
 {
     await messaging.ConnectAsync(facebookUrl, default);
-    await Send(messaging, new { key = bridge.PairKey, facebookProtocol = 1, facebookMessagingProtocol = 1, extensionVersion = "0.10.5" });
-    await WaitUntil(() => bridge.Facebook.Status.ExtensionVersion == "0.10.5");
+    await Send(messaging, new { key = bridge.PairKey, facebookProtocol = 1, facebookMessagingProtocol = 1, browserContactsProtocol = 1, extensionVersion = "0.10.8" });
+    await WaitUntil(() => bridge.Facebook.Status.ExtensionVersion == "0.10.8");
+    using (var tick = await Receive(messaging))
+        Check(tick!.RootElement.GetProperty("contacts").GetProperty("facebook").GetBoolean() && bridge.BrowserContacts.Supported,
+            "Compatible extension connections receive enabled automatic source settings.");
+    bridge.BrowserContacts.Configure(new(Facebook: false));
+    await Send(messaging, new { kind = "browser-contacts", snapshots = new[] { new { provider = "facebook", accountId = "unidentified", accountName = "Chrome (account not identified)",
+        contacts = new[] { new { name = "Synthetic browser friend", profileUrl = "https://www.facebook.com/browser.friend", photoUrl = "https://scontent.fbcdn.net/synthetic.jpg", page = "Facebook" } } } } });
+    await Task.Delay(50);
+    Check(!bridge.BrowserContacts.TryTake(out _), "A disabled source cannot save observations from a late browser packet.");
+    bridge.BrowserContacts.Configure(new());
+    await Send(messaging, new { kind = "browser-contacts", states = new[] { new { provider = "facebook", allowed = true, open = true, state = "ready", count = 1 } },
+        snapshots = new[] { new { provider = "facebook", accountId = "unidentified", accountName = "Chrome (account not identified)",
+        contacts = new[] { new { name = "Synthetic browser friend", profileUrl = "https://www.facebook.com/browser.friend", photoUrl = "https://scontent.fbcdn.net/synthetic.jpg", page = "Facebook" } } } } });
+    await WaitUntil(() => bridge.BrowserContacts.StateFor("facebook").State == "ready");
+    Check(bridge.BrowserContacts.TryTake(out var automatic) && automatic!.Contacts.Single().Name == "Synthetic browser friend",
+        "Automatic observations use the authenticated browser bridge without a manual read or import request.");
+    var automaticDiagnostics = await http.GetStringAsync("/status");
+    Check(!automaticDiagnostics.Contains("Synthetic browser friend", StringComparison.Ordinal), "Contact names never enter bridge connection diagnostics.");
     async Task<string> MessageRequest(bool inspection = false)
     {
         while (true)

@@ -92,7 +92,23 @@ function readFacebookContacts() {
     contacts.push({name,photoUrl:image.href,link,isOnline});
     if (contacts.length === 200) break;
   }
-  return {contacts,diagnostic:{stage:"section-read",sections:regions.length,photos:photos.length,rows:rowCount}};
+  let account = null;
+  // Own-profile navigation only; never infer the account from a feed author.
+  const ownLabels = /^(your profile|tu perfil|ver tu perfil|see your profile|votre profil|dein profil)$/i;
+  for (const anchor of document.querySelectorAll('a[aria-label][href],header a[href],[role="banner"] a[href]')) {
+    if (!visible(anchor) || !ownLabels.test(text(anchor.getAttribute?.("aria-label")))) continue;
+    try {
+      const url = new URL(anchor.getAttribute("href"), location.href);
+      if (!["facebook.com","www.facebook.com"].includes(url.hostname) || url.protocol !== "https:" || url.username || url.password || url.port) continue;
+      const path = url.pathname.replace(/^\/|\/$/g, "");
+      if (path === "profile.php" && /^\d+$/.test(url.searchParams.get("id") || ""))
+        account = {id:"https://www.facebook.com/profile.php?id=" + url.searchParams.get("id"),name:text(anchor.textContent) || "Facebook account"};
+      else if (/^[A-Za-z0-9.]+$/.test(path) && !["me","profile","login","friends","settings","messages"].includes(path))
+        account = {id:"https://www.facebook.com/" + path.toLowerCase(),name:text(anchor.textContent) || path};
+    } catch (_) {}
+    if (account) break;
+  }
+  return {contacts,account,diagnostic:{stage:"section-read",sections:regions.length,photos:photos.length,rows:rowCount}};
 }
 
 const facebookTransport = (() => {
@@ -140,6 +156,7 @@ const facebookTransport = (() => {
       readiness = new Promise(resolve => { ready = resolve; });
       watch(current);
       current.onopen = () => current.send(JSON.stringify({key:auth.key,facebookProtocol:1,
+        browserContactsProtocol:typeof browserContacts === "undefined" ? 0 : 1,
         facebookMessagingProtocol:typeof facebookMessaging === "undefined" ? 0 : 1,
         extensionVersion:chrome.runtime?.getManifest?.().version || "unknown"}));
       current.onmessage = event => {
@@ -149,6 +166,7 @@ const facebookTransport = (() => {
           if (packet.kind !== "facebook-tick") return;
           lastTick = Date.now(); issue = null; ready?.(); ready = null;
           current.send(JSON.stringify({kind:"facebook-pong"}));
+          if (typeof browserContacts !== "undefined") void browserContacts.tick(current,packet.contacts).catch(() => {});
           if (typeof facebookMessaging !== "undefined") void facebookMessaging.handle(current,packet.message);
           if (!packet.request) { job = cache = null; return; }
           void dispatch(current, packet.request);

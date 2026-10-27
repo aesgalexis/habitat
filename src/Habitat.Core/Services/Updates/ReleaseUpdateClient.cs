@@ -89,22 +89,29 @@ internal sealed class ReleaseUpdateClient : IDisposable
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromMinutes(15));
         token = timeout.Token;
-        // Re-resolve the release before downloading; callers cannot supply a URL
-        // or version which bypasses the publication checks above.
-        if (await CheckAsync(token) is not { } latest || latest != release) throw new InvalidDataException("The published update changed. Try again.");
-        using var checksumResponse = await GetAsync(release.Checksum.Url, token);
-        checksumResponse.EnsureSuccessStatusCode();
-        var checksumBytes = await ReadSmallAsync(checksumResponse, 4096, token);
-        var checksumText = System.Text.Encoding.UTF8.GetString(checksumBytes).Trim();
-        var match = Regex.Match(checksumText, @"^([a-fA-F0-9]{64})[ \t]+\*?" + Regex.Escape(release.Package.Name) + "$", RegexOptions.CultureInvariant);
-        if (!match.Success) throw new InvalidDataException("The update checksum is invalid.");
-        var expectedHash = match.Groups[1].Value;
         EnsureNoLinks(_cache);
         var directory = Path.Combine(_cache, "update-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(directory);
-        var packagePath = Path.Combine(directory, release.Package.Name);
+        var diagnostics = UpdateDiagnosticLog.ForDirectory(directory);
+        var phase = "release-check";
+        void Phase(string value) { phase = value; diagnostics.Record(value); }
         try
         {
+            Phase("release-check");
+            // Re-resolve the release before downloading; callers cannot supply a URL
+            // or version which bypasses the publication checks above.
+            if (await CheckAsync(token) is not { } latest || latest != release) throw new InvalidDataException("The published update changed. Try again.");
+            Phase("checksum-download");
+            using var checksumResponse = await GetAsync(release.Checksum.Url, token);
+            checksumResponse.EnsureSuccessStatusCode();
+            var checksumBytes = await ReadSmallAsync(checksumResponse, 4096, token);
+            var checksumText = System.Text.Encoding.UTF8.GetString(checksumBytes).Trim();
+            var match = Regex.Match(checksumText, @"^([a-fA-F0-9]{64})[ \t]+\*?" + Regex.Escape(release.Package.Name) + "$", RegexOptions.CultureInvariant);
+            if (!match.Success) throw new InvalidDataException("The update checksum is invalid.");
+            var expectedHash = match.Groups[1].Value;
+            EnsureNoLinks(_cache);
+            Directory.CreateDirectory(directory);
+            var packagePath = Path.Combine(directory, release.Package.Name);
+                Phase("package-download");
             using (var response = await GetAsync(release.Package.Url, token))
             {
                 response.EnsureSuccessStatusCode();
@@ -126,6 +133,7 @@ internal sealed class ReleaseUpdateClient : IDisposable
                     var percent = (int)(total * 100 / release.Package.Size);
                     if (percent != lastPercent) { progress.Report(percent); lastPercent = percent; }
                 }
+                Phase("package-integrity");
                 if (total != release.Package.Size || !Convert.ToHexString(hash.GetHashAndReset()).Equals(expectedHash, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("The update failed its SHA-256 check.");
             }
@@ -133,20 +141,28 @@ internal sealed class ReleaseUpdateClient : IDisposable
             if (release.Kind == UpdatePackageKind.Zip)
             {
                 extracted = Path.Combine(directory, "package");
+                Phase("archive-extract");
                 await Task.Run(() => ExtractPackage(packagePath, extracted, token), token);
+                Phase("package-metadata");
                 using var metadata = JsonDocument.Parse(await File.ReadAllBytesAsync(Path.Combine(extracted, "release.json"), token));
                 if (metadata.RootElement.GetProperty("version").GetString() != release.Version ||
                     metadata.RootElement.GetProperty("runtime").GetString() != "win-x64") throw new InvalidDataException("The update metadata does not match.");
+                Phase("payload-verify");
                 await VerifyPayloadAsync(Path.Combine(extracted, "artifacts", "staged", "app"), token);
             }
+            Phase("prepared");
             return new(release, directory, packagePath, expectedHash, extracted);
         }
-        catch
+        catch (Exception exception)
         {
+            diagnostics.Record(phase, exception);
             // This unique directory contains only this download and is always a
             // direct child of our explicit cache; never touch installed files.
-            EnsureNoLinks(directory);
-            Directory.Delete(directory, true);
+            try
+            {
+                if (Directory.Exists(directory)) { EnsureNoLinks(directory); Directory.Delete(directory, true); }
+            }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException) { diagnostics.Record("cleanup", cleanup); }
             throw;
         }
     }
@@ -207,13 +223,17 @@ internal sealed class ReleaseUpdateClient : IDisposable
         foreach (var entry in archive.Entries)
         {
             token.ThrowIfCancellationRequested();
-            var relative = entry.FullName.TrimEnd('/');
+            // Windows PowerShell's .NET Framework ZIP writer emitted backslashes
+            // in published archives. Canonicalize both separators before applying
+            // exactly the same containment, traversal and duplicate checks.
+            var normalized = entry.FullName.Replace('\\', '/');
+            var relative = normalized.TrimEnd('/');
             var path = ChildPath(destination, relative);
             if (!names.Add(path) || ((entry.ExternalAttributes >> 16) & 0xF000) == 0xA000)
                 throw new InvalidDataException("The update contains duplicate paths or filesystem links.");
             expanded += entry.Length;
             if (expanded > 2L * 1024 * 1024 * 1024) throw new InvalidDataException("The extracted update is too large.");
-            if (entry.FullName.EndsWith('/')) Directory.CreateDirectory(path);
+            if (normalized.EndsWith('/')) Directory.CreateDirectory(path);
             else { Directory.CreateDirectory(Path.GetDirectoryName(path)!); entry.ExtractToFile(path); }
         }
     }

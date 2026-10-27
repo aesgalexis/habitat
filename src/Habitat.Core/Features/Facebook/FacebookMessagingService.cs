@@ -4,6 +4,7 @@ internal sealed record FacebookMessageRequest(string Id, string TargetLink, stri
 internal sealed record FacebookMessageResult(string Status, string? Error = null);
 internal interface IFacebookMessagingService
 {
+    bool IsAvailable { get; }
     Task<FacebookMessageResult> SendAsync(string targetLink, string targetName, string text, CancellationToken token);
 }
 
@@ -21,6 +22,7 @@ internal sealed class FacebookMessagingService(TimeProvider? clock = null, strin
     private FacebookMessageRequest? _request;
     private TaskCompletionSource<FacebookMessageResult>? _completion;
     internal bool IsBusy { get { lock (_gate) return _request is not null; } }
+    public bool IsAvailable { get { lock (_gate) return _supported && _owner is not null && _clock.GetUtcNow() - _seen < TimeSpan.FromSeconds(10); } }
 
     public Task<FacebookMessageResult> SendAsync(string targetLink, string targetName, string text, CancellationToken token) =>
         RunAsync(targetLink, targetName, text, false, token);

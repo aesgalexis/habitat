@@ -9,6 +9,7 @@ public sealed partial class BridgeService
 {
     internal FacebookContactsService Facebook { get; }
     internal FacebookMessagingService FacebookMessaging { get; }
+    internal Features.Contacts.BrowserContactsService BrowserContacts { get; } = new();
 
     private sealed record MessageDiagnosticInput(string ContactName, string? Text, bool InspectOnly = false);
     private async Task<IResult> HandleFacebookMessageAsync(HttpRequest request)
@@ -61,10 +62,12 @@ public sealed partial class BridgeService
                 extensionVersion.ValueKind == JsonValueKind.String ? extensionVersion.GetString() : null);
             FacebookMessaging.Attach(owner, auth.RootElement.TryGetProperty("facebookMessagingProtocol", out var messaging) &&
                 messaging.ValueKind == JsonValueKind.Number && messaging.TryGetInt32(out var messagingVersion) && messagingVersion == 1);
+            BrowserContacts.Attach(owner, auth.RootElement.TryGetProperty("browserContactsProtocol", out var browserContacts) &&
+                browserContacts.TryGetInt32(out var browserVersion) && browserVersion == 1);
             receive = ReceiveFacebookAsync(socket, owner, lifetime.Token);
             while (!receive.IsCompleted && socket.State == WebSocketState.Open)
             {
-                await socket.SendAsync(JsonSerializer.SerializeToUtf8Bytes(new { kind = "facebook-tick", request = Facebook.Pending(owner), message = FacebookMessaging.Pending(owner) }, SocketJson).AsMemory(),
+                await socket.SendAsync(JsonSerializer.SerializeToUtf8Bytes(new { kind = "facebook-tick", request = Facebook.Pending(owner), message = FacebookMessaging.Pending(owner), contacts = BrowserContacts.Tick(owner) }, SocketJson).AsMemory(),
                     WebSocketMessageType.Text, true, lifetime.Token);
                 await Task.Delay(700, lifetime.Token);
             }
@@ -76,6 +79,7 @@ public sealed partial class BridgeService
             lifetime.Cancel();
             Facebook.Detach(owner);
             FacebookMessaging.Detach(owner);
+            BrowserContacts.Detach(owner);
             if (receive is not null)
                 try { await receive; }
                 catch (Exception exception) when (exception is WebSocketException or OperationCanceledException or JsonException or InvalidDataException or InvalidOperationException) { }
@@ -90,9 +94,16 @@ public sealed partial class BridgeService
             if (packet is null) return;
             Facebook.Touch(owner);
             FacebookMessaging.Touch(owner);
+            BrowserContacts.Touch(owner);
             var root = packet.RootElement;
             static string? Read(JsonElement item, string name) => item.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
             var kind = Read(root, "kind");
+            if (kind == "browser-contacts")
+            {
+                try { BrowserContacts.Accept(owner, root, SocketJson); }
+                catch (JsonException) { }
+                continue;
+            }
             if (kind == "facebook-message-progress")
             {
                 FacebookMessageDiagnostic? details = null;

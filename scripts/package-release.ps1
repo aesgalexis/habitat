@@ -53,7 +53,7 @@ if ($LASTEXITCODE -ne 0 -or $changes) { throw 'Source files changed while prepar
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zip = Join-Path $output "HABITAT-$version-win-x64.zip"
 if (Test-Path -LiteralPath $zip) { throw 'Package already exists. Use a new version or move the previous local package.' }
-[IO.Compression.ZipFile]::CreateFromDirectory($bundle, $zip, [IO.Compression.CompressionLevel]::Optimal, $false)
+New-HabitatReleaseArchive -Directory $bundle -ArchivePath $zip
 $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
 [IO.File]::WriteAllText(($zip + '.sha256'), ($hash + ' *' + [IO.Path]::GetFileName($zip) + "`n"), [Text.UTF8Encoding]::new($false))
 Write-Host "Release package: $zip"

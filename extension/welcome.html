@@ -17,10 +17,10 @@
       <ul>
         <li><strong>ChatGPT:</strong> HABITAT can send the messages you submit to your linked conversation and read the resulting replies, conversation address, model name and connection status.</li>
         <li><strong>Search and translation:</strong> HABITAT sends your search queries or source text to Google, YouTube or Google Translate and reads their results.</li>
-        <li><strong>Facebook (optional):</strong> enable Facebook contacts in the extension popup to share names, photo addresses and available links from its Contacts panel or loaded All friends list while the widget is open. Messages are not read. You can disable this access in the popup.</li>
+        <li><strong>Automatic contacts (optional):</strong> enabled sources share loaded people from open Facebook, Gmail or Google Contacts tabs with your local HABITAT agenda. Facebook supplies names, photos and links; Gmail supplies correspondent names and addresses; Google Contacts supplies loaded contact rows. Subjects, snippets and message bodies are not collected. Revoke site access in the popup or switch a source off in HABITAT.</li>
         <li><strong>Local desktop connection:</strong> these messages and results pass between Chrome and HABITAT on this computer at <code>127.0.0.1:8765</code>. There is no HABITAT cloud service, advertising or analytics.</li>
       </ul>
-      <p>The websites receive the text needed for your requests and apply their own account settings and privacy policies. HABITAT does not read your passwords or Gmail through this extension.</p>
+      <p>The websites receive the text needed for your requests and apply their own account settings and privacy policies. HABITAT does not read passwords or mail bodies through this extension. Contacts stay on your computer and are never forwarded to ChatGPT or the developer.</p>
       <p>Chrome's debugger permission keeps search and translation pages active in the background. It is attached only to the page used for that request and released afterwards.</p>
     </section>
     <p class="requirement">Requires the free HABITAT app for Windows and Chrome 120 or later. ChatGPT also requires you to sign in on chatgpt.com. No API key is needed.</p>

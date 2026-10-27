@@ -9,6 +9,12 @@ var checks = 0;
 void Check(bool condition, string message) { if (!condition) throw new Exception(message); checks++; }
 var root = Path.Combine(AppContext.BaseDirectory, "isolated-core", Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(root);
+if (args.Contains("--update-migration-only"))
+{
+    await UpdateMigrationChecks.RunAsync(root, Check, args);
+    Console.WriteLine($"Update migration checks passed: {checks}. Isolated installations only.");
+    return;
+}
 LocalizationChecks.Run(root, Check);
 SidebarChecks.Run(root, Check);
 WallpaperChecks.Run(root, Check);
@@ -16,6 +22,7 @@ BrowserChecks.Run(root, Check);
 InstallationChecks.Run(root, Check);
 await UpdateChecks.RunAsync(Check);
 await ReleaseUpdateChecks.RunAsync(root, Check);
+await UpdateMigrationChecks.RunAsync(root, Check, []);
 await UpdateDownloadChecks.RunAsync(root, Check);
 await MarketsChecks.RunAsync(root, Check);
 var paths = AppDataPaths.Isolated(root);

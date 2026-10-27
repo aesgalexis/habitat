@@ -1,6 +1,6 @@
 # HABITAT desktop privacy notes
 
-This describes the implementation at version 0.10.0 for the packaging and future code-signing review. It complements the [Chrome extension privacy policy](EXTENSION_PRIVACY.md). HABITAT has no developer-operated cloud backend, advertising or analytics service. Connected providers and external applications process data under their own policies and settings.
+This describes the desktop implementation, including the developing unified contacts feature, for packaging and future code-signing review. It complements the [Chrome extension privacy policy](EXTENSION_PRIVACY.md). HABITAT has no developer-operated cloud backend, advertising or analytics service. Connected providers and external applications process data under their own policies and settings.
 
 ## Local data
 
@@ -10,6 +10,10 @@ This describes the implementation at version 0.10.0 for the packaging and future
 - Local diagnostics can include timestamps, exception types, operating-system error codes, startup errors and integration status. Crash diagnostics can contain exception details. Do not publish logs without reviewing them for sensitive information.
 
 ## Connections
+
+The [unified address book](CONTACTS.md) starts empty. Opted-in imports retain source/account provenance, original records and earlier values in `contacts.json` and `contacts.json.history` in the persistent HABITAT desktop data directory. These contact files are not separately encrypted by HABITAT. Contacts are never forwarded to ChatGPT, Codex or the developer. Merges and undo affect local groupings only. Disconnecting a source keeps imported data and recovery history; desktop uninstall also retains it. Removing the local agenda requires removing both the contact file and its history while HABITAT is closed.
+
+Automatic browser contact sources use optional site permissions and the sessions already open in Chrome. Enabled Facebook, Gmail and Google Contacts pages contribute loaded people approximately every 30 seconds and after page/permission changes. Gmail contributes correspondent names and email addresses, without subjects, snippets or mail bodies; Google Contacts contributes loaded contact rows. Google account emails separate the source accounts; missing or ambiguous identity waits. Facebook uses explicit own-profile navigation when available and otherwise labels the account unidentified. No cookies or private endpoints are read. Observations are saved directly without import preview, preserve existing data and never automatically merge uncertain people. Source Off or permission revocation stops new reads and keeps saved contacts. Google People API and vCard remain optional manual alternatives with preview. Facebook photos make normal requests to its image servers. Email actions open Gmail drafts; Messenger requires an explicit send from the current Facebook session. Phone numbers do not establish iMessage availability.
 
 | Feature | Data and destination | When |
 | --- | --- | --- |

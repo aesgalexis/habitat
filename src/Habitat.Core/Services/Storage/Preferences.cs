@@ -16,6 +16,7 @@ internal sealed record Preferences(string Theme, double Opacity)
     public MarketsSettings Markets { get; init; } = new();
     public string[]? SidebarWidgets { get; init; } = SidebarCatalog.Defaults;
     public string FacebookCardSize { get; init; } = "small";
+    public Features.Contacts.BrowserContactSettings BrowserContacts { get; init; } = new();
     public bool TextOnly { get; init; } = true;
     public bool GlobalHotkeyEnabled { get; init; } = true;
     public bool SetupGuideSeen { get; init; }
@@ -45,6 +46,7 @@ internal sealed record Preferences(string Theme, double Opacity)
                     Wallpaper = (saved.Wallpaper ?? new()).Normalize(),
                     Markets = (saved.Markets ?? new()).Normalize(),
                     FacebookCardSize = saved.FacebookCardSize == "large" ? "large" : "small",
+                    BrowserContacts = saved.BrowserContacts ?? new(),
                     // Existing profiles keep their four widgets; fresh profiles omit Markets.
                     SidebarWidgets = new SidebarCatalog(document.RootElement.TryGetProperty(nameof(SidebarWidgets), out _)
                         ? saved.SidebarWidgets : SidebarCatalog.Available).Enabled.ToArray(),
