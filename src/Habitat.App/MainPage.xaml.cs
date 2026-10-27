@@ -210,7 +210,7 @@ public sealed partial class MainPage : Page
         SendButton.SizeChanged += (_, _) => UpdateWritingLayout();
         SendButton.Click += SendButton_Click;
         _root.Children.Add(SendButton);
-        BuildContactMessageIndicators();
+        BuildContactMessageIndicators(surface);
         BuildCodexScheduling();
 
         surface.Children.Add(_root);
@@ -388,7 +388,6 @@ public sealed partial class MainPage : Page
     {
         TickUpdates();
         TickGmail();
-        TickFacebook();
         TickTasks(DateTimeOffset.UtcNow);
         TickMarkets();
         TickCodexSchedules(DateTimeOffset.UtcNow);

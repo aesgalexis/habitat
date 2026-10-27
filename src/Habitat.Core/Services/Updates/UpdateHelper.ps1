@@ -1,4 +1,5 @@
 param([Parameter(Mandatory)][string]$PlanPath)
+$env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules')
 $ErrorActionPreference = 'Stop'
 $plan = Get-Content -LiteralPath $PlanPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $work = Split-Path -Parent ([IO.Path]::GetFullPath($PlanPath))

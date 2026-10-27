@@ -213,6 +213,7 @@ public sealed partial class MainPage
         var drawerOnly = (_tasksPanelOpen || expanded || _facebookPanelOpen) && contentWidth - layout.ContentInset - facebookInset - DestinationRailInset < 200;
         _root.Visibility = drawerOnly ? Visibility.Collapsed : Visibility.Visible;
         _root.Margin = new Thickness(layout.ContentInset + facebookInset, 0, DestinationRailInset, 0);
+        PositionContactMessageHeader(surface);
     }
 
     private void OpenTasks() => DispatcherQueue.TryEnqueue(

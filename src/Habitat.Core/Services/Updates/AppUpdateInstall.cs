@@ -65,12 +65,17 @@ internal static class AppUpdateInstall
             update.Package.Version, installation.Kind, installation.Directory, installation.Executable, installation.Launcher,
             ParentId = processId, Package = update.File, update.Sha256, ResultPath = resultPath
         }));
+        return CreateHelperStartInfo(helper, "-PlanPath", plan);
+    }
+
+    internal static ProcessStartInfo CreateHelperStartInfo(string helper, string requestOption, string requestPath)
+    {
         var powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
         var start = new ProcessStartInfo(powershell)
         {
             UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden,
-            WorkingDirectory = directory,
-            ArgumentList = { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", helper, "-PlanPath", plan }
+            WorkingDirectory = Path.GetDirectoryName(helper)!,
+            ArgumentList = { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", helper, requestOption, requestPath }
         };
         // PowerShell 7 module paths are incompatible with Windows PowerShell.
         // Let the installation helper initialise its own compatible module path.

@@ -42,13 +42,39 @@ public sealed partial class MainPage
             await Task.Delay(40);
             var aId = _destination;
             if (Composer.Text != "" || ComposerHint.Text != "Message Synthetic recipient A ☕…" ||
-                SendButton.Content as string != "Send message" || !_destinationButtons.ContainsKey(aId) ||
+                SendButton.Content as string != "Send message" || _destinationButtons.ContainsKey(aId) ||
+                DestinationRail.Children.Count != _destinationCatalog.Enabled.Count ||
                 _destinationSections[aId].HasContent || Composer.TextAlignment != TextAlignment.Center || fake.Calls != 0 ||
                 _facebookPanelOpen || FacebookSidebar.Visibility != Visibility.Collapsed ||
                 ContactMessageHeader.Visibility != Visibility.Visible || ContactMessageName.Text != a.Name ||
                 ContactMessageChannel.Visibility != Visibility.Visible || ContactMessageChannel.Text != "Facebook")
                 throw new InvalidOperationException("Selecting a contact must collapse its sidebar, retain its header and channel, and enter its centered destination without sending.");
             CheckContactMessageIndicatorLayout();
+            var surface = (Grid)Content;
+            var surfaceWidth = surface.Width;
+            var sidebar = _sidebarManualExpanded;
+            try
+            {
+                surface.Width = 1900;
+                foreach (var expanded in new[] { false, true })
+                {
+                    _sidebarManualExpanded = expanded;
+                    UpdateWritingLayout();
+                    surface.UpdateLayout();
+                    CheckContactMessageIndicatorLayout();
+                    RebuildDestinationRail();
+                    if (_destinationButtons.Keys.Any(IsFacebookDestination) ||
+                        DestinationRail.Children.Count != _destinationCatalog.Enabled.Count)
+                        throw new InvalidOperationException("Contacts must stay out of the right destination rail after rebuilding it.");
+                }
+            }
+            finally
+            {
+                surface.Width = surfaceWidth;
+                _sidebarManualExpanded = sidebar;
+                UpdateWritingLayout();
+                surface.UpdateLayout();
+            }
             Composer.Text = "Synthetic draft A · never sent to a real browser";
             var textA = Composer.Text;
             SetFacebookOpen(true);
@@ -57,7 +83,8 @@ public sealed partial class MainPage
             ((IInvokeProvider)new ButtonAutomationPeer((Button)FacebookAvatars.Children.Last()).GetPattern(PatternInterface.Invoke)).Invoke();
             await Task.Delay(40);
             var bId = _destination;
-            if (Composer.Text.Length != 0 || _facebookPanelOpen || ContactMessageName.Text != b.Name)
+            if (Composer.Text.Length != 0 || _facebookPanelOpen || ContactMessageName.Text != b.Name ||
+                _destinationButtons.Keys.Any(IsFacebookDestination))
                 throw new InvalidOperationException("Changing recipients must collapse the panel, update the header and isolate drafts.");
             Composer.Text = "Synthetic draft B";
             SelectDestination(aId);
@@ -80,7 +107,7 @@ public sealed partial class MainPage
             SelectDestination(destination);
             if (Composer.Text != draft || ContactMessageHeader.Visibility != Visibility.Collapsed || ContactMessageChannel.Visibility != Visibility.Collapsed)
                 throw new InvalidOperationException("Regular destinations must restore their draft and hide contact-specific indicators.");
-            File.AppendAllText(log, "PASS: people widget native hover; contact selection collapses its sidebar, retains avatar/name at top left and Facebook below Send message in welcome/results; isolated drafts, no send on selection, rejection/uncertainty preservation, clearing on confirmed submission only; messaging fully intercepted, no real messages\n");
+            File.AppendAllText(log, "PASS: people widget native hover; selected contact anchored beside collapsed/expanded sidebar on wide windows, absent from the right destination rail after selection/rebuild; Facebook below Send message in welcome/results; isolated drafts, no send on selection, rejection/uncertainty preservation, clearing on confirmed submission only; messaging fully intercepted, no real messages\n");
         }
         finally
         {
@@ -90,7 +117,7 @@ public sealed partial class MainPage
             SelectDestination(destination);
             foreach (var id in _facebookRecipients.Keys.ToArray())
                 if (_destinationSections.Remove(id, out var section)) { await section.StopAsync(); section.Dispose(); }
-            _facebookRecipients.Clear(); _lastFacebookRecipient = null;
+            _facebookRecipients.Clear();
             FacebookAvatars.Children.Clear();
             RebuildDestinationRail(); UpdateDestinationPresentation();
         }
@@ -99,15 +126,19 @@ public sealed partial class MainPage
     private void CheckContactMessageIndicatorLayout()
     {
         UpdateWritingLayout();
-        _root.UpdateLayout();
-        var header = ContactMessageHeader.TransformToVisual(_root).TransformPoint(new());
+        var surface = (Grid)Content;
+        surface.UpdateLayout();
+        var header = ContactMessageHeader.TransformToVisual(surface).TransformPoint(new());
+        var sidebarRight = _widgets.TransformToVisual(surface).TransformPoint(new(_widgets.ActualWidth, 0)).X;
         var label = ContactMessageChannel.TransformToVisual(_root).TransformPoint(new());
         var send = SendButton.TransformToVisual(_root).TransformPoint(new(0, SendButton.ActualHeight));
-        if (Math.Abs(header.X) > 1 || header.Y < 0 || header.Y + ContactMessageHeader.ActualHeight > 100 ||
-            ContactMessageName.ActualWidth <= 0 || ContactMessageHeader.ActualWidth > _root.ActualWidth ||
+        if (!ReferenceEquals(ContactMessageHeader.Parent, surface) || Math.Abs(header.X - sidebarRight - FacebookRailGap) > 1 ||
+            header.Y < 0 || header.Y + ContactMessageHeader.ActualHeight > 100 ||
+            ContactMessageName.ActualWidth <= 0 || header.X + ContactMessageHeader.ActualWidth >
+                surface.ActualWidth - surface.Padding.Right - DestinationRailInset + 1 ||
             label.Y < send.Y + 1 || label.Y + ContactMessageChannel.ActualHeight > _root.ActualHeight + 1 ||
             Math.Abs(label.X - send.X) > 1 || ToolTipService.GetToolTip(ContactMessageHeader) is not null)
-            throw new InvalidOperationException($"Contact indicators must fit the upper left header and place the channel directly below Send in each composer state. Header={header}; Label={label}; Send={send}; Root={_root.ActualWidth}x{_root.ActualHeight}.");
+            throw new InvalidOperationException($"Contact indicators must stay beside the sidebar and place the channel directly below Send in each composer state. Header={header}; SidebarRight={sidebarRight}; Label={label}; Send={send}; Root={_root.ActualWidth}x{_root.ActualHeight}.");
     }
 
     private sealed class CheckedFacebookMessaging : IFacebookMessagingService

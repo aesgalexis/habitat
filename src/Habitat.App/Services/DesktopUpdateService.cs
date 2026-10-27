@@ -51,10 +51,8 @@ internal sealed class DesktopUpdateService : IAppUpdateService
         };
         var requestPath = Path.Combine(prepared.Directory, "request.json");
         await File.WriteAllTextAsync(requestPath, JsonSerializer.Serialize(request), token);
-        var info = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "WindowsPowerShell", "v1.0", "powershell.exe"))
-        { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = prepared.Directory };
-        foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
-            Path.Combine(prepared.Directory, "install-release-update.ps1"), "-RequestPath", requestPath }) info.ArgumentList.Add(argument);
+        var info = AppUpdateInstall.CreateHelperStartInfo(
+            Path.Combine(prepared.Directory, "install-release-update.ps1"), "-RequestPath", requestPath);
         using var helper = Process.Start(info) ?? throw new IOException("The update helper could not start.");
         try
         {

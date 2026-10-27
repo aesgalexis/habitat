@@ -27,7 +27,9 @@ public sealed partial class MainPage
         try
         {
             _services.Facebook = fake;
-            if (_preferences.FacebookCardSize != "small" || FacebookIcon.Glyph != "\uE716" ||
+            if (_preferences.FacebookCardSize != "small" || FacebookIcon.Glyph != "\uE716" || FacebookTitle.Text != "Contacts" ||
+                ToolTipService.GetToolTip(FacebookButton) as string != "Contacts" ||
+                AutomationProperties.GetName(FacebookRail) != "Contacts" ||
                 FacebookSidebar.Children.Count != 3 || FacebookSidebar.Children[0] != FacebookContactSearch ||
                 Grid.GetRow(FacebookContactSearch) != 0 || Grid.GetRow(FacebookRail) != 1 ||
                 FacebookContactSearch.PlaceholderText != "Search contacts" ||
@@ -41,9 +43,18 @@ public sealed partial class MainPage
             ((IInvokeProvider)new ButtonAutomationPeer(FacebookButton).GetPattern(PatternInterface.Invoke)).Invoke();
             await WaitForUpdateUiAsync(() => !_facebookBusy);
             if (FacebookRail.Visibility != Visibility.Visible || FacebookAvatars.Children.Count != 3 ||
-                AutomationProperties.GetName(FacebookButton) != "Hide Facebook contacts" || _destination != destination || Composer.Text != expectedDraft)
-                throw new InvalidOperationException("Clicking Facebook must open an independent contacts sidebar while preserving the destination and draft.");
+                AutomationProperties.GetName(FacebookButton) != "Hide contacts" || _destination != destination || Composer.Text != expectedDraft)
+                throw new InvalidOperationException("Clicking Contacts must open an independent contacts sidebar while preserving the destination and draft.");
             var originalCards = FacebookAvatars.Children.ToArray();
+            _timer.Start();
+            try
+            {
+                // Cross the former 30-second presence refresh with the real app timer.
+                await Task.Delay(TimeSpan.FromSeconds(31));
+                if (fake.Reads != 1 || !FacebookAvatars.Children.SequenceEqual(originalCards))
+                    throw new InvalidOperationException("An idle contacts panel must retain its snapshot without periodic reads or rebuilding cards.");
+            }
+            finally { _timer.Stop(); }
             foreach (var (query, expected) in new[] { ("miGA", 1), (" 雪 ", 2), ("JOSE", 1), ("no matching contact", 0), ("   ", 3), ("", 3) })
             {
                 FacebookContactSearch.Text = query;
@@ -153,8 +164,8 @@ public sealed partial class MainPage
             if (FacebookRail.Visibility != Visibility.Collapsed || FacebookSidebar.Visibility != Visibility.Collapsed ||
                 FacebookAvatars.Children.Count != 0 || FacebookContactSearch.Text != "" || FacebookNoMatches.Visibility != Visibility.Collapsed ||
                 Composer.Text != expectedDraft || !fake.Canceled ||
-                AutomationProperties.GetName(FacebookButton) != "Show Facebook contacts")
-                throw new InvalidOperationException("Clicking Facebook again must close the sidebar, cancel the read, discard contacts and preserve the draft.");
+                AutomationProperties.GetName(FacebookButton) != "Show contacts")
+                throw new InvalidOperationException("Clicking Contacts again must close the sidebar, cancel the read, discard contacts and preserve the draft.");
             fake.Pending = null;
             fake.Fail = true;
             SetFacebookOpen(true);
@@ -166,7 +177,7 @@ public sealed partial class MainPage
                 throw new InvalidOperationException("Unavailable contacts must show visible connection recovery, leaving the avatar rail free of fake contacts and error icons.");
             SetFacebookOpen(false);
             await CheckFacebookMessagingUiAsync(log);
-            File.AppendAllText(log, "PASS: fixed accessible contact search, local substring/case/accent filtering, empty results, clearing and refresh; two-person icon; size settings in Preferences > Sidebar with small default and persistent large cards; list has no size selector, tooltips or profile actions; online/offline/unknown indicators in both sizes/themes, stable contacts/scroll position, preserved draft, cancellation and recovery; no browser, network or user contacts\n");
+            File.AppendAllText(log, "PASS: Contacts toggle and English accessibility labels; idle snapshot preserved beyond 30 seconds with the app timer running; fixed local contact search, empty results and explicit reload; two-person icon; persistent card sizes and scroll; online/offline/unknown indicators in both themes; preserved draft, cancellation and recovery; no browser, network or user contacts\n");
         }
         finally
         {

@@ -103,6 +103,7 @@ internal static class ReleaseUpdateChecks
         check(ReleaseUpdateInstallation.Find(active) is { Kind: UpdatePackageKind.Zip } found && found.Root == zipRoot,
             "ZIP and active development releases resolve their stable root.");
         check(ReleaseUpdateInstallation.Find(Path.Combine(root, "uninstalled")) is null, "Loose build outputs cannot update another installation.");
+        await ReleaseUpdateHandoffChecks.RunAsync(root, check);
 
         async Task Reject(Func<Task> action, string message)
         {

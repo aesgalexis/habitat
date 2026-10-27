@@ -30,7 +30,7 @@ public sealed partial class MainPage
         HorizontalContentAlignment = HorizontalAlignment.Stretch,
         VerticalContentAlignment = VerticalAlignment.Center
     };
-    private readonly TextBlock FacebookTitle = new() { Text = "Facebook", FontSize = 14, VerticalAlignment = VerticalAlignment.Center };
+    private readonly TextBlock FacebookTitle = new() { Text = "Contacts", FontSize = 14, VerticalAlignment = VerticalAlignment.Center };
     private readonly StackPanel FacebookAvatars = new() { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Stretch };
     private readonly TextBox FacebookContactSearch = new()
     {
@@ -55,13 +55,11 @@ public sealed partial class MainPage
     };
     private CancellationTokenSource? _facebookCancellation;
     private bool _facebookPanelOpen, _facebookBusy;
-    private bool _facebookWasConnected;
     private bool _facebookShowRecovery;
     private readonly Flyout FacebookRecovery = new();
     private readonly TextBlock FacebookRecoveryMessage = new() { TextWrapping = TextWrapping.Wrap };
     private readonly Button FacebookOpenExtensions = new() { Content = "Open Chrome extensions" };
     private string? _facebookError;
-    private DateTimeOffset _nextFacebookRefresh = DateTimeOffset.MinValue;
 
     private void BuildFacebookInterface(Grid surface)
     {
@@ -76,8 +74,8 @@ public sealed partial class MainPage
         content.Children.Add(FacebookTitle);
         FacebookButton.Content = content;
         UseStableWidgetButton(FacebookButton);
-        AutomationProperties.SetName(FacebookButton, "Show Facebook contacts");
-        ToolTipService.SetToolTip(FacebookButton, "Facebook contacts");
+        AutomationProperties.SetName(FacebookButton, "Show contacts");
+        ToolTipService.SetToolTip(FacebookButton, "Contacts");
         FacebookButton.Click += (_, _) => SetFacebookOpen(!_facebookPanelOpen);
         var recovery = new StackPanel { Spacing = 12, Width = 280 };
         recovery.Children.Add(FacebookRecoveryMessage);
@@ -93,12 +91,11 @@ public sealed partial class MainPage
         });
         recovery.Children.Add(openFacebook);
         var retry = new Button { Content = "Retry" };
-        retry.Click += (_, _) =>
+        retry.Click += async (_, _) =>
         {
             FacebookRecovery.Hide();
             _facebookShowRecovery = true;
-            _nextFacebookRefresh = DateTimeOffset.MinValue;
-            TickFacebook();
+            await RunOperationAsync(RefreshFacebookAsync);
         };
         recovery.Children.Add(retry);
         FacebookRecovery.Content = recovery;
@@ -106,7 +103,7 @@ public sealed partial class MainPage
         Grid.SetRow(FacebookButton, _widgets.RowDefinitions.Count - 1);
         _widgets.Children.Add(FacebookButton);
         FacebookRail.Content = FacebookAvatars;
-        AutomationProperties.SetName(FacebookRail, "Facebook contacts");
+        AutomationProperties.SetName(FacebookRail, "Contacts");
         AutomationProperties.SetName(FacebookContactSearch, "Search contacts by name");
         FacebookContactSearch.TextChanged += (_, _) =>
         {
@@ -144,15 +141,14 @@ public sealed partial class MainPage
         FacebookRecovery.Hide();
         FacebookRail.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
         FacebookSidebar.Visibility = FacebookRail.Visibility;
-        AutomationProperties.SetName(FacebookButton, open ? "Hide Facebook contacts" : "Show Facebook contacts");
+        AutomationProperties.SetName(FacebookButton, open ? "Hide contacts" : "Show contacts");
         AutomationProperties.SetItemStatus(FacebookButton, open ? "Expanded" : "Collapsed");
         _facebookCancellation?.Cancel();
         FacebookAvatars.Children.Clear();
         FacebookContactSearch.Text = "";
         ApplyFacebookContactFilter();
-        _nextFacebookRefresh = DateTimeOffset.MinValue;
         UpdateWritingLayout();
-        if (open) TickFacebook();
+        if (open) _ = RunOperationAsync(RefreshFacebookAsync);
         else FocusComposer();
     }
 
@@ -163,21 +159,6 @@ public sealed partial class MainPage
         FacebookSidebar.Width = Math.Min(FacebookSidebarWidth, Math.Max(0, width - layout.WidgetWidth - FacebookRailGap - DestinationRailInset - 16));
         FacebookSidebar.Margin = new Thickness(layout.WidgetWidth + FacebookRailGap, 20, 0, 24);
         FacebookSidebar.Height = Math.Max(0, height - 44);
-    }
-
-    private void TickFacebook()
-    {
-        if (!_facebookPanelOpen || _operations.IsStopping || HasAppearanceOverlay || _facebookBusy) return;
-        var connected = _services.Facebook.IsConnected;
-        if (_facebookWasConnected && !connected)
-        {
-            ShowFacebookState("Chrome disconnected. Reconnect the HABITAT extension to load Facebook contacts.", true);
-            _nextFacebookRefresh = DateTimeOffset.MinValue;
-        }
-        if (!_facebookWasConnected && connected) _nextFacebookRefresh = DateTimeOffset.MinValue;
-        _facebookWasConnected = connected;
-        if (DateTimeOffset.UtcNow < _nextFacebookRefresh) return;
-        _ = RunOperationAsync(RefreshFacebookAsync);
     }
 
     private async Task RefreshFacebookAsync()
@@ -195,27 +176,28 @@ public sealed partial class MainPage
             _facebookError = null;
             _facebookShowRecovery = false;
             FacebookRecovery.Hide();
-            ToolTipService.SetToolTip(FacebookButton, "Facebook contacts");
-            AutomationProperties.SetHelpText(FacebookButton, "Facebook contacts");
+            ToolTipService.SetToolTip(FacebookButton, "Contacts");
+            AutomationProperties.SetHelpText(FacebookButton, "Contacts");
             AutomationProperties.SetItemStatus(FacebookButton, $"{contacts.Count} contacts");
             FacebookAvatars.Children.Clear();
             foreach (var contact in contacts) AddFacebookAvatar(contact);
             ApplyFacebookContactFilter();
             PaintFacebook();
             if (contacts.Count == 0) ShowFacebookState("No contacts are loaded in Facebook. Open Friends → All friends in Chrome, wait for the profile photos, then retry.", true);
-            _nextFacebookRefresh = DateTimeOffset.UtcNow.AddSeconds(30);
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
         catch (Exception exception)
         {
             if (_facebookPanelOpen && !cancellation.IsCancellationRequested)
                 ShowFacebookState(exception is InvalidOperationException ? exception.Message : "Could not load Facebook contacts. Open Facebook in Chrome, then retry.", true);
-            _nextFacebookRefresh = DateTimeOffset.UtcNow.AddSeconds(15);
         }
         finally
         {
             if (ReferenceEquals(_facebookCancellation, cancellation)) _facebookCancellation = null;
             _facebookBusy = false;
+            // Reopening while a canceled read finishes is still an explicit load.
+            if (cancellation.IsCancellationRequested && _facebookPanelOpen && !_operations.IsStopping)
+                _ = RunOperationAsync(RefreshFacebookAsync);
         }
     }
 

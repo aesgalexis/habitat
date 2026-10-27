@@ -15,7 +15,6 @@ namespace Habitat;
 public sealed partial class MainPage
 {
     private readonly Dictionary<string, FacebookContact> _facebookRecipients = new();
-    private string? _lastFacebookRecipient;
     private FacebookContact? _displayedContact;
     private readonly Grid ContactMessageHeader = new()
     {
@@ -43,7 +42,6 @@ public sealed partial class MainPage
         if (HasAppearanceOverlay || _updateHandoff || _operations.IsStopping) return;
         var id = FacebookRecipientId(contact);
         _facebookRecipients[id] = contact;
-        _lastFacebookRecipient = id;
         _composerDrafts.Isolate(id);
         if (!_destinationSections.ContainsKey(id))
         {
@@ -58,20 +56,19 @@ public sealed partial class MainPage
             _composer.Register(id, false, SubmitFacebookMessageAsync,
                 _ => section.IsBusy || contact.Link is null, exclusive: true);
         }
-        RebuildDestinationRail();
         SelectDestination(id);
         SetFacebookOpen(false);
         FocusComposer();
     }
 
-    private void BuildContactMessageIndicators()
+    private void BuildContactMessageIndicators(Grid surface)
     {
         ContactMessageHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         ContactMessageHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         Grid.SetColumn(ContactMessageName, 1);
         ContactMessageHeader.Children.Add(ContactMessageName);
         AutomationProperties.SetName(ContactMessageChannel, "Message channel: Facebook");
-        _root.Children.Add(ContactMessageHeader);
+        surface.Children.Add(ContactMessageHeader);
         _root.Children.Add(ContactMessageChannel);
     }
 
@@ -93,9 +90,21 @@ public sealed partial class MainPage
         }
     }
 
+    private void PositionContactMessageHeader(Grid surface)
+    {
+        // The writing column is centered and capped at 867 px. Anchor the
+        // recipient to the sidebar instead, including on wide windows.
+        var left = _widgets.Width + FacebookRailGap +
+            (_facebookPanelOpen ? FacebookSidebar.Width + FacebookRailGap : 0);
+        ContactMessageHeader.Margin = new Thickness(left, 20, 0, 0);
+        ContactMessageHeader.Width = Math.Min(280, Math.Max(0,
+            surface.ActualWidth - surface.Padding.Left - surface.Padding.Right - DestinationRailInset - left));
+        ContactMessageHeader.Visibility = IsFacebookDestination(_destination) && _root.Visibility == Visibility.Visible
+            ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private void PositionContactMessageIndicators()
     {
-        ContactMessageHeader.Width = Math.Min(280, Math.Max(0, _root.ActualWidth));
         ContactMessageChannel.HorizontalAlignment = SendButton.HorizontalAlignment;
         ContactMessageChannel.VerticalAlignment = SendButton.VerticalAlignment;
         ContactMessageChannel.Width = SendButton.ActualWidth > 0 ? SendButton.ActualWidth : double.NaN;
@@ -120,24 +129,5 @@ public sealed partial class MainPage
         await section.SubmitAsync(request.Text);
         if (section.WasSubmitted) request.Clear();
         if (_destination == request.Destination) FocusComposer();
-    }
-
-    private void AddFacebookDestination()
-    {
-        if (_lastFacebookRecipient is not { } id || !_facebookRecipients.TryGetValue(id, out var contact)) return;
-        var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        content.Children.Add(new FontIcon { Glyph = "\uE8F2", FontSize = 16 });
-        content.Children.Add(new TextBlock { Text = contact.Name, FontSize = 12, MaxWidth = DestinationLabelWidth - 44,
-            TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center });
-        var button = new Button { Content = content, Width = DestinationLabelWidth, Height = 36,
-            Padding = new Thickness(8, 4, 4, 4), Margin = new Thickness(40, 0, 0, 0),
-            BorderThickness = new Thickness(2, 0, 0, 0), CornerRadius = new CornerRadius(0),
-            HorizontalContentAlignment = HorizontalAlignment.Left };
-        UseStableWidgetButton(button);
-        AutomationProperties.SetName(button, contact.Name);
-        AutomationProperties.SetHelpText(button, "Select Messenger recipient");
-        button.Click += (_, _) => { SelectDestination(id); FocusComposer(); };
-        _destinationButtons.Add(id, button);
-        DestinationRail.Children.Add(button);
     }
 }

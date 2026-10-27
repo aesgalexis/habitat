@@ -8,5 +8,8 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Habitat.Core/Habitat.Core.csproj" />
     <Content Include="../fixtures/bridge-v1.json" Link="bridge-v1.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../scripts/install-release-update.ps1" Link="release-updater/install-release-update.ps1" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../scripts/Habitat.Update.psm1" Link="release-updater/Habitat.Update.psm1" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../scripts/Habitat.Release.psm1" Link="release-updater/Habitat.Release.psm1" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

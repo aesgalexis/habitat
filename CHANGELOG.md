@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.16.4 — 2026-10-27
+
+- El widget de contactos se llama **Contacts**, con etiquetas accesibles en inglés. El destinatario seleccionado queda junto al sidebar incluso en ventanas anchas y ya no ocupa un destino fijo en la barra derecha.
+- La lista y la presencia se leen al abrir Contacts o al reintentar tras un error. Se eliminan los refrescos periódicos y los reintentos automáticos que reconstruían las tarjetas cada treinta segundos.
+- Corregida la preparación del actualizador cuando HABITAT hereda rutas de módulos de PowerShell 7 u otros hosts: ambos auxiliares usan los módulos de Windows PowerShell 5.1 y mantienen la aplicación abierta si la verificación falla.
+- Pruebas aisladas de posición, navegación, borradores, presencia pasiva y preparación real del auxiliar con rutas de módulos incompatibles y hashes incorrectos.
+
 ## 0.16.3 — 2026-10-26
 
 - Mensajería explícita a contactos de Facebook desde HABITAT, con identidad verificada, borradores separados por contacto y protección frente a envíos duplicados o inciertos.

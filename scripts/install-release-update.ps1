@@ -1,4 +1,7 @@
 param([Parameter(Mandatory)][string]$RequestPath)
+# Use this host's built-in modules even when an older launcher passes
+# PowerShell 7 paths or a customised user module path.
+$env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules')
 $ErrorActionPreference = 'Stop'
 $request = $null
 $appExited = $false

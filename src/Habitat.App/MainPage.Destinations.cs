@@ -133,7 +133,6 @@ public sealed partial class MainPage
             row.Children.Add(button);
             DestinationRail.Children.Add(row);
         }
-        AddFacebookDestination();
     }
 
     internal void RegisterDestinationWheel(UIElement element) => element.AddHandler(
@@ -169,8 +168,6 @@ public sealed partial class MainPage
         if (_updateDialogOpen || _updateHandoff) return;
         if (_destination == ComposerDestination.Codex && destination != _destination) CancelPendingCodexSend();
         _destination = IsFacebookDestination(destination) ? destination : _destinationCatalog.Select(destination);
-        if (IsFacebookDestination(_destination) && _lastFacebookRecipient != _destination)
-        { _lastFacebookRecipient = _destination; RebuildDestinationRail(); }
         RestoreComposerDraft();
         if (!IsFacebookDestination(_destination)) _preferences = _preferences with { Destination = _destination };
         SavePreferences();
