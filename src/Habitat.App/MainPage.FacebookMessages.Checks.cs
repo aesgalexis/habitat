@@ -1,5 +1,6 @@
 #if HABITAT_UI_CHECKS
 using Habitat.Features.Facebook;
+using Habitat.Features.Contacts;
 using Habitat.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -19,12 +20,17 @@ public sealed partial class MainPage
         var destination = _destination;
         var draft = Composer.Text;
         var fake = new CheckedFacebookMessaging();
+        await _services.Contacts.LoadAsync();
+        var originalBook = _services.Contacts.Book;
+        var source = new ContactSource(ContactBook.NewId(), "facebook", "Synthetic message recipients", "Synthetic message recipients", false);
         var a = new FacebookContact("Synthetic recipient A ☕", "https://scontent.fbcdn.net/a.jpg", "https://www.facebook.com/messages/t/synthetic.a");
         var b = new FacebookContact("Synthetic recipient B 雪", "https://scontent.fbcdn.net/b.jpg", "https://www.facebook.com/messages/t/synthetic.b");
         try
         {
             _services.FacebookMessaging = fake;
             _services.Facebook = new CheckedFacebook();
+            await _services.Contacts.ChangeAsync(book => book.Import(source, new[] { a, b }.Select(c =>
+                new ContactCandidate(c.Link!, [new("name", c.Name), new("photo", c.PhotoUrl), new("messenger", c.Link!)], c.Link!)).ToArray()));
             foreach (var dark in new[] { false, true })
             {
                 RequestedTheme = dark ? ElementTheme.Dark : ElementTheme.Light;
@@ -37,7 +43,8 @@ public sealed partial class MainPage
             }
             SetFacebookOpen(true);
             await WaitForUpdateUiAsync(() => !_facebookBusy);
-            AddFacebookAvatar(a);
+            var book = _services.Contacts.Book;
+            AddUnifiedContact(book, book.People.Single(p => book.For(p).Any(r => r.RemoteId == a.Link)));
             ((IInvokeProvider)new ButtonAutomationPeer((Button)FacebookAvatars.Children.Last()).GetPattern(PatternInterface.Invoke)).Invoke();
             await Task.Delay(40);
             var aId = _destination;
@@ -45,7 +52,7 @@ public sealed partial class MainPage
                 SendButton.Content as string != "Send message" || _destinationButtons.ContainsKey(aId) ||
                 DestinationRail.Children.Count != _destinationCatalog.Enabled.Count ||
                 _destinationSections[aId].HasContent || Composer.TextAlignment != TextAlignment.Center || fake.Calls != 0 ||
-                _facebookPanelOpen || FacebookSidebar.Visibility != Visibility.Collapsed ||
+                _facebookPanelOpen || FacebookSidebar.Visibility != Visibility.Collapsed || ContactProfile.IsOpen ||
                 ContactMessageHeader.Visibility != Visibility.Visible || ContactMessageName.Text != a.Name ||
                 ContactMessageChannel.Visibility != Visibility.Visible || ContactMessageChannel.Text != "Facebook")
                 throw new InvalidOperationException("Selecting a contact must collapse its sidebar, retain its header and channel, and enter its centered destination without sending.");
@@ -79,7 +86,7 @@ public sealed partial class MainPage
             var textA = Composer.Text;
             SetFacebookOpen(true);
             await WaitForUpdateUiAsync(() => !_facebookBusy);
-            AddFacebookAvatar(b);
+            AddUnifiedContact(book, book.People.Single(p => book.For(p).Any(r => r.RemoteId == b.Link)));
             ((IInvokeProvider)new ButtonAutomationPeer((Button)FacebookAvatars.Children.Last()).GetPattern(PatternInterface.Invoke)).Invoke();
             await Task.Delay(40);
             var bId = _destination;
@@ -116,6 +123,7 @@ public sealed partial class MainPage
         {
             _services.FacebookMessaging = service;
             SetFacebookOpen(false);
+            await _services.Contacts.ChangeAsync(_ => originalBook);
             _services.Facebook = contacts;
             SelectDestination(destination);
             foreach (var id in _facebookRecipients.Keys.ToArray())

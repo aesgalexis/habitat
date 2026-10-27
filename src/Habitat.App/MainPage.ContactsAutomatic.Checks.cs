@@ -44,6 +44,23 @@ public sealed partial class MainPage
             SetFacebookOpen(true); await WaitForUpdateUiAsync(() => !_facebookBusy);
             if (FacebookAvatars.Children.Count != 1 || Composer.Text != kept || _destination != destination)
                 throw new InvalidOperationException("The automatically populated agenda must preserve the draft and destination.");
+            using (var permission = JsonDocument.Parse(JsonSerializer.Serialize(new { states = new[] {
+                new BrowserContactState("google", false, false, "permission") } }, json)))
+                browser.Accept(owner, permission.RootElement, json);
+            TickBrowserContacts();
+            if (ContactsEnableGoogle.Visibility != Visibility.Visible)
+                throw new InvalidOperationException("Missing Google permission must offer an actionable setup button in Contacts.");
+            await InvokeAsync(ContactsEnableGoogle);
+            await WaitForUpdateUiAsync(() => browser.Settings.Google == true);
+            using (var setup = JsonDocument.Parse(JsonSerializer.Serialize(browser.Tick(owner), json)))
+            {
+                var request = setup.RootElement.GetProperty("setup");
+                if (request.GetProperty("provider").GetString() != "google" ||
+                    Preferences.Load(_services.Paths.PreferencesPath).BrowserContacts.Google != true)
+                    throw new InvalidOperationException("The Gmail action must persist activation and request Chrome's own permission flow.");
+                using var done = JsonDocument.Parse(JsonSerializer.Serialize(new { setupDone = request.GetProperty("id").GetString() }));
+                browser.Accept(owner, done.RootElement, json);
+            }
             var revision = _services.Contacts.Book.Revision;
             Push("facebook", "https://www.facebook.com/automatic.owner", "Automatic friend ☕");
             TickBrowserContacts(); await WaitForUpdateUiAsync(() => !_browserContactUpdating);

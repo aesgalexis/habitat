@@ -37,6 +37,8 @@ La versión **0.16.2** reúne todas las funciones consolidadas de 0.16.1 con Fac
 
 La versión **0.17.1** es la primera distribución instalable con agenda unificada y fuentes automáticas opcionales desde Facebook, Gmail y Google Contacts abiertos, con procedencia y fusiones revisables. También normaliza los separadores ZIP de distribución y conserva diagnósticos del actualizador. Corrige el orden entre el diagnóstico de espera y la señal de preparación del auxiliar. `v0.17.0` se conserva como etiqueta histórica sin paquetes publicados. La extensión incluida es 0.10.8; su lectura se limita a las personas cargadas y nunca envía mensajes por sincronizar contactos.
 
+La versión **0.17.2** repara las copias del mismo perfil de Facebook conservando sus fuentes e historial, abre directamente los contactos con un único canal y ofrece **Enable Gmail contacts** cuando falta el permiso de Google en Chrome. Las coincidencias de correo o teléfono siguen requiriendo revisión.
+
 La publicación incluye dos alternativas: el instalador `HABITAT-<version>-x64-setup.exe`, con desinstalación registrada en Windows, y el ZIP con su instalador PowerShell. Ambos son autocontenidos, se instalan por usuario y tienen un SHA-256 adjunto. El EXE necesita Windows 10 2004 o posterior y admite instalación silenciosa. Consulta [la preparación para WinGet](WINGET.md).
 
 Usa siempre el mismo formato para actualizar una instalación. Los instaladores rechazan mezclar las disposiciones del EXE y el ZIP en una misma carpeta. Para cambiar de formato, cierra HABITAT y el residente, retira la instalación anterior conservando los datos de usuario y después instala el otro formato.

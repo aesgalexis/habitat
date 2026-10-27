@@ -130,7 +130,13 @@ internal sealed class ContactSession(ContactStore store)
     internal async Task LoadAsync(CancellationToken token = default)
     {
         await _gate.WaitAsync(token);
-        try { Book = await store.LoadAsync(token); Loaded = true; Error = null; }
+        try
+        {
+            Book = await store.LoadAsync(token);
+            var repaired = Book.DeduplicateFacebookProfiles();
+            if (!ReferenceEquals(repaired, Book)) Book = await store.SaveAsync(repaired, Book.Revision, token);
+            Loaded = true; Error = null;
+        }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
         { Loaded = false; Error = ReadError(exception); }
         finally { _gate.Release(); Changed?.Invoke(); }
@@ -142,7 +148,7 @@ internal sealed class ContactSession(ContactStore store)
         try
         {
             if (!Loaded || Error is not null) throw new InvalidOperationException("Reload contacts before making changes.");
-            var next = change(Book);
+            var next = change(Book).DeduplicateFacebookProfiles();
             if (!ReferenceEquals(next, Book)) Book = await store.SaveAsync(next, Book.Revision, token);
             return true;
         }

@@ -247,7 +247,7 @@ internal sealed class ContactsPreferencesView : StackPanel
             try { row.Toggle.IsOn = setting ?? state.Allowed; }
             finally { _updatingBrowserToggle = false; }
             var saved = _session.Book.Sources.Where(s => provider == "facebook" ? s.Kind == "facebook" : s.Kind == "google-browser").Select(s => s.Id).ToHashSet();
-            var count = _session.Book.Records.Count(r => saved.Contains(r.SourceId));
+            var count = _session.Book.People.Count(p => _session.Book.For(p).Any(r => saved.Contains(r.SourceId)));
             row.Status.Text = state.State switch
             {
                 "disabled" => "Off · saved contacts kept",

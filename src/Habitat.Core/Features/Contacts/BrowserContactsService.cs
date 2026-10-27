@@ -164,7 +164,8 @@ internal sealed class BrowserContactsService(TimeProvider? time = null)
         }
         var existing = book.Sources.FirstOrDefault(s => s.Id == source.Id);
         var changed = candidates.Values.Any(c => book.Records.FirstOrDefault(r => r.Id == ContactBook.RecordId(source.Id, c.RemoteId))?.Current.Raw != c.Raw);
-        if (!changed && existing?.Label == source.Label && existing.Connected) return book;
-        return candidates.Count > 0 ? book.Import(source, candidates.Values.ToArray()) : existing is null ? book.WithSource(source) : book;
+        if (!changed && existing?.Label == source.Label && existing.Connected) return book.DeduplicateFacebookProfiles();
+        return (candidates.Count > 0 ? book.Import(source, candidates.Values.ToArray()) : existing is null ? book.WithSource(source) : book)
+            .DeduplicateFacebookProfiles();
     }
 }

@@ -1,6 +1,6 @@
 # Agenda unificada
 
-La agenda de la versión 0.17.1 se completa automáticamente con las fuentes activadas y abiertas en Chrome. **Contacts** abre los datos guardados localmente. **Manage contacts** lleva a **Preferences → Contacts**, con **Sources**, **People** y **Possible duplicates**. Requiere la extensión 0.10.8 o posterior; los límites de lectura se detallan abajo.
+La agenda de la versión 0.17.2 se completa automáticamente con las fuentes activadas y abiertas en Chrome. **Contacts** abre los datos guardados localmente. **Manage contacts** lleva a **Preferences → Contacts**, con **Sources**, **People** y **Possible duplicates**. Requiere la extensión 0.10.8 o posterior; los límites de lectura se detallan abajo.
 
 ## Fuentes y primer uso
 
@@ -33,13 +33,17 @@ Los límites actuales son 16 MB para vCard y 20.000 registros por importación v
 
 Una persona agrupa registros de fuente independientes. Cada registro conserva su fuente, cuenta, identificador remoto, valores actuales, datos originales y versiones anteriores cuando cambian. Una recarga del mismo identificador no añade otra persona ni rompe una fusión confirmada. Los datos discrepantes no se sobrescriben entre fuentes. **Use name from…** permite elegir el origen del nombre principal.
 
-**People → Merge with → Review merge** muestra ambas fichas antes de **Confirm merge**. **Possible duplicates** propone coincidencias de correo, teléfono o enlace idéntico de perfil de Facebook, nunca solo de nombre. Los perfiles ya presentes en fuentes anteriores se conservan por separado hasta confirmar su fusión, sin perder la procedencia. La normalización de teléfono no deduce países ni elimina extensiones. No se fusiona automáticamente. **Keep separate** recuerda el rechazo, también después de lecturas automáticas. Las sugerencias se limitan a 100 por revisión y omiten identificadores compartidos por más de diez personas.
+Las copias del mismo perfil de Facebook se muestran como una sola persona, aunque procedan de una importación anterior y de la lectura automática o de cuentas diferentes. Se agrupan únicamente enlaces de perfil idénticos o equivalentes en host, mayúsculas y barra final; se conservan todos los registros y sus fuentes. Al cargar una agenda anterior se repara el duplicado y se guarda una copia íntegra en el historial. Los identificadores de conversaciones no se usan como identidad global.
 
-**Undo last merge** restaura los grupos previos conservando las actualizaciones posteriores de sus fuentes. Las fusiones sucesivas se pueden deshacer en orden inverso. Importar, fusionar, elegir nombre y deshacer solo cambian HABITAT: no escriben en Google, Facebook ni las agendas originales.
+**People → Merge with → Review merge** muestra ambas fichas antes de **Confirm merge**. **Possible duplicates** propone coincidencias de correo o teléfono, nunca solo de nombre. Estas coincidencias requieren confirmación. La normalización de teléfono no deduce países ni elimina extensiones. **Keep separate** recuerda el rechazo, también después de lecturas automáticas. Las sugerencias se limitan a 100 por revisión y omiten identificadores compartidos por más de diez personas.
+
+**Undo last merge** restaura los grupos previos conservando las actualizaciones posteriores de sus fuentes. Las fusiones sucesivas se pueden deshacer en orden inverso. Deshacer una agrupación del mismo perfil de Facebook recuerda la decisión de mantener las copias separadas, para no repetirla al sincronizar o reiniciar. Importar, fusionar, elegir nombre y deshacer solo cambian HABITAT: no escriben en Google, Facebook ni las agendas originales.
 
 ## Ficha y canales
 
-Pulsar una tarjeta abre la ficha, con datos, procedencia y canales. No cambia el destino ni envía nada. El buscador local admite nombre, correo y teléfono, ignora acentos/mayúsculas y busca en toda la agenda. La barra presenta hasta 100 coincidencias a la vez; **Load more contacts** añade otras 100. El tamaño sigue en **Preferences → Sidebar → Contact card size**.
+Pulsar una tarjeta con un solo canal abre directamente ese canal: Messenger selecciona el destinatario y el editor de HABITAT; correo abre el borrador en Gmail. No aparece un aviso informativo y no se envía ningún mensaje. Si hay varios canales o cuentas remitentes se puede elegir en la ficha. **Contact details**, en el menú contextual de la tarjeta, mantiene accesibles los datos y su procedencia.
+
+El buscador local admite nombre, correo y teléfono, ignora acentos/mayúsculas y busca en toda la agenda. La barra presenta hasta 100 coincidencias a la vez; **Load more contacts** añade otras 100. El tamaño sigue en **Preferences → Sidebar → Contact card size**. Si falta el permiso de Google, **Enable Gmail contacts** abre su concesión en Chrome: es necesario pulsar **Enable access** una vez; después las pestañas abiertas se leen automáticamente.
 
 - **Open email draft** abre Gmail con destinatario, cuenta remitente elegida y texto actual del editor. El borrador original de HABITAT se conserva; hay que revisar y enviar en Gmail. No es envío de correo mediante API.
 - **Message in Messenger** utiliza la integración ya existente y la cuenta de Facebook actualmente abierta en Chrome. Elige un destino con indicación, editor centrado y **Send message**; seleccionar el canal no envía nada. La verificación usa el nombre y enlace originales de Facebook, aunque la ficha unificada tenga otro nombre principal. Se exige una extensión conectada con mensajería compatible.

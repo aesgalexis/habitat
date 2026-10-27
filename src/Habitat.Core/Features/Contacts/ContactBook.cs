@@ -98,8 +98,51 @@ internal sealed record ContactBook(int Schema, long Revision, ContactSource[] So
     internal ContactBook UndoMerge(string personId)
     {
         var merge = UndoableMerge(personId) ?? throw new InvalidOperationException("This merge can no longer be undone.");
-        return this with { People = People.Where(p => p.Id != personId).Concat(merge.Before).ToArray(),
+        var restored = this with { People = People.Where(p => p.Id != personId).Concat(merge.Before).ToArray(),
             Merges = Merges.Where(m => m.Id != merge.Id).ToArray() };
+        // Undo is an explicit decision to keep these copies separate, including
+        // when they carry the same provider identity. A later scan must honour it.
+        return FacebookProfiles(merge.Before[0]).Intersect(FacebookProfiles(merge.Before[1])).Any()
+            ? restored.Dismiss(merge.Before[0].Id, merge.Before[1].Id) : restored;
+    }
+
+    internal static string? FacebookProfileIdentity(string value)
+    {
+        if (!Habitat.Features.Facebook.FacebookContactsService.SafeLink(value)) return null;
+        var uri = new Uri(value);
+        var path = uri.AbsolutePath.Trim('/');
+        // A conversation ID is scoped to its signed-in account, not a profile.
+        if (path.StartsWith("messages/", StringComparison.Ordinal)) return null;
+        return path.ToLowerInvariant() + uri.Query;
+    }
+
+    private IEnumerable<string> FacebookProfiles(ContactPerson person) => For(person)
+        .Where(r => !r.Missing && Source(r).Kind == "facebook")
+        .SelectMany(r => r.Current.Values.Where(v => v.Kind is "profile" or "messenger"))
+        .Select(v => FacebookProfileIdentity(v.Value)).OfType<string>().Distinct();
+
+    internal ContactBook DeduplicateFacebookProfiles()
+    {
+        var identities = Records.Where(r => !r.Missing && Source(r).Kind == "facebook")
+            .SelectMany(r => r.Current.Values.Where(v => v.Kind is "profile" or "messenger")
+                .Select(v => (Record: r.Id, Profile: FacebookProfileIdentity(v.Value))))
+            .Where(x => x.Profile is not null).GroupBy(x => x.Profile).Where(g => g.Count() > 1);
+        var owners = People.SelectMany(p => p.RecordIds.Select(id => (id, p))).ToDictionary(x => x.id, x => x.p);
+        var dismissed = DismissedPairs.ToHashSet();
+        var book = this;
+        foreach (var identity in identities)
+        {
+            var first = identity.First().Record;
+            foreach (var record in identity.Skip(1))
+            {
+                var left = owners[first]; var right = owners[record.Record];
+                if (left.Id == right.Id || Pairs(left, right).Any(dismissed.Contains)) continue;
+                book = book.Merge(left.Id, right.Id);
+                var person = book.People.Single(p => p.Id == left.Id);
+                foreach (var id in person.RecordIds) owners[id] = person;
+            }
+        }
+        return book;
     }
 
     internal ContactBook PreferRecord(string personId, string recordId)

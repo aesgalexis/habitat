@@ -126,9 +126,14 @@ public sealed partial class MainPage
         actions.Children.Add(ContactsSettings);
         actions.Children.Add(ContactsDuplicates);
         actions.Children.Add(ContactsLoadMore);
+        actions.Children.Add(ContactsEnableGoogle);
         Grid.SetRow(actions, 2);
         FacebookSidebar.Children.Add(actions);
         ContactsSettings.Click += async (_, _) => await RunOperationAsync(() => ShowPreferencesAsync("Contacts"));
+        ContactsEnableGoogle.Click += async (_, _) => await RunOperationAsync(async () =>
+        {
+            if (SetBrowserContactSource("google", true)) await EnableBrowserContactAccessAsync("google");
+        });
         ContactsDuplicates.Click += async (_, _) =>
         {
             _reviewContactDuplicates = true;
@@ -378,7 +383,7 @@ public sealed partial class MainPage
             card.BorderBrush = selected ? new SolidColorBrush(RequestedTheme == ElementTheme.Dark ? Color(255, 0x89, 0x95, 0xFF) : Color(255, 0x66, 0x74, 0xF4)) : transparent;
             card.Resources["ButtonBackground"] = transparent;
             card.Resources["ButtonBackgroundPointerOver"] = card.Resources["ButtonBackgroundPressed"] = hover;
-            AutomationProperties.SetHelpText(card, "Open contact details and communication channels");
+            AutomationProperties.SetHelpText(card, "Open contact");
             foreach (var name in row.Children.OfType<TextBlock>()) name.Foreground = text;
             var avatar = row.Children.OfType<Grid>().FirstOrDefault();
             if (avatar is null) continue;

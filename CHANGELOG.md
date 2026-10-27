@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.17.2 — 2026-10-27
+
+- Una sola persona por perfil de Facebook, incluso si ya estaba importado antes de activar la lectura automática. Las agendas existentes se reparan conservando los registros, cuentas, valores originales e historial. La agrupación se puede deshacer y respeta las decisiones de mantener separados los contactos. Los nombres, correos, teléfonos e identificadores de conversación no se usan para agrupar automáticamente.
+- Un clic abre directamente el único canal disponible: Messenger selecciona el destinatario y su editor; correo abre el borrador en Gmail. Se eliminan los avisos informativos intermedios y se conservan los borradores. **Contact details** mantiene la ficha accesible en el menú contextual; si hay varios canales o remitentes se puede elegir.
+- **Enable Gmail contacts** aparece en la agenda cuando falta el permiso de Google y abre su concesión en Chrome. Los recuentos de fuentes cuentan personas, no sus copias por cuenta.
+- Comprobaciones sintéticas de reparación persistente con copia de recuperación, perfiles equivalentes, deshacer y rechazo recordados, conservación de identidades diferentes y clic directo con mensajería interceptada.
+
 ## 0.17.1 — 2026-10-27
 
 - Primera distribución instalable de la agenda unificada: fichas persistentes, procedencia de cada dato, fusiones manuales y sugeridas con confirmación y deshacer, y acceso a Gmail o Messenger cuando el contacto y la integración lo permiten.

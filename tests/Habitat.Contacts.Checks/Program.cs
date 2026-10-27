@@ -177,10 +177,50 @@ var autoChanged = BrowserContactsService.Apply(autoBook, changedFb);
 Check(autoChanged.People.Length == 1 && autoChanged.Records.Single().History.Length == 1, "Automatic updates preserve source identity and prior values.");
 var anotherFbAccount = fbSnapshot with { AccountId = "https://www.facebook.com/another.owner", AccountName = "Another account" };
 var sameProfile = BrowserContactsService.Apply(autoBook, anotherFbAccount);
-Check(sameProfile.People.Length == 2 && sameProfile.Records.Length == 2 && sameProfile.Sources.Length == 2 && sameProfile.Suggestions().Single().Reason == "Same Facebook profile",
-    "Matching Facebook profiles from different sources must retain their data and offer merge review instead of silently changing identity groupings.");
-sameProfile = sameProfile.Dismiss(sameProfile.People[0].Id, sameProfile.People[1].Id);
-Check(BrowserContactsService.Apply(sameProfile, anotherFbAccount).Suggestions().Length == 0, "Rejected Facebook profile matches must stay rejected across automatic scans.");
+Check(sameProfile.People.Length == 1 && sameProfile.Records.Length == 2 && sameProfile.Sources.Length == 2 && sameProfile.Merges.Length == 1,
+    "Copies of the exact same Facebook profile must appear once while retaining both original accounts and an undoable grouping.");
+sameProfile = sameProfile.UndoMerge(sameProfile.People[0].Id);
+Check(sameProfile.People.Length == 2 && BrowserContactsService.Apply(sameProfile, anotherFbAccount).People.Length == 2 && sameProfile.Suggestions().Length == 0,
+    "Undoing an exact-profile grouping must keep the copies separate across later automatic scans.");
+var oldFacebook = new ContactSource(ContactBook.NewId(), "facebook", "Previous Facebook import", "Previous import", false);
+var oldCandidate = new ContactCandidate(fbSnapshot.Contacts[0].ProfileUrl!,
+    [new("name", "Previous friend name"), new("profile", fbSnapshot.Contacts[0].ProfileUrl!), new("messenger", fbSnapshot.Contacts[0].ProfileUrl!)], "Original import data");
+var legacyBook = ContactBook.Empty.Import(oldFacebook, [oldCandidate]);
+var repairedImport = BrowserContactsService.Apply(legacyBook, fbSnapshot);
+Check(repairedImport.People.Length == 1 && repairedImport.Records.Length == 2 && repairedImport.Records.Any(r => r.Current.Raw == "Original import data"),
+    "An automatic scan after a manual import must preserve the original data without displaying the same profile twice.");
+Check(ContactChannels.For(repairedImport, repairedImport.People[0]).Single().SourceId == BrowserContactsService.Source(fbSnapshot).Id,
+    "The direct Messenger action must use the active observed identity rather than an older disconnected import.");
+var variant = fbSnapshot with { Contacts = [fbSnapshot.Contacts[0] with { ProfileUrl = "https://facebook.com/FRIEND.PERSON/" }] };
+var canonical = BrowserContactsService.Apply(legacyBook, variant);
+Check(canonical.People.Length == 1 && ContactChannels.For(canonical, canonical.People[0]).Length == 1,
+    "Equivalent Facebook host, case and trailing-slash variants must not duplicate people or Messenger actions.");
+var duplicateBook = legacyBook.Import(BrowserContactsService.Source(fbSnapshot), [oldCandidate]);
+var duplicatePath = Path.Combine(root, "previous-duplicates.json");
+var duplicateStore = new ContactStore(duplicatePath);
+await duplicateStore.SaveAsync(duplicateBook, 0);
+var migratedSession = new ContactSession(duplicateStore);
+await migratedSession.LoadAsync();
+Check(migratedSession.Loaded && migratedSession.Error is null && migratedSession.Book.People.Length == 1 && migratedSession.Book.Records.Length == 2 && migratedSession.Book.Revision == 2,
+    "Loading a previous duplicate agenda must repair and durably save its exact Facebook profile groups.");
+Check((await new ContactStore(Path.Combine(duplicatePath + ".history", "000000000001.json")).LoadAsync()).People.Length == 2,
+    "Repairing existing duplicates must retain the complete original agenda in recovery history.");
+await migratedSession.LoadAsync();
+Check(migratedSession.Book.Revision == 2, "Reloading a repaired agenda must not create more revisions or merges.");
+await migratedSession.ChangeAsync(bk => bk.UndoMerge(bk.People[0].Id));
+await migratedSession.LoadAsync();
+Check(migratedSession.Book.People.Length == 2 && migratedSession.Book.Revision == 3,
+    "Explicitly undone duplicate repairs must survive storage and restart.");
+var dismissedCopies = duplicateBook.Dismiss(duplicateBook.People[0].Id, duplicateBook.People[1].Id);
+Check(ReferenceEquals(dismissedCopies, dismissedCopies.DeduplicateFacebookProfiles()),
+    "An earlier Keep separate decision must take priority over automatic duplicate repair.");
+var threadCopies = ContactBook.Empty.Import(oldFacebook, [oldCandidate with { Values = [new("name", "Friend"), new("messenger", "https://www.facebook.com/messages/t/thread.one")] }])
+    .Import(BrowserContactsService.Source(fbSnapshot), [oldCandidate with { Values = [new("name", "Friend"), new("messenger", "https://www.facebook.com/messages/t/thread.one")] }]);
+Check(ReferenceEquals(threadCopies, threadCopies.DeduplicateFacebookProfiles()),
+    "Account-scoped conversation IDs must never be treated as global Facebook profile identities.");
+var vcardProfile = legacyBook.Import(phone, [oldCandidate]);
+Check(ReferenceEquals(vcardProfile, vcardProfile.DeduplicateFacebookProfiles()),
+    "A profile field in another provider must still require the user's merge review.");
 var differentProfile = BrowserContactsService.Apply(autoBook, anotherFbAccount with { Contacts = [fbSnapshot.Contacts[0] with { ProfileUrl = "https://www.facebook.com/different.person" }] });
 Check(differentProfile.Suggestions().Length == 0, "A matching Facebook name with a different profile must not suggest a merge.");
 Push(fbSnapshot, new object());

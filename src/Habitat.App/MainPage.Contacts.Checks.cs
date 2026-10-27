@@ -95,14 +95,24 @@ public sealed partial class MainPage
             FacebookContactSearch.Text = "Jose";
             await WaitForUpdateUiAsync(() => FacebookAvatars.Children.Count == 1);
             if (FacebookAvatars.Children.Count != 1) throw new InvalidOperationException("Search must ignore accents without translating names.");
-            await InvokeAsync((Button)FacebookAvatars.Children[0]);
-            if (!ContactProfile.IsOpen || Composer.Text != keptDraft || _destination != destination)
-                throw new InvalidOperationException("Opening a profile must preserve the editor and destination.");
+            Uri? openedDraft = null;
+            _launchBrowser = uri => { openedDraft = uri; return Task.FromResult(true); };
+            var contactCard = (Button)FacebookAvatars.Children[0];
+            await InvokeAsync(contactCard);
+            if (ContactProfile.IsOpen || Composer.Text != keptDraft || _destination != destination ||
+                openedDraft?.Host != "mail.google.com" || !openedDraft.Query.Contains("amiga%40example.com", StringComparison.Ordinal))
+                throw new InvalidOperationException("A single email channel must open its draft directly without an informational flyout or changing the editor.");
+            if (contactCard.ContextFlyout is not MenuFlyout menu || menu.Items.OfType<MenuFlyoutItem>().Single().Text != "Contact details")
+                throw new InvalidOperationException("Contact details must remain available as an explicit secondary action.");
+            ShowContactProfile((string)contactCard.Tag, contactCard);
+            if (!ContactProfile.IsOpen) throw new InvalidOperationException("The explicit details action must open the contact profile.");
             var profile = (ScrollViewer)ContactProfile.Content;
+            await WaitForUpdateUiAsync(() => Descendants(profile).OfType<Button>().Any());
             if (!Descendants(profile).OfType<Button>().Any(b => (b.Content as string)?.StartsWith("Open email draft", StringComparison.Ordinal) == true) ||
                 Descendants(profile).OfType<Button>().Any(b => (b.Content as string)?.Contains("iMessage", StringComparison.Ordinal) == true))
                 throw new InvalidOperationException("Profiles must expose supported channels without inventing iMessage availability.");
             ContactProfile.Hide();
+            _launchBrowser = _ => throw new InvalidOperationException("Unexpected browser launch in contact checks.");
             var extra = Enumerable.Range(0, 150).Select(i => Candidate("extra-" + i, "Paged person " + i.ToString("D3"), "page" + i + "@example.com")).ToArray();
             await _services.Contacts.ChangeAsync(b => b.Import(source, extra));
             FacebookContactSearch.Text = "";
