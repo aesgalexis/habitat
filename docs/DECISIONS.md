@@ -1,9 +1,10 @@
 # Decisiones del proyecto
 
-Registro breve de decisiones vigentes a 24 de octubre de 2026. Recoge reglas y evidencias existentes; no introduce nuevas autorizaciones. Las ideas de producto permanecen en [PRODUCT_STATE_AND_VISION.md](PRODUCT_STATE_AND_VISION.md).
+Registro breve de decisiones vigentes a 28 de octubre de 2026. Recoge reglas y evidencias existentes; no introduce nuevas autorizaciones. Las ideas de producto permanecen en [PRODUCT_STATE_AND_VISION.md](PRODUCT_STATE_AND_VISION.md).
 
 | Decisión | Motivo y consecuencia | Referencia principal |
 | --- | --- | --- |
+| Contactos manuales como destinos | Decisión del propietario del 28 de octubre: agenda nueva vacía, alta explícita, una ficha por persona y sin incorporación automática. Los datos anteriores se conservan aparte. | [CONTACTS.md](CONTACTS.md) |
 | Interfaz en inglés; contenido del usuario intacto | Mantener vocabulario coherente en controles, errores y accesibilidad. La documentación puede estar en español. | [AGENTS.md](../AGENTS.md), [LOCALIZATION.md](LOCALIZATION.md) |
 | Pantalla inicial común de tres elementos | Indicación sobre el editor, editor centrado y botón debajo. Resultados y sus acciones aparecen después de ejecutar. | [AGENTS.md](../AGENTS.md) |
 | Chrome para las integraciones web | La extensión y los adaptadores se apoyan en la sesión real de Chrome. No hay selector de navegador vigente. | [BRIDGE_PROTOCOL.md](BRIDGE_PROTOCOL.md), [ARCHITECTURE.md](ARCHITECTURE.md) |

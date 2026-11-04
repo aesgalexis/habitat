@@ -12,11 +12,13 @@ namespace Habitat;
 public sealed partial class MainPage
 {
     private readonly Button ContactsSettings = new() { Content = "Manage contacts", HorizontalAlignment = HorizontalAlignment.Stretch };
+    private readonly Button ContactsAdd = new() { Content = "Add contact", HorizontalAlignment = HorizontalAlignment.Stretch };
+    private bool _newContact;
     private readonly Button ContactsDuplicates = new() { Content = "Possible duplicates", Visibility = Visibility.Collapsed,
         HorizontalAlignment = HorizontalAlignment.Stretch };
     private readonly Button ContactsLoadMore = new() { Content = "Load more contacts", Visibility = Visibility.Collapsed,
         HorizontalAlignment = HorizontalAlignment.Stretch };
-    private readonly Button ContactsEnableGoogle = new() { Content = "Enable Gmail contacts", Visibility = Visibility.Collapsed,
+    private readonly Button ContactsEnableGoogle = new() { Content = "Connect Google Contacts", Visibility = Visibility.Collapsed,
         HorizontalAlignment = HorizontalAlignment.Stretch };
     private int _contactVisibleLimit = 100;
     private ContactBook? _renderedContactBook;
@@ -25,17 +27,44 @@ public sealed partial class MainPage
     private readonly Flyout ContactProfile = new();
     private string? _contactToManage;
     private bool _reviewContactDuplicates;
-    private bool _browserContactUpdating;
     private ContactsPreferencesView? _contactsPreferences;
 
-    private ContactsPreferencesView CreateContactsPreferences() => new(_services.Contacts, ConnectGoogleContactsAsync,
-        ReloadGoogleContactsAsync, PickVCardContactsAsync, ReadFacebookCandidatesAsync, DisconnectContactSourceAsync,
-        _services.Bridge.BrowserContacts, SetBrowserContactSource, EnableBrowserContactAccessAsync);
+    private DateTimeOffset _nextDriveContactsSync;
+
+    private ContactsPreferencesView CreateContactsPreferences() => new(_services.Contacts,
+        drive: _services.ContactDrive, pickDriveClient: PickDriveClientAsync);
+
+    private async Task<GmailClientConfiguration?> PickDriveClientAsync()
+    {
+        var file = await _services.PickContactsFileAsync(_windowHost?.Handle ?? 0, client: true);
+        if (file is null) return null;
+        if (new FileInfo(file).Length > 65536) throw new InvalidDataException("Choose a Google Desktop OAuth client JSON smaller than 64 KB.");
+        return GmailClientConfiguration.FromJson(await File.ReadAllTextAsync(file, _operations.Token));
+    }
+
+    private void TickDriveContacts()
+    {
+        if (_services.ContactDrive is not { HasLink: true, Busy: false, NeedsAttention: false } drive ||
+            _contactsPreferences is { IsEditingContact: true } or { IsBusy: true } ||
+            DateTimeOffset.UtcNow < _nextDriveContactsSync) return;
+        _nextDriveContactsSync = DateTimeOffset.UtcNow.AddSeconds(30);
+        _ = RunOperationAsync(async () =>
+        {
+            var book = _services.Contacts.Book;
+            var status = drive.Status;
+            var settings = _contactsPreferences;
+            await drive.SyncAsync(_operations.Token);
+            if (_contactsPreferences is { IsBusy: false, IsEditingContact: false } contacts &&
+                (!ReferenceEquals(book, _services.Contacts.Book) || status != drive.Status || !ReferenceEquals(settings, contacts)))
+                contacts.Refresh();
+        });
+    }
 
     private bool SetBrowserContactSource(string provider, bool enabled)
     {
-        var settings = provider == "facebook" ? _preferences.BrowserContacts with { Facebook = enabled }
-            : _preferences.BrowserContacts with { Google = enabled };
+        // Legacy preferences must never re-enable automatic destination creation.
+        if (enabled) return false;
+        var settings = new BrowserContactSettings(false, false);
         var updated = _preferences with { BrowserContacts = settings };
         if (!updated.Save(_services.Paths.PreferencesPath, ex => _services.ReportError("Save automatic contacts", ex))) return false;
         _preferences = updated;
@@ -52,29 +81,7 @@ public sealed partial class MainPage
 
     private void TickBrowserContacts()
     {
-        _contactsPreferences?.RefreshBrowserState();
-        RefreshContactSourceAction();
-        if (_browserContactUpdating || _operations.IsStopping) return;
-        if (!_services.Bridge.BrowserContacts.TryTake(out var first) || first is null) return;
-        _browserContactUpdating = true;
-        _ = RunOperationAsync(async () =>
-        {
-            try
-            {
-                if (!_services.Contacts.Loaded && _services.Contacts.Error is null) await _services.Contacts.LoadAsync(_operations.Token);
-                if (!_services.Contacts.Loaded || _services.Contacts.Error is not null) return;
-                var snapshots = new List<BrowserContactSnapshot> { first };
-                while (_services.Bridge.BrowserContacts.TryTake(out var next) && next is not null) snapshots.Add(next);
-                await _services.Contacts.ChangeAsync(book =>
-                {
-                    foreach (var snapshot in snapshots)
-                        if (_services.Bridge.BrowserContacts.Settings.Allows(snapshot.Provider))
-                            book = BrowserContactsService.Apply(book, snapshot);
-                    return book;
-                }, _operations.Token);
-            }
-            finally { _browserContactUpdating = false; }
-        });
+        _services.Bridge.BrowserContacts.Configure(new(false, false));
     }
 
     private async Task<ContactImport?> ConnectGoogleContactsAsync(CancellationToken token)
@@ -146,7 +153,9 @@ public sealed partial class MainPage
 
     private void ContactsChanged()
     {
-        if (!_operations.IsStopping && _facebookPanelOpen) RenderUnifiedContacts();
+        if (_operations.IsStopping) return;
+        if (_facebookPanelOpen) RenderUnifiedContacts();
+        RefreshSavedContactDestinations();
     }
 
     private void RenderUnifiedContacts()
@@ -167,11 +176,9 @@ public sealed partial class MainPage
         if (_facebookError is null)
             foreach (var person in matches.Take(_contactVisibleLimit)) AddUnifiedContact(book, person);
         ContactsLoadMore.Visibility = matches.Length > _contactVisibleLimit ? Visibility.Visible : Visibility.Collapsed;
-        var count = book.Suggestions().Length;
-        ContactsDuplicates.Content = $"Possible duplicates ({count})";
-        ContactsDuplicates.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        ContactsDuplicates.Visibility = Visibility.Collapsed;
         AutomationProperties.SetItemStatus(FacebookButton, $"{book.ListedPeople.Count()} contacts");
-        AutomationProperties.SetHelpText(FacebookButton, _facebookError ?? "Open your unified address book");
+        AutomationProperties.SetHelpText(FacebookButton, _facebookError ?? "Open your contacts");
         ApplyFacebookContactFilter(); PaintFacebook();
     }
 
@@ -195,16 +202,11 @@ public sealed partial class MainPage
         AutomationProperties.SetHelpText(card, "Open contact");
         AutomationProperties.SetItemStatus(card, string.Join(", ", book.For(person).Select(r => book.Source(r).Label).Distinct()));
         card.Click += async (_, _) => await OpenContactAsync(person.Id, card);
-        var menu = new MenuFlyout();
-        var details = new MenuFlyoutItem { Text = "Contact details" };
-        details.Click += (_, _) => ShowContactProfile(person.Id, card);
-        menu.Items.Add(details);
-        card.ContextFlyout = menu;
+        card.ContextRequested += (_, e) => { e.Handled = true; ShowContactProfile(person.Id, card); };
         SizeFacebookContact(card); FacebookAvatars.Children.Add(card);
     }
 
-    private void RefreshContactSourceAction() => ContactsEnableGoogle.Visibility =
-        _services.Bridge.BrowserContacts.StateFor("google").State == "permission" ? Visibility.Visible : Visibility.Collapsed;
+    private void RefreshContactSourceAction() => ContactsEnableGoogle.Visibility = Visibility.Collapsed;
 
     private string[] ContactEmailSenders() => _services.Contacts.Book.Sources
         .Where(s => s.Kind is "google" or "google-browser" && s.Connected && ContactChannels.IsEmail(s.Account)).Select(s => s.Account)
@@ -218,10 +220,14 @@ public sealed partial class MainPage
         if (person is null) return;
         var channels = ContactChannels.For(book, person);
         var senders = ContactEmailSenders();
-        if (channels.Length != 1 || channels[0].Kind == "email" && senders.Length > 1)
-        { ShowContactProfile(personId, anchor); return; }
-        try { await OpenContactChannelAsync(book, person, channels[0], senders.FirstOrDefault()); }
-        catch (Exception) { ShowContactProfile(personId, anchor, "Could not open this channel. Your text was kept. Try again."); }
+        if (channels.Length == 0) { SelectUnavailableContact(book, person); return; }
+        _preferredContactChannels.TryGetValue(personId, out var preferred);
+        var channel = channels.FirstOrDefault(c => c.Kind == preferred?.Kind && SameContactAddress(c.Kind, c.Address, preferred.Address)) ??
+            channels.OrderBy(c => c.Kind == "phone" ? 0 : c.Kind == "email" ? 1 : 2).First();
+        var sender = preferred?.Sender is { } previous && senders.Contains(previous, StringComparer.OrdinalIgnoreCase) ? previous :
+            book.Sources.FirstOrDefault(s => s.Id == channel.SourceId && ContactChannels.IsEmail(s.Account))?.Account ??
+            _gmailAuth?.Email ?? senders.FirstOrDefault();
+        await OpenContactChannelAsync(book, person, channel, sender);
     }
 
     private Task OpenContactChannelAsync(ContactBook book, ContactPerson person, ContactChannel channel, string? sender = null)
@@ -233,7 +239,12 @@ public sealed partial class MainPage
             var photo = record.Current.Values.FirstOrDefault(v => v.Kind == "photo" && FacebookContactsService.SafePhoto(v.Value))?.Value ?? "";
             var sourceName = record.Current.Values.FirstOrDefault(v => v.Kind == "name")?.Value ?? book.Name(person);
             ContactProfile.Hide();
-            SelectFacebookContact(new(sourceName, photo, channel.Address), book.Name(person));
+            SelectFacebookContact(new(sourceName, photo, channel.Address), book.Name(person), person.Id);
+        }
+        else if (channel.Kind == "phone")
+        {
+            ContactProfile.Hide();
+            SelectPhoneContact(book, person, channel.Address);
         }
         else
         {
@@ -243,52 +254,25 @@ public sealed partial class MainPage
         return Task.CompletedTask;
     }
 
-    private void ShowContactProfile(string personId, FrameworkElement anchor, string? error = null)
+    private void ShowContactProfile(string personId, FrameworkElement anchor)
     {
         var book = _services.Contacts.Book;
         var person = book.People.FirstOrDefault(p => p.Id == personId);
         if (person is null) return;
-        var panel = new StackPanel { Spacing = 12, Width = Math.Clamp(XamlRoot.Size.Width - 100, 240, 380) };
-        var status = new TextBlock { Text = error ?? "", TextWrapping = TextWrapping.Wrap, FontSize = 12,
-            Visibility = error is null ? Visibility.Collapsed : Visibility.Visible };
-        AutomationProperties.SetLiveSetting(status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
-        var senders = ContactEmailSenders();
-        var sender = new ComboBox { Header = "Gmail sender account", ItemsSource = senders.Length > 0 ? senders : new[] { "Default Google account" },
-            SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch };
-        AutomationProperties.SetName(sender, "Gmail sender account");
-        var channels = ContactChannels.For(book, person);
-        if (channels.Any(c => c.Kind == "email") && senders.Length > 1) panel.Children.Add(sender);
-        foreach (var channel in channels)
+        var panel = new StackPanel { Spacing = 8, Width = Math.Clamp(XamlRoot.Size.Width - 100, 200, 320) };
+        panel.Children.Add(new TextBlock { Text = book.Name(person), FontSize = 16, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true });
+        foreach (var value in book.For(person).SelectMany(r => r.Current.Values).Where(v => v.Kind is "email" or "phone" or "organization")
+            .DistinctBy(v => (v.Kind, v.Value.ToUpperInvariant())))
+            panel.Children.Add(new TextBlock { Text = value.Value, FontSize = 13, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true });
+        var phones = ContactChannels.For(book, person).Where(channel => channel.Kind == "phone").ToArray();
+        foreach (var phone in phones)
         {
-            var button = new Button { Content = channel.Label + " · " + (channel.Kind == "email" ? channel.Address : book.Sources.Single(s => s.Id == channel.SourceId).Label),
-                HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left };
-            AutomationProperties.SetName(button, channel.Label + " for " + book.Name(person) + (channel.Kind == "email" ? ", " + channel.Address : ""));
-            if (channel.Kind == "messenger")
-            {
-                button.IsEnabled = _services.Facebook.IsConnected && _services.FacebookMessaging.IsAvailable;
-                if (!button.IsEnabled) ToolTipService.SetToolTip(button, "Reconnect Facebook or update the HABITAT Chrome extension to use Messenger.");
-            }
-            button.Click += async (_, _) =>
-            {
-                button.IsEnabled = false;
-                try
-                {
-                    var account = senders.Length > 0 ? senders[Math.Max(0, sender.SelectedIndex)] : null;
-                    await OpenContactChannelAsync(book, person, channel, account);
-                }
-                catch (Exception exception)
-                {
-                    status.Text = exception is InvalidOperationException ? exception.Message : "Could not open this channel. Your text was kept.";
-                    status.Visibility = Visibility.Visible;
-                }
-                finally { button.IsEnabled = true; }
-            };
-            panel.Children.Add(button);
+            var view = new Button { Content = phones.Length == 1 ? "View conversation" : "View conversation · " + phone.Address };
+            view.Click += async (_, _) => await RunOperationAsync(() => ViewPhoneConversationAsync(person.Id, phone.Address));
+            panel.Children.Add(view);
         }
-        panel.Children.Add(status);
-        if (channels.Length == 0) panel.Children.Add(new TextBlock { Text = "No compatible communication channel is available for this contact.", TextWrapping = TextWrapping.Wrap });
-        panel.Children.Add(ContactsPreferencesView.Profile(book, person));
-        var manage = new Button { Content = "Manage or merge contact" };
+        var manage = new Button { Content = "Manage contact" };
         manage.Click += async (_, _) =>
         {
             ContactProfile.Hide(); _contactToManage = person.Id;

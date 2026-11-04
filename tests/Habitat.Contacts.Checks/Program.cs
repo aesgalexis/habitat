@@ -120,7 +120,31 @@ await Reject<InvalidDataException>(() => Task.Run(() => ContactStore.Validate(Co
 var contactBook = ContactBook.Empty.Import(phone, cards);
 var contact = contactBook.People.Single();
 var channels = ContactChannels.For(contactBook, contact);
-Check(channels.Length == 1 && channels[0].Kind == "email", "Phone numbers and profiles must not invent iMessage or other channel availability.");
+Check(channels.Length == 2 && channels.Any(c => c.Kind == "email") &&
+    channels.Any(c => c.Kind == "phone" && c.Label == "Message with Phone Link"),
+    "Imported phone numbers must offer the Phone Link draft handoff alongside email without claiming iMessage availability.");
+var phoneChannelsBook = ContactBook.Empty.Import(phone, [new("phone-routing", [new("name", "Phone friend"),
+    new("phone", "+34 600 111 222"), new("phone", "0034600111222"), new("phone", "600111222"),
+    new("phone", "+34600111222;ext=9"), new("phone", "+34600111222?body=injected"),
+    new("phone", "600111222,600333444"), new("im", "imessage:friend@example.com")], "synthetic")]);
+var phoneChannels = ContactChannels.For(phoneChannelsBook, phoneChannelsBook.People.Single());
+Check(phoneChannels.Length == 2 && phoneChannels.All(c => c.Kind == "phone") &&
+    phoneChannels.Any(c => c.Address == "600111222"),
+    "Phone handoffs must deduplicate equivalent formats, keep unknown country codes unchanged and reject extensions or extra recipients.");
+var phoneBody = "Exact text · café ☕\nSecond line &to=another? #fragment + plus";
+var phoneUri = PhoneLinkMessage.DraftUri("0034 600 111 222", phoneBody);
+Check(phoneUri.OriginalString.StartsWith("sms:+34600111222?body=", StringComparison.Ordinal) &&
+    Uri.UnescapeDataString(phoneUri.OriginalString.Split("?body=", 2)[1]) == phoneBody && phoneUri.Fragment.Length == 0,
+    "Phone Link must receive one normalized recipient and the exact Unicode body without query or fragment injection.");
+Check(PhoneLinkMessage.DraftUri("600 111 222", "Text").OriginalString.StartsWith("sms:600111222?body=", StringComparison.Ordinal),
+    "Phone Link must not invent a country code for a local number.");
+foreach (var badPhone in new[] { "invalid", "123", "+34600111222,600333444", "+34600111222;ext=9", "+34600111222\r\nOther:1", "sms:+34600111222" })
+    await Reject<InvalidDataException>(() => Task.FromResult(PhoneLinkMessage.DraftUri(badPhone, "Text")),
+        "Invalid or ambiguous Phone Link recipients must not launch.");
+await Reject<InvalidDataException>(() => Task.FromResult(PhoneLinkMessage.DraftUri("+34600111222", "  ")),
+    "An empty message must keep the initial editor without launching Phone Link.");
+await Reject<InvalidDataException>(() => Task.FromResult(PhoneLinkMessage.DraftUri("+34600111222", new string('☕', 4000))),
+    "Oversized URI handoffs must fail before activating another app.");
 var fb = new ContactSource(ContactBook.NewId(), "facebook", "Facebook · personal", "personal", false);
 contactBook = contactBook.Import(fb, [new("fb/1", [new("name", "Friend"), new("messenger", "https://www.facebook.com/messages/t/123")], "snapshot")]);
 Check(ContactChannels.For(contactBook, contactBook.People.Last()).Single().Kind == "messenger", "Verified Facebook links may provide the existing Messenger route.");
@@ -130,6 +154,7 @@ Check(uri.Host == "mail.google.com" && uri.Query.Contains("authuser=sender%40exa
 Check(!ContactChannels.IsEmail("bad\r\nBcc:other@example.com"), "Contact addresses must reject header injection.");
 await Reject<InvalidDataException>(() => Task.FromResult(ContactChannels.GmailDraft("invalid", null)), "Invalid email channels must not launch.");
 
+checks += await PhoneLinkDeliveryChecks.RunAsync();
 var authUrl = GmailAuthService.AuthorizationUrl("client", "http://127.0.0.1:1/oauth/callback", "state", "challenge", contactsOnly: true);
 var scope = Uri.UnescapeDataString(new Uri(authUrl).Query);
 Check(scope.Contains(GmailAuthService.ContactsScope, StringComparison.Ordinal) && scope.Contains(GmailAuthService.EmailScope, StringComparison.Ordinal) &&
@@ -239,6 +264,9 @@ var googleSnapshot = new BrowserContactSnapshot("google", "owner@example.com", "
     [new("c123456789", "Friend 雪", "friend@example.com", "+34 600 111 222", Page: "Google Contacts"),
      new("c123456789", "Friend 雪", "other@example.com", Page: "Google Contacts")]);
 var autoGoogle = BrowserContactsService.Apply(ContactBook.Empty, googleSnapshot);
+Check(autoGoogle.People.Length == 0 && autoGoogle.PendingBrowserSuggestions.Length == 1,
+    "Google browser observations must wait for explicit acceptance outside the address book.");
+autoGoogle = autoGoogle.ReviewBrowserSuggestions(autoGoogle.PendingBrowserSuggestions.Select(s => ContactBook.RecordId(s.SourceId, s.Candidate.RemoteId)).ToArray(), accept: true);
 Check(autoGoogle.People.Length == 1 && autoGoogle.Records.Single().Current.Values.Count(v => v.Kind == "email") == 2,
     "A Google contact's multiple emails must stay on one original source record.");
 var gmailObservation = googleSnapshot with { Contacts = [new(null, "Friend 雪", "friend@example.com", Page: "Gmail")] };
@@ -247,6 +275,9 @@ Check(autoGoogle.People.Length == 1 && autoGoogle.Records.Single().Current.Value
     autoGoogle.Records.Single().Current.Values.Count(v => v.Kind == "email") == 2, "A partial Gmail read must enrich the same contact without deleting previously observed phones or other emails.");
 var otherAccount = googleSnapshot with { AccountId = "work@example.com", AccountName = "work@example.com" };
 autoGoogle = BrowserContactsService.Apply(autoGoogle, otherAccount);
+Check(autoGoogle.People.Length == 1 && autoGoogle.PendingBrowserSuggestions.Length == 1,
+    "Another account must offer its own suggestion without implicitly importing it.");
+autoGoogle = autoGoogle.ReviewBrowserSuggestions(autoGoogle.PendingBrowserSuggestions.Select(s => ContactBook.RecordId(s.SourceId, s.Candidate.RemoteId)).ToArray(), accept: true);
 Check(autoGoogle.Sources.Length == 2 && autoGoogle.People.Length == 2 && autoGoogle.Suggestions().Length == 1,
     "Different open accounts retain their own origins; matching people await merge review.");
 Push(googleSnapshot with { AccountId = "gmail-slot-0" });
@@ -298,7 +329,10 @@ var automatedSnapshot = googleSnapshot with { Contacts = [new(null, "Automated s
 var ignored = BrowserContactsService.Apply(ContactBook.Empty, automatedSnapshot);
 Check(ignored.Records.Length == 0 && !ignored.ListedPeople.Any() && ReferenceEquals(ignored, BrowserContactsService.Apply(ignored, automatedSnapshot)),
     "New browser no-reply rows must not become contact records or cause repeated storage writes.");
-Console.WriteLine($"PASS: {checks} contact checks; opt-in sources, lossless import, merge/undo, suggestions, storage conflicts, Google pagination, no-reply filtering and channel routing. Synthetic data: {root}");
+checks += await BrowserSuggestionChecks.RunAsync(root);
+checks += await ManualContactChecks.RunAsync(root);
+await DriveContactChecks.RunAsync(root, Check);
+Console.WriteLine($"PASS: {checks} contact checks; empty manual agenda, legacy isolation, create/edit/remove, uniqueness and restart; legacy import/storage compatibility and channel routing. Synthetic data: {root}");
 
 static HttpResponseMessage Response(string json, HttpStatusCode status = HttpStatusCode.OK) => new(status) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
 sealed class Handler(Func<HttpRequestMessage, HttpResponseMessage> send) : HttpMessageHandler

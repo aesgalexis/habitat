@@ -8,21 +8,21 @@ A native Windows desktop application that lets you write to the active ChatGPT c
 
 The current application is built with **C# and WinUI 3 on .NET 10**. It includes eleven destinations, configurable appearance, persistent tasks, weather forecasts, Gmail, a [Markets sidebar widget](docs/MARKETS.md), and the Ctrl+H global shortcut. The Python/Tkinter prototype belongs to an earlier stage; the current entry point is `HABITAT.vbs`.
 
-Version **0.17.3** keeps email contact writing inside HABITAT, with a fixed recipient, a selected sender and a separate draft per address and sender. **Draft email** saves through the Gmail integration without opening a browser; **Open in browser** is an explicit action. No-reply addresses are filtered from the [unified address book](docs/CONTACTS.md), including earlier saved entries. Automatic optional sources from open Facebook, Gmail and Google Contacts tabs, lossless Facebook duplicate repair and reviewable merges remain included. See [project status](docs/PROJECT_STATUS.md).
+Version **0.18.0** adds manually managed contact destinations, optional Google Drive contact sync and a single selection of text buttons for each contact's channels. **View conversation** shows available Phone Link messages and replies and refreshes the open thread every ten seconds. See [Contacts](docs/CONTACTS.md) and [project status](docs/PROJECT_STATUS.md).
 
 ## First-time installation
 
 WinGet distribution is being prepared. The installer, manifests, and publishing process are documented in [docs/WINGET.md](docs/WINGET.md). HABITAT is not yet available in the public WinGet catalog. The package submission is open at [microsoft/winget-pkgs#455544](https://github.com/microsoft/winget-pkgs/pull/455544). While it is under review, you can download the installer directly from GitHub Releases.
 
-1. Download `HABITAT-0.17.3-x64-setup.exe` and its SHA-256 from [GitHub Releases](https://github.com/aesgalexis/habitat/releases/latest), verify the hash, and run the installer from your normal Windows session. Use the release assets; the **Source code** ZIP does not contain the compiled application.
+1. Download `HABITAT-0.18.0-x64-setup.exe` and its SHA-256 from [GitHub Releases](https://github.com/aesgalexis/habitat/releases/latest), verify the hash, and run the installer from your normal Windows session. Use the release assets; the **Source code** ZIP does not contain the compiled application.
 2. The installer installs to `%LOCALAPPDATA%\Programs\HABITAT`, adds HABITAT to the Start menu, and registers its uninstaller. It includes .NET and Windows App SDK; no SDK or administrator privileges are required. Supports Windows x64, Windows 10 version 2004 or later, and Windows 11.
 3. Open **Set up HABITAT…** (shown on first launch and always available in the menu). It detects Chrome, opens the extension in the [Chrome Web Store](https://chromewebstore.google.com/detail/ennnldolgdbbkgmpjjpkafeajihpimii), and shows each connection's status. Approve installation in Chrome and click **Enable connection**.
 4. At the time of this release, extension 0.9.0 has been submitted as Unlisted and is awaiting Google's review. If the link is not available yet, the setup wizard opens the included folder and `chrome://extensions` so you can load it unpacked. Chrome is not installed and extensions are not added silently.
 5. For ChatGPT, sign in and open a conversation in Chrome. Google, YouTube, and Translate do not require a ChatGPT account. Gmail, VS Code, and Codex are optional; the wizard explains their setup.
 
-The package includes browser bridge **0.10.8** and the **HABITAT Terminal 0.2.0** VSIX. The installer is not yet code-signed. See the [guide for another PC](docs/GETTING_STARTED.md) and [distribution details](docs/RELEASING.md). To work from source, clone the repository and follow [Build](#build).
+The package includes browser bridge **0.10.9** and the **HABITAT Terminal 0.2.0** VSIX. The installer is not yet code-signed. See the [guide for another PC](docs/GETTING_STARTED.md) and [distribution details](docs/RELEASING.md). To work from source, clone the repository and follow [Build](#build).
 
-Alternatively, extract all of `HABITAT-0.17.3-win-x64.zip` and run `Install-HABITAT.cmd`. Always use the same format when updating: EXE and ZIP installations use different layouts and refuse to overwrite each other. Both preserve user data; the ZIP also keeps the previous release for recovery. WinGet preparation is documented in [WINGET.md](docs/WINGET.md).
+Alternatively, extract all of `HABITAT-0.18.0-win-x64.zip` and run `Install-HABITAT.cmd`. Always use the same format when updating: EXE and ZIP installations use different layouts and refuse to overwrite each other. Both preserve user data; the ZIP also keeps the previous release for recovery. WinGet preparation is documented in [WINGET.md](docs/WINGET.md).
 
 HABITAT checks for newer stable Windows releases at startup and every six hours while open. Click **Update HABITAT** at the bottom of the sidebar to download the matching EXE or ZIP, verify its SHA-256, install it and reopen the app. Downloading is cancellable; HABITAT waits for active actions and preserves drafts, tasks and preferences. Failed checks retry after one hour. Versions before 0.15.0 need one manual upgrade to gain this feature. See [in-app updates](docs/AUTO_UPDATES.md).
 
@@ -172,7 +172,9 @@ Storage and distribution checks run with `dotnet run --project tests\Habitat.Tas
 
 ## Unified contacts
 
-**Contacts** opens a local address book that updates automatically from enabled, open Facebook, Gmail and Google Contacts tabs. **Manage contacts → Preferences → Contacts** provides source switches and current connection states. Existing Chrome permissions are reused; new site access is enabled once in Chrome. Only loaded people are available: Gmail contributes correspondent names/addresses, not a complete Google address book or mail bodies. File imports and full Google API access remain under **Other contact options**. Each person retains source records and previous values; merges require confirmation and can be undone. Profiles offer Gmail drafts and compatible Messenger messaging. See [unified contacts](docs/CONTACTS.md) for setup and limits.
+Phone contacts offer **Message with Phone Link**. Write in HABITAT and press **Send**. HABITAT verifies the selected number, connected phone and exact editor text, then activates Phone Link's normal Send control once. A confirmed submission clears the editor and keeps the submitted text in HABITAT. Different existing drafts are preserved; uncertain results require review before another attempt. Drafts stay separate per number. Network delivery and iMessage availability remain controlled by the phone and provider.
+
+The **0.18.0** address book starts empty. **Contacts → Add contact** creates a person, and **Manage contacts** edits or removes their details. The old address book remains on disk. Optional Google Drive sync shares only contacts from the new address book. See [Contacts](docs/CONTACTS.md).
 
 ## Gmail
 

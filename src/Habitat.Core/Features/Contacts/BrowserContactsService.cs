@@ -143,7 +143,13 @@ internal sealed class BrowserContactsService(TimeProvider? time = null)
                     (r.RemoteId == stableId || r.Current.Values.Contains(new("other", row.Id!, "Google Contacts ID"))));
                 var byEmail = row.Email is null ? [] : book.Records.Where(r => r.SourceId == source.Id && r.Current.Values.Any(v =>
                     v.Kind == "email" && ContactBook.NormalizeEmail(v.Value) == ContactBook.NormalizeEmail(row.Email))).ToArray();
-                remote = knownId?.RemoteId ?? (byEmail.Length == 1 ? byEmail[0].RemoteId : stableId ??
+                var pending = book.BrowserSuggestions.Where(s => s.SourceId == source.Id).Select(s => s.Candidate).ToArray();
+                var pendingId = stableId is null ? null : pending.FirstOrDefault(c => c.RemoteId == stableId ||
+                    c.Values.Contains(new("other", row.Id!, "Google Contacts ID")));
+                var pendingEmail = row.Email is null ? [] : pending.Where(c => c.Values.Any(v =>
+                    v.Kind == "email" && ContactBook.NormalizeEmail(v.Value) == ContactBook.NormalizeEmail(row.Email))).ToArray();
+                remote = knownId?.RemoteId ?? pendingId?.RemoteId ?? (byEmail.Length == 1 ? byEmail[0].RemoteId :
+                    pendingEmail.Length == 1 ? pendingEmail[0].RemoteId : stableId ??
                     (row.Email is not null ? "email:" + ContactBook.NormalizeEmail(row.Email) : "snapshot:" + ContactBook.Hash(row.Name + "\n" + row.Phone)));
             }
             var values = new List<ContactValue> { new("name", row.Name) };
@@ -158,11 +164,14 @@ internal sealed class BrowserContactsService(TimeProvider? time = null)
             var id = ContactBook.RecordId(source.Id, remote);
             if (book.Records.FirstOrDefault(r => r.Id == id) is { } previous)
                 values.AddRange(previous.Current.Values.Where(v => v.Kind != "name" && (v.Kind != "photo" || row.PhotoUrl is null)));
+            if (book.BrowserSuggestions.FirstOrDefault(s => s.SourceId == source.Id && s.Candidate.RemoteId == remote) is { } observed)
+                values.AddRange(observed.Candidate.Values.Where(v => v.Kind != "name"));
             if (candidates.TryGetValue(remote, out var prior)) values.AddRange(prior.Values.Where(v => v.Kind != "name"));
             var fields = values.Distinct().OrderBy(v => v.Kind, StringComparer.Ordinal).ThenBy(v => v.Value, StringComparer.Ordinal)
                 .ThenBy(v => v.Label, StringComparer.Ordinal).ToArray();
             candidates[remote] = new(remote, fields, JsonSerializer.Serialize(new { provider = snapshot.Provider, account = snapshot.AccountId, fields }));
         }
+        if (snapshot.Provider == "google") return book.ObserveBrowserCandidates(source, candidates.Values.ToArray());
         var existing = book.Sources.FirstOrDefault(s => s.Id == source.Id);
         var changed = candidates.Values.Any(c => book.Records.FirstOrDefault(r => r.Id == ContactBook.RecordId(source.Id, c.RemoteId))?.Current.Raw != c.Raw);
         if (!changed && existing?.Label == source.Label && existing.Connected) return book.DeduplicateFacebookProfiles();

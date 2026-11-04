@@ -86,8 +86,8 @@ internal sealed class PreferencesView : Grid
         Sidebar = new SidebarPreferencesView(saved.SidebarWidgets, saved.FacebookCardSize);
         AddCategory("Sidebar", "\uE700", UiText.Get("SidebarDescription"), Sidebar);
         Contacts = contacts;
-        AddCategory("Contacts", "\uE716", "Connect sources, review contact details and merge people without changing the original accounts.",
-            contacts is null ? new TextBlock { Text = "Contact sources are unavailable in this view." } : contacts);
+        AddCategory("Contacts", "\uE716", "Add and edit the people you use as destinations in HABITAT.",
+            contacts is null ? new TextBlock { Text = "Contacts are unavailable in this view." } : contacts);
         Categories.SelectionChanged += (_, _) =>
         {
             _scroll.Content = ((ListViewItem)Categories.SelectedItem).Content is StackPanel label ? label.Tag : null;

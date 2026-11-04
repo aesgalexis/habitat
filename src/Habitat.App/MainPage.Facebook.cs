@@ -104,7 +104,7 @@ public sealed partial class MainPage
         _widgets.Children.Add(FacebookButton);
         FacebookRail.Content = FacebookAvatars;
         AutomationProperties.SetName(FacebookRail, "Contacts");
-        AutomationProperties.SetName(FacebookContactSearch, "Search contacts by name");
+        AutomationProperties.SetName(FacebookContactSearch, "Search contacts by name, email or phone");
         FacebookContactSearch.TextChanged += (_, _) =>
         {
             _contactVisibleLimit = 100;
@@ -123,17 +123,18 @@ public sealed partial class MainPage
         FacebookNoMatches.VerticalAlignment = VerticalAlignment.Top;
         FacebookSidebar.Children.Add(FacebookNoMatches);
         var actions = new StackPanel { Spacing = 6, Margin = new Thickness(8, 0, 8, 8) };
+        actions.Children.Add(ContactsAdd);
         actions.Children.Add(ContactsSettings);
-        actions.Children.Add(ContactsDuplicates);
         actions.Children.Add(ContactsLoadMore);
-        actions.Children.Add(ContactsEnableGoogle);
         Grid.SetRow(actions, 2);
         FacebookSidebar.Children.Add(actions);
         ContactsSettings.Click += async (_, _) => await RunOperationAsync(() => ShowPreferencesAsync("Contacts"));
-        ContactsEnableGoogle.Click += async (_, _) => await RunOperationAsync(async () =>
+        ContactsAdd.Click += async (_, _) =>
         {
-            if (SetBrowserContactSource("google", true)) await EnableBrowserContactAccessAsync("google");
-        });
+            _newContact = true;
+            await RunOperationAsync(() => ShowPreferencesAsync("Contacts"));
+        };
+        ContactsEnableGoogle.Click += async (_, _) => await RunOperationAsync(() => ShowPreferencesAsync("Contacts"));
         ContactsDuplicates.Click += async (_, _) =>
         {
             _reviewContactDuplicates = true;
@@ -237,7 +238,7 @@ public sealed partial class MainPage
             if (matches) visible++;
         }
         FacebookNoMatches.Text = _facebookError ?? (!_services.Contacts.Book.ListedPeople.Any()
-            ? "Your address book is empty. Choose Manage contacts to connect a source or create a contact." : "No contacts found.");
+            ? "No contacts yet. Choose Add contact to create your first destination." : "No contacts found.");
         FacebookNoMatches.Visibility = _facebookPanelOpen && visible == 0
             ? Visibility.Visible : Visibility.Collapsed;
     }

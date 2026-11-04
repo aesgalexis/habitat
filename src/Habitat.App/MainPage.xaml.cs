@@ -73,7 +73,7 @@ public sealed partial class MainPage : Page
         _conversationView = new(_conversation, ToneBrush, TextBrush);
         _windowHost = windowHost;
         _preferences = Preferences.Load(services.Paths.PreferencesPath);
-        services.Bridge.BrowserContacts.Configure(_preferences.BrowserContacts);
+        services.Bridge.BrowserContacts.Configure(new(false, false));
         UiText.SetLanguage(_preferences.InterfaceLanguage);
         _destinationCatalog = new(_preferences.EnabledDestinations, _preferences.WindowsApps);
         _taskStore = services.Tasks;
@@ -262,7 +262,7 @@ public sealed partial class MainPage : Page
         ConversationScroll.Margin = new Thickness(0, historyTop, 0, 0);
         if (_destination == ComposerDestination.OpenAI && Conversation.Children.Count > 0 || HasDestinationSection)
         {
-            const double bottomPadding = 24;
+            var bottomPadding = IsContactDestination(_destination) ? Math.Max(24, ContactChannelPickerHeight + 16) : 24;
             var sendWidth = SendButton.ActualWidth > 0 ? SendButton.ActualWidth : 60;
             // Match the single-line editor to Send; longer drafts keep their
             // final line at the same bottom anchor as the button label.
@@ -307,7 +307,7 @@ public sealed partial class MainPage : Page
         var composerHeight = Composer.ActualHeight > 0 ? Composer.ActualHeight : Composer.MinHeight;
         var composerTop = Math.Max(0, (height - composerHeight) / 2);
         var sendTop = Math.Max(height * 2 / 3 - sendHeight / 2, composerTop + composerHeight + 12);
-        sendTop = Math.Min(sendTop, Math.Max(0, height - sendHeight - (IsContactDestination(_destination) ? 20 : 0)));
+        sendTop = Math.Min(sendTop, Math.Max(0, height - sendHeight - (IsContactDestination(_destination) ? ContactChannelPickerHeight + 8 : 0)));
         Composer.Margin = new Thickness(0, composerTop, 0, 0);
         UpdateComposerHintLayout(composerTop);
         SendButton.Margin = new Thickness(0, sendTop, 0, 0);
@@ -390,6 +390,7 @@ public sealed partial class MainPage : Page
         TickUpdates();
         TickGmail();
         TickBrowserContacts();
+        TickDriveContacts();
         TickTasks(DateTimeOffset.UtcNow);
         TickMarkets();
         TickCodexSchedules(DateTimeOffset.UtcNow);
@@ -555,6 +556,8 @@ public sealed partial class MainPage : Page
         }
         else if (_emailRecipients.TryGetValue(_destination, out var emailRecipient))
             SetStatus("Gmail · " + emailRecipient.Address, StatusTone.Success);
+        else if (_phoneRecipients.TryGetValue(_destination, out var phoneRecipient))
+            SetStatus("Phone Link · " + phoneRecipient.Address, StatusTone.Success);
         else if (_destination == ComposerDestination.OpenAI)
         {
             if (_bridge?.HasMessageInFlight == true || _bridgeStartupFailed)
@@ -623,7 +626,11 @@ public sealed partial class MainPage : Page
     private void UpdateSendState()
     {
         CodexScheduleButton.IsEnabled = !_operations.IsStopping && !_services.CodexSchedules.IsSending;
+        UpdateContactChannelAvailability();
         UpdateExternalDestinationState();
+        if (_unavailableContacts.ContainsKey(_destination)) { SendButton.IsEnabled = false; return; }
+        if (_destinationSections.GetValueOrDefault(_destination) is Features.Destinations.PhoneLinkSection { RequiresReview: true })
+        { SendButton.IsEnabled = false; return; }
         if (_operations.IsStopping || _composer.IsExclusiveBusy) { SendButton.IsEnabled = false; return; }
         if (_destination.Length == 0) { SendButton.IsEnabled = true; return; }
         if (_destination == ComposerDestination.Codex)

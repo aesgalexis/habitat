@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.18.0 — 2026-11-04
+
+- Contactos manuales como destinos. La agenda nueva empieza con cero contactos; solo **Add contact** añade personas. Nombre, teléfono, correo y otros datos se reúnen en una ficha editable. Los correos, teléfonos y perfiles repetidos se rechazan sin perder el formulario. Editar conserva la identidad y los borradores del destino.
+- Se retiran del flujo actual las fuentes, sugerencias e importaciones. Los permisos y preferencias antiguos no activan lecturas. La agenda nueva usa `contact-destinations.json`; la agenda anterior y sus copias quedan intactas, sin traslado automático. Los contactos creados después persisten al reiniciar.
+
+- El indicador de presencia de la cabecera se limita a Facebook y personas fusionadas con Facebook, independientemente del canal elegido. Se oculta para contactos solo de móvil o correo y se actualiza al fusionar o deshacer la fusión.
+- El canal de teléfono verifica el destinatario y el texto en Enlace Móvil antes de enviar. La confirmación distingue un envío observado de una solicitud aceptada. Cuando el protocolo no está disponible, el iPhone decide el transporte. SMS permanece deshabilitado como opción independiente.
+- Se añade un prototipo opcional de clasificación masiva por metadatos de Mensajes, probado con 400 direcciones sintéticas. Solo registra evidencia histórica de iMessage; no consulta disponibilidad actual, no lee cuerpos, no envía y todavía no se integra en la agenda.
+- Durante el envío, un control de eventos de primer plano mantiene HABITAT activo si Phone Link intenta activarse; respeta que el usuario cambie a otra aplicación y se libera al terminar. Una conversación correcta ya abierta se reutiliza sin navegación ni activación adicional. Las pruebas de foco y protocolos usan ventanas y compositores simulados, sin mensajes reales.
+- **Clear** vuelve a funcionar tras resultados inciertos de Phone Link: limpia la vista y el borrador local y devuelve el foco al editor. Se conservan huellas en memoria de los textos con resultado incierto para impedir repetirlos sin revisión, incluso después de limpiar o escribir otro mensaje. Limpiar no actúa sobre mensajes ni borradores de Phone Link.
+- Elegir cualquier contacto lo convierte directamente en destino, incluso con varios canales. Los canales aparecen como botones de texto redondeados debajo de la acción, con una sola vía activa. El destinatario y los borradores se mantienen separados por canal, dirección y remitente. El clic derecho da acceso a **View conversation** y **Manage contact**.
+
+- **View conversation** muestra los mensajes y respuestas que Enlace Móvil expone para el hilo verificado. Carga al abrir y se actualiza cada diez segundos mientras el hilo está activo.
+- Sincronización opcional de contactos manuales con Google Drive, con elección explícita para resolver ediciones simultáneas y un CSV en la cuenta del usuario.
+
 ## 0.17.3 — 2026-10-27
 
 - Los contactos de correo abren el editor de HABITAT, con destinatario fijado, cuenta remitente elegida y borrador independiente por dirección y remitente. Elegir el contacto no abre Gmail ni copia el texto de otro destino.

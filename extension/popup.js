@@ -15,30 +15,6 @@ chrome.storage.local.get(["habitatKey","habitatTab","habitatConsentVersion","hab
 });
 
 document.getElementById("settings").onclick = () => chrome.tabs.create({url:chrome.runtime.getURL("welcome.html")});
-const googleContacts = document.getElementById("google-contacts");
-const googleContactOrigins = {origins:["https://mail.google.com/*","https://contacts.google.com/*"]};
-let googleContactsEnabled = false;
-chrome.permissions.contains(googleContactOrigins).then(enabled => {
-  googleContactsEnabled = enabled;
-  googleContacts.textContent = enabled ? "Disable Gmail and Google Contacts" : "Enable Gmail and Google Contacts";
-});
-googleContacts.onclick = async () => {
-  try {
-    if (googleContactsEnabled) {
-      if (await chrome.permissions.remove(googleContactOrigins)) {
-        googleContactsEnabled = false;
-        googleContacts.textContent = "Enable Gmail and Google Contacts";
-        msg.textContent = "Google browser contacts disabled. Saved contacts stay in HABITAT.";
-      }
-    } else {
-      const granted = await chrome.permissions.request(googleContactOrigins);
-      googleContactsEnabled = granted;
-      googleContacts.textContent = granted ? "Disable Gmail and Google Contacts" : "Enable Gmail and Google Contacts";
-      msg.textContent = granted ? "Google contacts enabled. Keep HABITAT and Gmail or Google Contacts open; loaded people update automatically." : "Google access was not enabled.";
-      if (granted) await chrome.runtime.sendMessage({kind:"facebook-connect",restart:true});
-    }
-  } catch (_) { msg.textContent = "Could not update Google access. Reload the HABITAT extension and try again."; }
-};
 const facebook = document.getElementById("facebook");
 const facebookReconnect = document.getElementById("facebook-reconnect");
 const facebookStatus = document.getElementById("facebook-status");
@@ -53,7 +29,7 @@ async function connectFacebook(restart = false) {
     facebookWorkerNeedsReload = !result || result.facebookProtocol !== 1 && !result.error?.includes("enable the connection");
     facebookReconnect.textContent = facebookWorkerNeedsReload ? "Reload extension for Facebook" : "Reconnect Facebook";
     const readError = {
-      permission:"Enable Facebook contacts to allow the reader.",
+      permission:"Enable Facebook access to allow the reader.",
       login:"Sign in to Facebook in Chrome, then retry its widget.",
       blocked:"Complete Facebook's verification in Chrome, then retry its widget.",
       "page-changed":"Open Facebook All friends in Chrome, then retry its widget.",
@@ -65,13 +41,13 @@ async function connectFacebook(restart = false) {
         result.lastRead?.error ? readError[result.lastRead.error] || readError.result :
         result.lastRead?.contactCount > 0 ? `Facebook is connected to HABITAT. ${result.lastRead.contactCount} contacts received.` :
         result.lastRead?.contactCount === 0 ? "Facebook is connected to HABITAT, but its Contacts panel returned no contacts." :
-        "Facebook is connected to HABITAT. Open Facebook; loaded contacts update automatically.");
+        "Facebook is connected to HABITAT. Add contacts manually in the desktop app.");
   } catch (_) { facebookStatus.textContent = "Could not connect Facebook. Keep HABITAT open, then reconnect."; }
   finally { facebookReconnect.disabled = false; }
 }
 chrome.permissions.contains(facebookOrigins).then(enabled => {
   facebookEnabled = enabled;
-  facebook.textContent = enabled ? "Disable Facebook contacts" : "Enable Facebook contacts";
+  facebook.textContent = enabled ? "Disable Facebook access" : "Enable Facebook access";
   if (enabled) void connectFacebook();
 }).catch(() => { facebook.disabled = true; });
 facebookReconnect.onclick = () => {
@@ -84,15 +60,15 @@ facebook.onclick = async () => {
     if (facebookEnabled) {
       if (await chrome.permissions.remove(facebookOrigins)) {
         facebookEnabled = false;
-        facebook.textContent = "Enable Facebook contacts";
-        msg.textContent = "Facebook contacts disabled. Existing Facebook tabs remain open.";
+        facebook.textContent = "Enable Facebook access";
+        msg.textContent = "Facebook access disabled. Existing Facebook tabs remain open.";
       }
       return;
     }
     const granted = await chrome.permissions.request(facebookOrigins);
     facebookEnabled = granted;
-    facebook.textContent = granted ? "Disable Facebook contacts" : "Enable Facebook contacts";
-    msg.textContent = granted ? "Facebook access enabled. Keep HABITAT and Facebook open; loaded contacts update automatically." :
+    facebook.textContent = granted ? "Disable Facebook access" : "Enable Facebook access";
+    msg.textContent = granted ? "Facebook access enabled for Messenger. Add your contacts manually in HABITAT." :
       "Facebook access was not enabled. You can try again here.";
     if (granted) void connectFacebook(true);
   } catch (_) { msg.textContent = "Could not enable Facebook access. Reload the HABITAT extension and try again."; }

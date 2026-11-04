@@ -1,6 +1,6 @@
 # HABITAT Browser Bridge privacy policy
 
-Effective date: 27 October 2026. Local development extension version: 0.10.8.
+Effective date: 28 October 2026. Local development extension version: 0.10.9.
 
 This policy covers the HABITAT Browser Bridge Chrome extension maintained by [aesgalexis](https://github.com/aesgalexis). The extension connects Chrome to the HABITAT desktop application running on your own Windows computer. It has no HABITAT cloud backend, advertising, analytics or tracking service.
 
@@ -17,7 +17,7 @@ The extension stays disconnected until you select **Enable connection** on its c
 - **Gmail and Google Contacts (optional):** with site access and the source enabled, already-open Gmail tabs contribute the names and email addresses of correspondents loaded in mail-list rows. Subjects, snippets, message bodies and attachments are not collected. An open Google Contacts tab contributes loaded contact rows, including names, emails and phones. The signed-in account email is read from Google's account button to keep accounts separate; if missing or ambiguous, collection waits. This is not a complete account export. There is no use of cookies, hidden page state or private endpoints.
 - **Connection information:** a local pairing key, your connection choice, browser tab identifiers and addresses needed to route requests to the correct page. Basic tab information is used to find and validate the relevant page, not to build a browsing history or profile.
 
-The extension does not read passwords, payment information, mail bodies or unrelated page content. It does not access browser cookies directly or transfer a browsing history to the developer. Automatic contact observations travel only to the local HABITAT agenda, where source records and earlier versions are retained. They do not require an import preview. Contact data is never forwarded to ChatGPT, Codex or the developer; see [contacts](CONTACTS.md). Facebook avatar requests go to its image servers.
+The extension does not read passwords, payment information, mail bodies or unrelated page content. It does not access browser cookies directly or send a browsing history to the developer. HABITAT 0.18 and later disables automatic contact collection and starts with an empty manual address book; legacy enabled permissions and source settings do not add people. Contact observations are retained only for compatibility with older desktop versions. The popup offers Facebook access for explicit Messenger submissions; current contact creation happens in the desktop app. Contact data is never forwarded to ChatGPT, Codex or the developer; see [contacts](CONTACTS.md).
 
 ## Where information goes
 
@@ -35,7 +35,7 @@ Requests, responses, relevant page information and connection status pass betwee
 
 Chrome extension-local storage keeps your connection choice, pairing key and linked ChatGPT tab/address until replaced, cleared or the extension is removed. This storage is not Chrome sync storage. Temporary search/translation tab identifiers are kept in session storage; in-progress requests and result caches are held in worker memory. Search tabs created for HABITAT may remain open until you clear that search or close them.
 
-Automatic contact sources observe eligible open tabs approximately every 30 seconds and after relevant tab/permission changes. Closing a provider tab stops reading it. Source switches in HABITAT stop new reads and discard pending observations; saved contacts and local recovery history remain. The extension retains working snapshots only in memory. Revoke site access with **Disable Facebook contacts**, **Disable Gmail and Google Contacts**, or Chrome's extension settings. Disconnecting the global connection stops all collection. No personal provider tab is closed or navigated for collection.
+Automatic contact sources observe eligible open tabs approximately every 30 seconds and after relevant tab/permission changes. Closing a provider tab stops reading it. Source switches in HABITAT stop new reads and discard observations in transit; saved contacts, suggestions, review decisions and local recovery history remain. The extension retains working snapshots only in memory. Revoke site access with **Disable Facebook contacts**, **Disable Google browser suggestions**, or Chrome's extension settings. Disconnecting the global connection stops all collection. No personal provider tab is closed or navigated for collection.
 
 Local Facebook connection diagnostics keep only the extension version, heartbeat age, read stage, error code and counts of sections, photos, rows and received contacts in memory. They contain no names, photo addresses or page text. They are available to the desktop app through its authenticated local bridge and are not sent to a server.
 

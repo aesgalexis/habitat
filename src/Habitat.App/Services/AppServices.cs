@@ -23,6 +23,8 @@ internal sealed class AppServices : IAsyncDisposable
     public TaskStore Tasks { get; }
     public TaskSession TaskSession { get; }
     internal Habitat.Features.Contacts.ContactSession Contacts { get; }
+    internal Habitat.Features.Contacts.ContactDriveSync? ContactDrive { get; }
+    private readonly HttpClient? _contactDriveHttp;
     private readonly Dictionary<string, IGmailCredentialStore> _contactsTestCredentials = new();
     public WeatherService Weather { get; }
     internal MarketsService Markets { get; set; }
@@ -43,6 +45,10 @@ internal sealed class AppServices : IAsyncDisposable
         { ReportError("Open setup resource", exception); return false; }
     }
     public Func<string, Task<bool>> LaunchNotepad { get; }
+    internal Func<string, string, CancellationToken, Task<Habitat.Features.Contacts.PhoneLinkMessageResult>> SendPhoneLink { get; set; }
+    internal Func<string, CancellationToken, Task<bool>> ReviewPhoneLink { get; set; }
+    internal Func<string, bool, CancellationToken, Task<IReadOnlyList<Habitat.Features.Contacts.PhoneLinkConversationMessage>?>> ReadPhoneLinkConversation { get; set; }
+    internal Func<nint, IDisposable> KeepPhoneLinkBackground { get; set; }
     public Func<string, CancellationToken, Task<CodexDeliveryResult>> LaunchCodex { get; }
     internal ICodexChatService Codex { get; set; }
     internal CodexScheduleQueue CodexSchedules { get; }
@@ -122,10 +128,19 @@ internal sealed class AppServices : IAsyncDisposable
         Wallpapers = new WallpaperService(paths);
         GlobalHotkey = new GlobalHotkeyService(paths);
         Bridge = new BridgeService(paths.IsIsolated ? 0 : 8765, facebookTracePath: paths.FacebookMessageTracePath);
+        Bridge.BrowserContacts.Configure(new(false, false));
         Tasks = paths.IsIsolated ? new TaskStore(paths.TasksPath) : new TaskStore();
         TaskSession = new TaskSession(Tasks);
         Contacts = new(new Habitat.Features.Contacts.ContactStore(paths.ContactsPath));
         if (paths.IsIsolated) _isolatedHttp = new HttpClient(new DisabledNetwork());
+        else
+        {
+            _contactDriveHttp = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+            ContactDrive = new(Contacts, Path.Combine(paths.DesktopDirectory, "contacts-drive.json"),
+                () => new GmailAuthService(new GmailCredentialStore(
+                    Path.Combine(paths.DesktopDirectory, "contacts-drive-account.bin"), "HABITAT/Contacts/Drive/v1"),
+                    _contactDriveHttp, driveOnly: true), _contactDriveHttp);
+        }
         Weather = new WeatherService(_isolatedHttp);
         Markets = new MarketsService(_isolatedHttp);
         Updates = new DesktopUpdateService(paths);
@@ -147,6 +162,13 @@ internal sealed class AppServices : IAsyncDisposable
             : new BrowserLauncher(WindowsChrome.FindExecutable);
         LaunchBrowser = uri => Task.FromResult(browser.Open(uri));
         LaunchNotepad = paths.IsIsolated ? _ => Task.FromResult(false) : new NotepadLauncher().OpenAsync;
+        var phoneLink = paths.IsIsolated ? null : new PhoneLinkLauncher();
+        SendPhoneLink = phoneLink is null ? (_, _, _) => Task.FromResult(new Habitat.Features.Contacts.PhoneLinkMessageResult("not-sent", "unavailable")) : phoneLink.SendAsync;
+        ReviewPhoneLink = phoneLink is null ? (_, _) => Task.FromResult(false) : phoneLink.OpenAsync;
+        ReadPhoneLinkConversation = phoneLink is null
+            ? (_, _, _) => Task.FromResult<IReadOnlyList<Habitat.Features.Contacts.PhoneLinkConversationMessage>?>(null)
+            : phoneLink.ReadConversationAsync;
+        KeepPhoneLinkBackground = paths.IsIsolated ? _ => PhoneLinkForegroundGuard.Disabled : PhoneLinkForegroundGuard.Start;
         var codex = paths.IsIsolated ? null : new CodexLauncher(paths: paths);
         LaunchCodex = codex is null ? (_, _) => Task.FromResult(CodexDeliveryResult.NotSent) : codex.OpenAsync;
         Codex = codex is null ? new DisabledCodexChatService() : codex;
@@ -221,7 +243,8 @@ internal sealed class AppServices : IAsyncDisposable
             try { await _bridgeStart; }
             finally { await Bridge.DisposeAsync(); }
         }
-        finally { Updates.Dispose(); UpdateDownload.Dispose(); Weather.Dispose(); Markets.Dispose(); VSCode.Dispose(); _isolatedHttp?.Dispose(); await Codex.DisposeAsync(); }
+        finally { Updates.Dispose(); UpdateDownload.Dispose(); Weather.Dispose(); Markets.Dispose(); VSCode.Dispose();
+            ContactDrive?.Dispose(); _contactDriveHttp?.Dispose(); _isolatedHttp?.Dispose(); await Codex.DisposeAsync(); }
     }
 
     private sealed class MemoryCredentials : IGmailCredentialStore

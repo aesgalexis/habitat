@@ -17,6 +17,8 @@ internal sealed class GmailAuthService : IDisposable
     internal const string ComposeScope = "https://www.googleapis.com/auth/gmail.compose";
     internal const string ContactsScope = "https://www.googleapis.com/auth/contacts.readonly";
     internal const string EmailScope = "https://www.googleapis.com/auth/userinfo.email";
+    internal const string DriveFileScope = "https://www.googleapis.com/auth/drive.file";
+    internal const string DriveAppDataScope = "https://www.googleapis.com/auth/drive.appdata";
     private const string TokenUrl = "https://oauth2.googleapis.com/token";
     private readonly IGmailCredentialStore _store;
     private readonly HttpClient _http;
@@ -25,11 +27,14 @@ internal sealed class GmailAuthService : IDisposable
     private readonly Func<string, Task> _openBrowser;
     private GmailAccount _account;
     private readonly bool _contactsOnly;
+    private readonly bool _driveOnly;
 
-    public GmailAuthService(IGmailCredentialStore store, HttpClient? http = null, Func<string, Task>? openBrowser = null, bool contactsOnly = false)
+    public GmailAuthService(IGmailCredentialStore store, HttpClient? http = null, Func<string, Task>? openBrowser = null,
+        bool contactsOnly = false, bool driveOnly = false)
     {
         _store = store;
         _contactsOnly = contactsOnly;
+        _driveOnly = driveOnly;
         _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
         _ownsClient = http is null;
         _openBrowser = openBrowser ?? (url =>
@@ -113,7 +118,7 @@ internal sealed class GmailAuthService : IDisposable
             try
             {
                 var redirect = server.Urls.Single().TrimEnd('/') + "/oauth/callback";
-                var authorizationUrl = AuthorizationUrl(client.ClientId, redirect, state, challenge, authorizeDrafts, _contactsOnly);
+                var authorizationUrl = AuthorizationUrl(client.ClientId, redirect, state, challenge, authorizeDrafts, _contactsOnly, _driveOnly);
                 await _openBrowser(authorizationUrl).ConfigureAwait(false);
                 var code = await completion.Task.WaitAsync(timeout.Token).ConfigureAwait(false);
                 var tokens = await ExchangeAsync(new Dictionary<string, string>
@@ -136,12 +141,14 @@ internal sealed class GmailAuthService : IDisposable
         finally { _tokenLock.Release(); }
     }
 
-    internal static string AuthorizationUrl(string clientId, string redirect, string state, string challenge, bool authorizeDrafts = false, bool contactsOnly = false)
+    internal static string AuthorizationUrl(string clientId, string redirect, string state, string challenge,
+        bool authorizeDrafts = false, bool contactsOnly = false, bool driveOnly = false)
     {
         var query = new Dictionary<string, string>
         {
             ["client_id"] = clientId, ["redirect_uri"] = redirect, ["response_type"] = "code",
-            ["scope"] = contactsOnly ? ContactsScope + " " + EmailScope : authorizeDrafts ? ReadOnlyScope + " " + ComposeScope : ReadOnlyScope,
+            ["scope"] = driveOnly ? DriveFileScope + " " + DriveAppDataScope : contactsOnly ? ContactsScope + " " + EmailScope :
+                authorizeDrafts ? ReadOnlyScope + " " + ComposeScope : ReadOnlyScope,
             ["access_type"] = "offline", ["prompt"] = "consent select_account",
             ["state"] = state, ["code_challenge"] = challenge, ["code_challenge_method"] = "S256"
         };
@@ -206,7 +213,8 @@ internal sealed class GmailAuthService : IDisposable
                 if (code == "invalid_grant")
                     throw new GmailSignInRequiredException(UiText.Get("GoogleAuthorizationExpiredOrWasRevokedSignIn"));
                 if (code == "invalid_client")
-                    throw new InvalidOperationException(UiText.Get("GoogleRejectedTheDesktopOAuthClientCheckGmail"));
+                    throw new InvalidOperationException(_driveOnly ? "Google rejected the Desktop OAuth client. Check the Google Drive setup." :
+                        UiText.Get("GoogleRejectedTheDesktopOAuthClientCheckGmail"));
             }
             response.EnsureSuccessStatusCode();
         }
@@ -216,8 +224,10 @@ internal sealed class GmailAuthService : IDisposable
         if (root.TryGetProperty("scope", out var scopes))
         {
             var granted = (scopes.GetString() ?? "").Split(' ');
-            if (!granted.Contains(_contactsOnly ? ContactsScope : ReadOnlyScope))
-                throw new GmailSignInRequiredException(_contactsOnly ? "Google did not grant read-only contacts access. Sign in again and allow Contacts." : UiText.Get("GoogleDidNotGrantReadonlyGmailAccessSign"));
+            if (!granted.Contains(_driveOnly ? DriveFileScope : _contactsOnly ? ContactsScope : ReadOnlyScope) ||
+                _driveOnly && !granted.Contains(DriveAppDataScope))
+                throw new GmailSignInRequiredException(_driveOnly ? "Google did not grant file access. Reconnect Google Drive and allow access to HABITAT files." :
+                    _contactsOnly ? "Google did not grant read-only contacts access. Sign in again and allow Contacts." : UiText.Get("GoogleDidNotGrantReadonlyGmailAccessSign"));
         }
         var refresh = root.TryGetProperty("refresh_token", out var value) ? value.GetString() : refreshToken;
         if (string.IsNullOrWhiteSpace(access) || string.IsNullOrWhiteSpace(refresh))
@@ -227,13 +237,15 @@ internal sealed class GmailAuthService : IDisposable
 
     private async Task<string> ReadProfileAsync(string accessToken, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, _contactsOnly
+        using var request = new HttpRequestMessage(HttpMethod.Get, _driveOnly
+            ? "https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)" : _contactsOnly
             ? "https://www.googleapis.com/oauth2/v2/userinfo" : "https://gmail.googleapis.com/gmail/v1/users/me/profile");
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
         using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
-        var email = document.RootElement.GetProperty(_contactsOnly ? "email" : "emailAddress").GetString();
+        var profile = _driveOnly ? document.RootElement.GetProperty("user") : document.RootElement;
+        var email = profile.GetProperty(_contactsOnly ? "email" : "emailAddress").GetString();
         if (_contactsOnly && (!document.RootElement.TryGetProperty("verified_email", out var verified) || verified.ValueKind != JsonValueKind.True))
             throw new InvalidDataException("Google did not return a verified account email. Nothing was imported.");
         return !string.IsNullOrWhiteSpace(email) ? email : throw new InvalidDataException("Google returned no account email.");

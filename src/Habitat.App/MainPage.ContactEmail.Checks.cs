@@ -51,6 +51,7 @@ public sealed partial class MainPage
             await LaunchDestinationAsync(first, Composer.Text);
             if (saves != 1 || to != "one@example.com" || from != "sender@example.com" || body != firstText || browserCalls != 0)
                 throw new InvalidOperationException("Draft email must target the selected recipient and sender once, with the exact text, without opening Gmail.");
+            if (ContactChannelsEnabled) throw new InvalidOperationException("Contact channel selection must stay disabled while its email draft is being saved.");
             pending.SetResult(new("synthetic-draft", "Body for first friend", "contact-test@habitat.local"));
             await submitting;
             var section = (GmailDraftSection)_destinationSections[first];
@@ -70,7 +71,7 @@ public sealed partial class MainPage
                     ComposerHint.Text != "Email Email friend ☕…" || SendButton.Content as string != "Draft email" ||
                     _destinationSections[_destination].HasContent || _destinationContent.Visibility != Visibility.Collapsed ||
                     Composer.TextAlignment != TextAlignment.Center || ContactMessageName.Text != "Email friend ☕" ||
-                    ContactMessageChannel.Text != "Gmail" || ContactMessageHeader.Visibility != Visibility.Visible || browserCalls != 0)
+                    SelectedContactChannelLabel != "Email" || ContactChannelPicker.Visibility != Visibility.Visible || ContactMessageHeader.Visibility != Visibility.Visible || browserCalls != 0)
                     throw new InvalidOperationException("An email contact must start/reset to HABITAT's centered writing view, recipient header and Draft email action without launching a browser.");
             }
         }

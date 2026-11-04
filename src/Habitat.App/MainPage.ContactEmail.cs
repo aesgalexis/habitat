@@ -12,15 +12,15 @@ public sealed partial class MainPage
     private readonly Dictionary<string, EmailContactRecipient> _emailRecipients = new();
     private Func<string, string, string?, CancellationToken, Task<GmailDraft>>? _saveContactEmailDraft = null;
     private bool IsEmailContactDestination(string id) => _emailRecipients.ContainsKey(id);
-    private bool IsContactDestination(string id) => IsFacebookDestination(id) || IsEmailContactDestination(id);
+    private bool IsContactDestination(string id) => IsFacebookDestination(id) || IsEmailContactDestination(id) || IsPhoneContactDestination(id) || _unavailableContacts.ContainsKey(id);
 
     private void SelectEmailContact(ContactBook book, ContactPerson person, string address, string? sender)
     {
         if (HasAppearanceOverlay || _updateHandoff || _operations.IsStopping) return;
-        if (!ContactChannels.IsEmail(address) || ContactChannels.IsNoReply(address) ||
+        if (!ContactChannels.IsEmail(address) ||
             sender is not null && !ContactChannels.IsEmail(sender))
-            throw new InvalidOperationException("Choose a contact with a replyable email address.");
-        var id = "email-contact:" + ContactBook.Hash(ContactBook.NormalizeEmail(address) + "\n" + sender?.ToUpperInvariant());
+            throw new InvalidOperationException("Choose a contact with a valid email address.");
+        var id = "email-contact:" + ContactBook.Hash(person.Id + "\n" + ContactBook.NormalizeEmail(address) + "\n" + sender?.ToUpperInvariant());
         var name = book.Name(person);
         var photo = book.For(person).SelectMany(r => r.Current.Values).FirstOrDefault(v => v.Kind == "photo" && FacebookContactsService.SafePhoto(v.Value))?.Value ?? "";
         _emailRecipients[id] = new(name, address, sender, new(name, photo));
@@ -44,6 +44,7 @@ public sealed partial class MainPage
             _composer.Register(id, false, SubmitSectionAsync, _ => section.IsBusy);
             _composer.Register(id, true, _ => section.OpenBrowserAsync(), _ => section.IsBusy);
         }
+        AssociateContactChannel(id, person.Id, "email", address, sender);
         SelectDestination(id);
         SetFacebookOpen(false);
         FocusComposer();

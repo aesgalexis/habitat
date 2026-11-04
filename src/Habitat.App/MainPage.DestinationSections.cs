@@ -152,6 +152,13 @@ public sealed partial class MainPage
             ((VSCodeSection)vscode).SetActive(_destination == Services.ComposerDestination.VSCode);
         if (_destinationSections.TryGetValue(Services.ComposerDestination.Codex, out var codex))
             ((CodexSection)codex).SetActive(_destination == Services.ComposerDestination.Codex);
+        var phone = _destinationSections.GetValueOrDefault(_destination) as PhoneLinkSection;
+        if (_activePhoneSection != phone)
+        {
+            _activePhoneSection?.SetActive(false);
+            _activePhoneSection = phone;
+            phone?.SetActive(true);
+        }
         _destinationContent.Content = IsDestinationSectionVisible ? _destinationSections[_destination].View : null;
         _destinationContent.Visibility = IsDestinationSectionVisible ? Visibility.Visible : Visibility.Collapsed;
     }

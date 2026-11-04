@@ -16,6 +16,25 @@ public sealed partial class MainPage
                 throw new InvalidOperationException("UI checks did not receive isolated services.");
             File.AppendAllText(path, "PASS: isolated services, empty in-memory Gmail credentials and explicit data paths\n");
             await _initialTaskLoad;
+            if (Environment.GetCommandLineArgs().Contains("--contact-channels-ui-only"))
+            {
+                await CheckContactChannelsUiAsync(path);
+                await CheckContactEmailUiAsync(path);
+                await CheckContactPhoneUiAsync(path);
+                await CheckFacebookMessagingUiAsync(path);
+                await StopAsync(); await _services.DisposeAsync(); window.Close(); Application.Current.Exit(); return;
+            }
+            if (Environment.GetCommandLineArgs().Contains("--contact-sources-ui-only") || Environment.GetCommandLineArgs().Contains("--contact-destinations-ui-only"))
+            {
+                await CheckAutomaticContactsUiAsync(path);
+                await CheckContactsSettingsUiAsync(path);
+                await StopAsync(); await _services.DisposeAsync(); window.Close(); Application.Current.Exit(); return;
+            }
+            if (Environment.GetCommandLineArgs().Contains("--phone-link-ui-only"))
+            {
+                await CheckContactPhoneUiAsync(path);
+                await StopAsync(); await _services.DisposeAsync(); window.Close(); Application.Current.Exit(); return;
+            }
             if (Environment.GetCommandLineArgs().Contains("--facebook-ui-only") || Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
                 await CheckFacebookUiAsync(path);
             if (Environment.GetCommandLineArgs().Contains("--facebook-ui-only"))

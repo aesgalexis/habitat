@@ -36,7 +36,7 @@ internal sealed class ContactStore(string path)
             try { history = Directory.EnumerateFiles(_path + ".history", "*.json").Any(); }
             catch (DirectoryNotFoundException) { history = false; }
             if (history)
-                throw new InvalidDataException("The contacts file is missing. Backups were kept in contacts.json.history; restore the file before making changes.");
+                throw new InvalidDataException("The contacts file is missing. Backups were kept in " + Path.GetFileName(_path) + ".history; restore the file before making changes.");
             return ContactBook.Empty;
         }
     }
@@ -100,6 +100,12 @@ internal sealed class ContactStore(string path)
         Require(book.Sources.Select(s => s.Id).Distinct().Count() == book.Sources.Length);
         Require(book.Sources.Select(s => (s.Kind, s.Account.ToUpperInvariant())).Distinct().Count() == book.Sources.Length);
         var sources = book.Sources.Select(s => s.Id).ToHashSet();
+        Require(book.BrowserSuggestions is not null && book.BrowserSuggestions.All(s => s is not null &&
+            book.Sources.Any(source => source.Id == s.SourceId && source.Kind == "google-browser") &&
+            s.Candidate is not null && !string.IsNullOrWhiteSpace(s.Candidate.RemoteId) && s.Candidate.Raw is not null &&
+            s.Candidate.Values is { Length: > 0 } && s.Candidate.Values.All(v => v is not null &&
+                !string.IsNullOrWhiteSpace(v.Kind) && !string.IsNullOrWhiteSpace(v.Value) && v.Label is not null)));
+        Require(book.BrowserSuggestions.Select(s => ContactBook.RecordId(s.SourceId, s.Candidate.RemoteId)).Distinct().Count() == book.BrowserSuggestions.Length);
         Require(book.Records!.All(r => r is not null && !string.IsNullOrWhiteSpace(r.RemoteId) && sources.Contains(r.SourceId) &&
             r.Id == ContactBook.RecordId(r.SourceId, r.RemoteId) && r.Current is not null && r.History is not null));
         Require(book.Records.Select(r => r.Id).Distinct().Count() == book.Records.Length);
@@ -152,9 +158,32 @@ internal sealed class ContactSession(ContactStore store)
             if (!ReferenceEquals(next, Book)) Book = await store.SaveAsync(next, Book.Revision, token);
             return true;
         }
+        catch (ContactReviewException) { throw; }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
         { Error = ReadError(exception); return false; }
         finally { _gate.Release(); Changed?.Invoke(); }
+    }
+
+    internal async Task SynchronizeAsync(Func<ContactBook, Task<(ContactBook Book, Action Commit)>> sync, CancellationToken token)
+    {
+        await _gate.WaitAsync(token);
+        var changed = false;
+        try
+        {
+            if (!Loaded || Error is not null) throw new InvalidOperationException("Reload contacts before syncing.");
+            var (next, commit) = await sync(Book);
+            if (!ReferenceEquals(next, Book))
+            {
+                Book = await store.SaveAsync(next, Book.Revision, token);
+                changed = true;
+            }
+            commit();
+        }
+        finally
+        {
+            _gate.Release();
+            if (changed) Changed?.Invoke();
+        }
     }
 
     private static string ReadError(Exception exception) => exception is InvalidOperationException or InvalidDataException

@@ -21,7 +21,9 @@ internal sealed class AppDataPaths
     internal string UpdateDraftsPath => Path.Combine(LocalDirectory, "update-drafts.json");
     internal string UpdateResultPath => Path.Combine(LocalDirectory, "update-result.json");
     public string TasksPath => Path.Combine(DesktopDirectory, "tasks.json");
-    public string ContactsPath => Path.Combine(DesktopDirectory, "contacts.json");
+    // A deliberate new address book. Legacy imported contacts and their history
+    // remain untouched in contacts.json; they never populate manual destinations.
+    public string ContactsPath => Path.Combine(DesktopDirectory, "contact-destinations.json");
     public string CodexChatsPath => Path.Combine(DesktopDirectory, "codex-chats.json");
     public string CodexSchedulesPath => Path.Combine(DesktopDirectory, "codex-scheduled-messages.json");
     public string GmailLegacyPath => Path.Combine(DesktopDirectory, "gmail-account.bin");

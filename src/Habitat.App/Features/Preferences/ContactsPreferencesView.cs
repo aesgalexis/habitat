@@ -8,9 +8,12 @@ namespace Habitat.Features.Preferences;
 
 internal sealed record ContactImport(ContactSource Source, ContactCandidate[] Candidates, bool Complete = false);
 
-internal sealed class ContactsPreferencesView : StackPanel
+internal sealed partial class ContactsPreferencesView : StackPanel
 {
     private readonly ContactSession _session;
+    private readonly bool _manualOnly;
+    private readonly ContactDriveSync? _drive;
+    private readonly Func<Task<Habitat.Models.GmailClientConfiguration?>>? _pickDriveClient;
     private readonly Func<CancellationToken, Task<ContactImport?>> _connectGoogle;
     private readonly Func<ContactSource, CancellationToken, Task<ContactCandidate[]>> _reloadGoogle;
     private readonly Func<CancellationToken, Task<(string Name, ContactCandidate[] Candidates)?>> _pickVCard;
@@ -29,13 +32,14 @@ internal sealed class ContactsPreferencesView : StackPanel
     private ContactSuggestion? _review;
     private ContactImport? _preview;
     private ListView? _previewList;
-    private readonly ComboBox _mode = new() { ItemsSource = new[] { "Sources", "People", "Possible duplicates" }, SelectedIndex = 0,
+    private readonly ComboBox _mode = new() { ItemsSource = new[] { "Sources", "People", "Possible duplicates", "Browser suggestions", "Review saved browser contacts" }, SelectedIndex = 0,
         HorizontalAlignment = HorizontalAlignment.Stretch };
     private readonly TextBlock _status = Text("", 13);
     private readonly StackPanel _body = new() { Spacing = 12 };
     private readonly ContentControl _bodyHost = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch };
     internal ContactImport? Preview => _preview;
     internal bool IsBusy => _busy;
+    internal bool IsEditingContact => _contactEditorOpen;
 
     internal ContactsPreferencesView(ContactSession session,
         Func<CancellationToken, Task<ContactImport?>>? connectGoogle = null,
@@ -44,9 +48,12 @@ internal sealed class ContactsPreferencesView : StackPanel
         Func<CancellationToken, Task<ContactCandidate[]>>? readFacebook = null,
         Func<ContactSource, CancellationToken, Task>? disconnect = null,
         BrowserContactsService? browser = null, Func<string, bool, bool>? setBrowserSource = null,
-        Func<string, Task>? enableBrowserAccess = null)
+        Func<string, Task>? enableBrowserAccess = null, bool manualOnly = true,
+        ContactDriveSync? drive = null, Func<Task<Habitat.Models.GmailClientConfiguration?>>? pickDriveClient = null)
     {
         _session = session;
+        _drive = drive; _pickDriveClient = pickDriveClient;
+        _manualOnly = manualOnly;
         _connectGoogle = connectGoogle ?? (_ => Task.FromResult<ContactImport?>(null));
         _reloadGoogle = reloadGoogle ?? ((_, _) => Task.FromResult<ContactCandidate[]>([]));
         _pickVCard = pickVCard ?? (_ => Task.FromResult<(string, ContactCandidate[])?>(null));
@@ -57,13 +64,14 @@ internal sealed class ContactsPreferencesView : StackPanel
         AutomationProperties.SetName(_mode, "Contacts settings section");
         AutomationProperties.SetLiveSetting(_status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         _bodyHost.Content = _body;
-        Children.Add(_mode); Children.Add(_status); Children.Add(_bodyHost);
-        _mode.SelectionChanged += (_, _) => { _review = null; Refresh(); };
+        if (!_manualOnly) Children.Add(_mode);
+        Children.Add(_status); Children.Add(_bodyHost);
+        _mode.SelectionChanged += (_, _) => { _review = null; _confirmHideBrowserPeople = null; Refresh(); };
         Refresh();
     }
 
     internal async Task StopAsync() { _stop.Cancel(); await _pending; _stop.Dispose(); }
-    internal void SelectPerson(string id) { _selectedPerson = id; _mode.SelectedIndex = 1; Refresh(); }
+    internal void SelectPerson(string id) { _selectedPerson = id; if (_manualOnly) BeginContactEdit(id); else { _mode.SelectedIndex = 1; Refresh(); } }
     internal void SelectDuplicates() { _mode.SelectedIndex = 2; Refresh(); }
     internal async Task InitializeAsync()
     {
@@ -82,6 +90,7 @@ internal sealed class ContactsPreferencesView : StackPanel
     private async Task RunAsync(Func<Task> action)
     {
         if (_busy || _stop.IsCancellationRequested) return;
+        if (_manualOnly) CaptureContactForm();
         _busy = true; _status.Text = "Working…"; _mode.IsEnabled = false;
         _bodyHost.IsEnabled = false;
         _pending = Work();
@@ -93,7 +102,7 @@ internal sealed class ContactsPreferencesView : StackPanel
             catch (Exception exception)
             {
                 _status.Text = exception is InvalidDataException or InvalidOperationException or Habitat.Models.GmailSignInRequiredException
-                    ? exception.Message : "Could not complete this action. Your existing contacts were kept. Retry or reconnect the source.";
+                    ? exception.Message : "Could not complete this action. Your existing contacts were kept. Try again.";
             }
             finally
             {
@@ -114,12 +123,15 @@ internal sealed class ContactsPreferencesView : StackPanel
             Action(_body, "Reload contacts", async () => { await _session.LoadAsync(_stop.Token); });
             return;
         }
+        if (_manualOnly) { ShowManualContacts(); return; }
         if (_preview is not null) { ShowPreview(); return; }
         if (_review is not null) { ShowReview(); return; }
         switch (_mode.SelectedIndex)
         {
             case 1: ShowPeople(); break;
             case 2: ShowSuggestions(); break;
+            case 3: ShowBrowserSuggestions(); break;
+            case 4: ShowSavedBrowserContacts(); break;
             default: ShowSources(); break;
         }
     }
@@ -127,15 +139,7 @@ internal sealed class ContactsPreferencesView : StackPanel
     private void ShowSources()
     {
         var book = _session.Book;
-        _body.Children.Add(Text("Enable a source once. HABITAT adds and updates people automatically while its page is open in Chrome. Saved contacts stay available when the page closes."));
-        BrowserSource("facebook", "Facebook", "People loaded in Facebook Contacts or All friends. Uses your open Facebook session.");
-        BrowserSource("google", "Gmail and Google Contacts", "Names and email addresses loaded in Gmail, plus contact rows in an open Google Contacts tab. Only the loaded people are available; this does not read mail bodies or the entire address book.");
-        _body.Children.Add(Text("Existing Chrome permissions are used automatically. Turning a source off stops new reads and keeps saved contacts. Possible duplicate people still need your review.", 12));
-        Action(_body, _advanced ? "Hide other contact options" : "Other contact options", () => { _advanced = !_advanced; return Task.CompletedTask; });
-        RefreshBrowserState();
-        if (!_advanced) return;
-        _body.Children.Add(Text("Optional file imports and full Google API access. These use a separate import review.", 12));
-        var google = Panel("Google Contacts", "Read contacts from one or more Google accounts. Email actions open Gmail drafts; this connection does not grant permission to send email.");
+        var google = Panel("Google Contacts", "Your main address book source. Read your saved Google contacts across all pages, independently of open Chrome tabs. Review the import before adding contacts.");
         google.Children.Add(Text("First connection: select a Desktop OAuth client JSON with People API enabled, or reuse the client already configured for Gmail. Contacts permission is requested separately.", 12));
         Action(google, "Connect Google account", async () =>
         {
@@ -150,7 +154,7 @@ internal sealed class ContactsPreferencesView : StackPanel
             var description = source.Kind switch
             {
                 "google" => source.Connected ? "Connected · read-only Google Contacts" : "Disconnected · saved contacts retained",
-                "google-browser" => "Automatic · people observed in your open Google pages",
+                "google-browser" => "Browser observations · new contacts require your review",
                 "facebook" => source.Connected ? "Automatic · people observed in your open Facebook page" : "Saved Facebook snapshot",
                 "vcard" => "Imported file · import again using the same source name to update", _ => "Contacts created in HABITAT"
             };
@@ -171,6 +175,14 @@ internal sealed class ContactsPreferencesView : StackPanel
             }
             _body.Children.Add(Card(panel));
         }
+        Action(_body, $"Review browser suggestions ({book.PendingBrowserSuggestions.Length})", () => { SelectBrowserSuggestions(); return Task.CompletedTask; });
+        Action(_body, $"Review saved browser contacts ({book.SavedBrowserPeople.Count(p => !p.BrowserReviewed)})", () => { SelectSavedBrowserContacts(); return Task.CompletedTask; });
+        BrowserSource("facebook", "Facebook", "People loaded in Facebook Contacts or All friends are added automatically. Uses your open Facebook session.");
+        BrowserSource("google", "Google browser suggestions", "Optional suggestions from names and addresses loaded in Gmail or Google Contacts. Accept a suggestion before it enters your address book. Subjects, snippets and mail bodies are not read.");
+        _body.Children.Add(Text("Turning a browser source off stops new reads and keeps saved contacts and suggestions. Use Google Contacts above to read the complete saved address book.", 12));
+        RefreshBrowserState();
+        Action(_body, _advanced ? "Hide other contact options" : "Other contact options", () => { _advanced = !_advanced; return Task.CompletedTask; });
+        if (!_advanced) return;
         var vcard = Panel("Phone and other accounts", "Import a .vcf export from your phone, iCloud, Outlook or another address book. Original fields are retained, including fields HABITAT cannot display as channels.");
         var importName = new TextBox { Header = "Import source name", PlaceholderText = "e.g. Personal phone", Text = _importName, MaxLength = 160 };
         AutomationProperties.SetName(importName, "Import source name");
@@ -201,7 +213,7 @@ internal sealed class ContactsPreferencesView : StackPanel
             BeginPreview(new(existing ?? new(ContactBook.NewId(), "facebook", "Facebook · " + label, label, false), contacts));
         });
         _body.Children.Add(Card(facebook));
-        _body.Children.Add(Text("iMessage and other messaging services will appear only when a compatible integration is available. A phone number alone does not establish availability.", 12));
+        _body.Children.Add(Text("Send phone messages through the Windows Phone Link app using your connected phone. HABITAT verifies the selected number and exact text before sending. iMessage or SMS availability depends on your phone and recipient.", 12));
     }
 
     private void BrowserSource(string provider, string title, string description)
@@ -210,7 +222,7 @@ internal sealed class ContactsPreferencesView : StackPanel
         var setting = provider == "facebook" ? _browser?.Settings.Facebook : _browser?.Settings.Google;
         var toggle = new ToggleSwitch { Header = title, OnContent = "On", OffContent = "Off",
             IsOn = setting ?? state?.Allowed == true, IsEnabled = _setBrowserSource is not null };
-        AutomationProperties.SetName(toggle, "Automatic " + title + " contacts");
+        AutomationProperties.SetName(toggle, provider == "google" ? "Browser contact suggestions" : "Automatic " + title + " contacts");
         var status = Text("", 12);
         AutomationProperties.SetLiveSetting(status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         _browserRows[provider] = (toggle, status);
@@ -253,12 +265,12 @@ internal sealed class ContactsPreferencesView : StackPanel
                 "disabled" => "Off · saved contacts kept",
                 "disconnected" => "Waiting for the HABITAT Chrome extension",
                 "extension-update" => "Reload HABITAT Browser Bridge 0.10.8 or later in Chrome",
-                "permission" => "Enable access in Chrome once to start automatic contacts",
+                "permission" => provider == "google" ? "Enable access in Chrome once to collect suggestions" : "Enable access in Chrome once to start automatic contacts",
                 "waiting-for-tab" => provider == "facebook" ? "Waiting for an open Facebook tab" : "Waiting for an open Gmail or Google Contacts tab",
                 "login" => "Sign in to the open provider tab",
                 "account-unavailable" => "Waiting for the signed-in account address to appear in Google’s account button",
                 "waiting-for-contacts" => provider == "facebook" ? "Facebook is open · waiting for Contacts or All friends to load" : "Google is open · waiting for people to load",
-                "ready" => $"Automatic · {count} saved contacts · {state.Count} people loaded in Chrome",
+                "ready" => provider == "google" ? $"{_session.Book.PendingBrowserSuggestions.Length} suggestions to review · {state.Count} people loaded in Chrome" : $"Automatic · {count} saved contacts · {state.Count} people loaded in Chrome",
                 _ => "Checking open tabs…"
             };
         }

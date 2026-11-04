@@ -11,9 +11,13 @@ HABITAT usa **SemVer: MAJOR.MINOR.PATCH**. `VERSION` es la fuente de la versión
 
 La primera distribución instalable del escritorio es **0.9.1**: recoge el estado funcional de 0.9.0 y corrige su comprobación del changelog en clones Windows con CRLF. `v0.9.0` se conserva como etiqueta histórica sin paquetes publicados. La versión 1.0.0 queda para un estado con compatibilidad y distribución consideradas estables. Una etiqueta publicada es inmutable: si una publicación requiere cambios, se incrementa la versión. Las etiquetas siguen el formato `vMAJOR.MINOR.PATCH` y apuntan a un commit de `main` ya verificado.
 
-La extensión de Chrome (`extension/manifest.json`, actualmente 0.10.8) y la de VS Code (`vscode-extension/package.json`, actualmente 0.2.0) tienen versiones independientes porque se instalan y actualizan por separado. Cada paquete registra las versiones incluidas en `release.json`. La versión del protocolo del puente es un contrato independiente de la versión de producto.
+La extensión de Chrome (`extension/manifest.json`, actualmente 0.10.9) y la de VS Code (`vscode-extension/package.json`, actualmente 0.2.0) tienen versiones independientes porque se instalan y actualizan por separado. Cada paquete registra las versiones incluidas en `release.json`. La versión del protocolo del puente es un contrato independiente de la versión de producto.
 
 La versión 0.10.0 añade la guía de primera puesta en marcha y utiliza exclusivamente Chrome para los destinos web. La extensión 0.9.0 está enviada a Chrome Web Store como Unlisted; el enlace estará disponible tras la aprobación de Google. Se mantiene la carga manual incluida mientras tanto. Consulta [la guía para otro PC](GETTING_STARTED.md).
+
+## Cambio de agenda en 0.18.0
+
+La fuente 0.18.0 incorpora un cambio de modelo: solo los contactos creados por el usuario son destinos. La agenda nueva empieza vacía en `contact-destinations.json`, sin trasladar la agenda anterior; `contacts.json` y su historial permanecen intactos. Las fuentes automáticas y las importaciones se desactivan en el flujo actual. Los contactos creados después del cambio persisten. La sincronización opcional con Google Drive se aplica a esta agenda nueva. Los botones de canal seleccionan una vía y **View conversation** muestra los mensajes y respuestas disponibles en Enlace Móvil.
 
 ## Instalar una publicación
 

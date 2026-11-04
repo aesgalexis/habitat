@@ -54,7 +54,7 @@ public sealed partial class MainPage
                 _destinationSections[aId].HasContent || Composer.TextAlignment != TextAlignment.Center || fake.Calls != 0 ||
                 _facebookPanelOpen || FacebookSidebar.Visibility != Visibility.Collapsed || ContactProfile.IsOpen ||
                 ContactMessageHeader.Visibility != Visibility.Visible || ContactMessageName.Text != a.Name ||
-                ContactMessageChannel.Visibility != Visibility.Visible || ContactMessageChannel.Text != "Facebook")
+                ContactChannelPicker.Visibility != Visibility.Visible || SelectedContactChannelLabel != "Facebook")
                 throw new InvalidOperationException("Selecting a contact must collapse its sidebar, retain its header and channel, and enter its centered destination without sending.");
             CheckContactMessageIndicatorLayout();
             var surface = (Grid)Content;
@@ -96,7 +96,7 @@ public sealed partial class MainPage
             Composer.Text = "Synthetic draft B";
             SelectDestination(aId);
             if (Composer.Text != textA || fake.Calls != 0) throw new InvalidOperationException("Selecting destinations must preserve drafts without sending.");
-            SelectFacebookContact(a, "Unified person A");
+            SelectFacebookContact(a, "Unified person A", book.People.Single(p => book.For(p).Any(r => r.RemoteId == a.Link)).Id);
             if (ContactMessageName.Text != "Unified person A" || Composer.Text != textA)
                 throw new InvalidOperationException("A unified display name must preserve the recipient's draft and original Facebook identity.");
             fake.Result = new("not-sent", "recipient");
@@ -115,7 +115,7 @@ public sealed partial class MainPage
             SelectFacebookContact(new("No verified address", "https://scontent.fbcdn.net/unknown.jpg"));
             if (SendButton.IsEnabled || fake.Calls != 3) throw new InvalidOperationException("A contact without a verified link must not admit a send.");
             SelectDestination(destination);
-            if (Composer.Text != draft || ContactMessageHeader.Visibility != Visibility.Collapsed || ContactMessageChannel.Visibility != Visibility.Collapsed)
+            if (Composer.Text != draft || ContactMessageHeader.Visibility != Visibility.Collapsed || ContactChannelPicker.Visibility != Visibility.Collapsed)
                 throw new InvalidOperationException("Regular destinations must restore their draft and hide contact-specific indicators.");
             File.AppendAllText(log, "PASS: people widget native hover; selected contact anchored beside collapsed/expanded sidebar on wide windows, absent from the right destination rail after selection/rebuild; Facebook below Send message in welcome/results; isolated drafts, no send on selection, rejection/uncertainty preservation, clearing on confirmed submission only; messaging fully intercepted, no real messages\n");
         }
@@ -142,14 +142,17 @@ public sealed partial class MainPage
         surface.UpdateLayout();
         var header = ContactMessageHeader.TransformToVisual(surface).TransformPoint(new());
         var sidebarRight = _widgets.TransformToVisual(surface).TransformPoint(new(_widgets.ActualWidth, 0)).X;
-        var label = ContactMessageChannel.TransformToVisual(_root).TransformPoint(new());
+        var label = ContactChannelPicker.TransformToVisual(_root).TransformPoint(new());
         var send = SendButton.TransformToVisual(_root).TransformPoint(new(0, SendButton.ActualHeight));
         if (!ReferenceEquals(ContactMessageHeader.Parent, surface) || Math.Abs(header.X - sidebarRight - FacebookRailGap) > 1 ||
             header.Y < 0 || header.Y + ContactMessageHeader.ActualHeight > 100 ||
             ContactMessageName.ActualWidth <= 0 || header.X + ContactMessageHeader.ActualWidth >
                 surface.ActualWidth - surface.Padding.Right - DestinationRailInset + 1 ||
-            label.Y < send.Y + 1 || label.Y + ContactMessageChannel.ActualHeight > _root.ActualHeight + 1 ||
-            Math.Abs(label.X - send.X) > 1 || ToolTipService.GetToolTip(ContactMessageHeader) is not null)
+            label.Y < send.Y + 1 || label.Y + ContactChannelPicker.ActualHeight > _root.ActualHeight + 1 ||
+            (SendButton.HorizontalAlignment == HorizontalAlignment.Center
+                ? Math.Abs(label.X + ContactChannelPicker.ActualWidth / 2 - send.X - SendButton.ActualWidth / 2) > 1
+                : Math.Abs(label.X + ContactChannelPicker.ActualWidth - send.X - SendButton.ActualWidth) > 1) ||
+            ToolTipService.GetToolTip(ContactMessageHeader) is not null)
             throw new InvalidOperationException($"Contact indicators must stay beside the sidebar and place the channel directly below Send in each composer state. Header={header}; SidebarRight={sidebarRight}; Label={label}; Send={send}; Root={_root.ActualWidth}x{_root.ActualHeight}.");
     }
 

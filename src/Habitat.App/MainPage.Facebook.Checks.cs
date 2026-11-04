@@ -15,8 +15,10 @@ public sealed partial class MainPage
     private async Task CheckFacebookUiAsync(string log)
     {
         await CheckAutomaticContactsUiAsync(log);
+        await CheckContactChannelsUiAsync(log);
         await CheckContactsSettingsUiAsync(log);
         await CheckContactEmailUiAsync(log);
+        await CheckContactPhoneUiAsync(log);
         await _services.Contacts.LoadAsync();
         var originalBook = _services.Contacts.Book;
         var service = _services.Facebook;
@@ -40,7 +42,7 @@ public sealed partial class MainPage
                 FacebookSidebar.Children.Count != 4 || FacebookSidebar.Children[0] != FacebookContactSearch ||
                 Grid.GetRow(FacebookContactSearch) != 0 || Grid.GetRow(FacebookRail) != 1 ||
                 FacebookContactSearch.PlaceholderText != "Search contacts" ||
-                AutomationProperties.GetName(FacebookContactSearch) != "Search contacts by name")
+                AutomationProperties.GetName(FacebookContactSearch) != "Search contacts by name, email or phone")
                 throw new InvalidOperationException("Contacts must start small with an accessible English search field above the list and size settings outside it.");
             _services.FacebookPhoto = _ => new Microsoft.UI.Xaml.Media.Imaging.WriteableBitmap(1, 1);
             var candidates = await ReadFacebookCandidatesAsync(_operations.Token);

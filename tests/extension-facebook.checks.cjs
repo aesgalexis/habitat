@@ -154,9 +154,9 @@ async function dispatch(){context.request={id:(++number).toString(16).padStart(3
       runtime:{sendMessage:async request=>{check(request.kind==='facebook-connect','Facebook reconnects its independent reader.');reconnects++;return workerResult;},reload:()=>reloaded++},
       permissions:{contains:async()=>false,request:async()=>{grants++;return true;},remove:async()=>{revocations++;return true;}}}});
   vm.runInContext(fs.readFileSync(path.resolve(__dirname,'../extension/popup.js'),'utf8'),popup);await settle();
-  check(grants===0&&elements.facebook.textContent==='Enable Facebook contacts','Opening the popup cannot grant Facebook access.');
+  check(grants===0&&elements.facebook.textContent==='Enable Facebook access','Opening the popup cannot grant Facebook access.');
   await elements.facebook.onclick();
-  check(grants===1&&elements.facebook.textContent==='Disable Facebook contacts','An explicit enable action requests optional access.');
+  check(grants===1&&elements.facebook.textContent==='Disable Facebook access','An explicit enable action requests optional access.');
   await settle();
   check(reconnects===1&&elements['facebook-status'].textContent.includes('connected to HABITAT'),'Granting access also connects the reader and reports the actual desktop connection separately.');
   workerResult={error:'Not a ChatGPT tab'};
@@ -174,6 +174,6 @@ async function dispatch(){context.request={id:(++number).toString(16).padStart(3
   check(elements['facebook-status'].textContent.includes('3 contacts received'),
     'A received contact count is reported separately from transport readiness.');
   await elements.facebook.onclick();
-  check(revocations===1&&elements.facebook.textContent==='Enable Facebook contacts','The popup can revoke Facebook access independently.');
+  check(revocations===1&&elements.facebook.textContent==='Enable Facebook access','The popup can revoke Facebook access independently.');
   console.log('Facebook extension checks passed: '+checks+'. Synthetic DOM and tabs only.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

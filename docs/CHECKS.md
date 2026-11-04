@@ -38,7 +38,7 @@ La suite de tareas utiliza archivos sintéticos junto a su binario de pruebas. L
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check-tasks-ui.ps1
 ```
 
-El [script WinUI](../scripts/check-tasks-ui.ps1) compila con `HabitatUiChecks=true` y ejecuta comprobaciones nativas con servicios y almacenamiento aislados. Consulta sus parámetros vigentes antes de utilizar selectores específicos. Abre un proceso de pruebas; no instala una release para el usuario. No lo ejecutes para cambios exclusivamente documentales.
+El [script WinUI](../scripts/check-tasks-ui.ps1) compila con `HabitatUiChecks=true` y ejecuta comprobaciones nativas con servicios y almacenamiento aislados. `-ContactDestinationsOnly` verifica agenda vacía, bloqueo de fuentes antiguas, alta/edición/eliminación manual, rechazo de duplicados sin perder el formulario y selección del contacto como destino. `-ContactSourcesOnly` se conserva como alias de esta comprobación. `-ContactChannelsOnly` comprueba el clic directo de una persona con varios canales, los iconos bajo la acción, la selección de dirección/remitente, la ficha mínima y los flujos de correo y Phone Link interceptados. Consulta sus parámetros vigentes antes de utilizar otros selectores. Abre un proceso de pruebas; no instala una release para el usuario. No lo ejecutes para cambios exclusivamente documentales.
 
 Prioriza comprobaciones no visuales. El control visual requiere una necesidad real o una solicitud expresa, conforme a [AGENTS.md](../AGENTS.md).
 

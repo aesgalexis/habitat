@@ -210,11 +210,13 @@ public sealed partial class MainPage
         Composer.PlaceholderText = string.Empty;
         ComposerHint.Text = _facebookRecipients.TryGetValue(_destination, out var recipient)
             ? "Message " + recipient.Name + "…" : _emailRecipients.TryGetValue(_destination, out var emailRecipient)
-            ? "Email " + emailRecipient.Name + "…" : _destinationCatalog.Placeholder(_destination);
+            ? "Email " + emailRecipient.Name + "…" : _phoneRecipients.TryGetValue(_destination, out var phoneRecipient)
+            ? "Message " + phoneRecipient.Name + "…" : _unavailableContacts.TryGetValue(_destination, out var unavailable)
+            ? "Message " + unavailable.Name + "…" : _destinationCatalog.Placeholder(_destination);
         AutomationProperties.SetName(Composer, ComposerHint.Text);
         UpdateWritingLayout();
         SendButton.Content = UiLanguage.Value(SendButton, "Content", () => IsFacebookDestination(_destination) ? "Send message" :
-            IsEmailContactDestination(_destination) ? UiText.Get("DraftEmail") : _destination switch
+            IsPhoneContactDestination(_destination) || _unavailableContacts.ContainsKey(_destination) ? "Send" : IsEmailContactDestination(_destination) ? UiText.Get("DraftEmail") : _destination switch
         {
             ComposerDestination.Notepad => UiText.Get("OpenInNotepad"),
             ComposerDestination.Translate => UiText.Get("Translate"),

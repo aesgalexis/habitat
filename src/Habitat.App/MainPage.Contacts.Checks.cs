@@ -10,153 +10,109 @@ public sealed partial class MainPage
 {
     private async Task CheckContactsSettingsUiAsync(string log)
     {
-        var service = _services.Facebook;
-        var photo = _services.FacebookPhoto;
-        var launch = _launchBrowser;
-        var draft = Composer.Text;
-        var destination = _destination;
-        Task? showing = null;
         await _services.Contacts.LoadAsync();
         var original = _services.Contacts.Book;
+        var service = _services.Facebook;
+        var launch = _launchBrowser;
+        var destination = _destination;
+        var draft = Composer.Text;
+        var previousSections = _destinationSections.Keys.ToHashSet();
+        Task? showing = null;
         var fake = new CheckedFacebook();
         try
         {
-            _services.Facebook = fake; _services.FacebookPhoto = _ => null;
-            _launchBrowser = _ => throw new InvalidOperationException("Unexpected browser launch in contact checks.");
-            Composer.Text = "Synthetic draft · conservar ☕";
-            var keptDraft = Composer.Text;
-            SetFacebookOpen(true);
-            await WaitForUpdateUiAsync(() => !_facebookBusy);
-            if (fake.Reads != 0 || FacebookAvatars.Children.Count != 0 || FacebookRecovery.IsOpen ||
-                FacebookNoMatches.Visibility != Visibility.Visible || !FacebookNoMatches.Text.Contains("Manage contacts") ||
-                Composer.Text != keptDraft || _destination != destination)
-                throw new InvalidOperationException("Fresh Contacts must stay empty, offer settings and preserve the draft without reading Facebook.");
-            showing = ShowPreferencesAsync("Contacts");
+            _services.Facebook = fake;
+            _launchBrowser = _ => throw new InvalidOperationException("Manual contacts must not launch a browser.");
+            await _services.Contacts.ChangeAsync(_ => ContactBook.Empty);
+            Composer.Text = "Unrelated draft stays here ☕";
+            var kept = Composer.Text;
+            SetFacebookOpen(true); await WaitForUpdateUiAsync(() => !_facebookBusy);
+            if (FacebookAvatars.Children.Count != 0 || !FacebookNoMatches.Text.Contains("Add contact") || fake.Reads != 0)
+                throw new InvalidOperationException("Contacts must start empty and offer manual creation without reading providers.");
+            await InvokeAsync(ContactsAdd);
             await WaitForUpdateUiAsync(() => _activeDialog?.Content is PreferencesView);
-            var preferences = (PreferencesView)_activeDialog!.Content;
-            var view = preferences.Contacts ?? throw new InvalidOperationException("Contacts settings are missing.");
-            if (preferences.Category != "Contacts" || fake.Reads != 0 || _services.Contacts.Book.Sources.Length != 0)
-                throw new InvalidOperationException("Opening settings must not connect or import any source.");
-            var source = new ContactSource(ContactBook.NewId(), "vcard", "Synthetic phone", "Synthetic phone", false);
-            ContactCandidate Candidate(string id, string name, string email) => new(id, [new("name", name), new("email", email)], id);
-            var contacts = new[] { Candidate("one", "Amiga José ☕", "amiga@example.com"), Candidate("two", "Friend 雪", "friend@example.com") };
-            view.BeginPreview(new(source, contacts)); view.Refresh();
-            await Task.Delay(60);
-            if (_services.Contacts.Book.People.Length != 0 || view.Preview is null)
-                throw new InvalidOperationException("A preview must not save contacts before confirmation.");
-            var selection = Descendants(view).OfType<ListView>().Single();
-            selection.SelectedItems.Clear(); selection.SelectedItems.Add(selection.Items[0]);
-            await InvokeAsync(FindButton(view, "Import selected contacts"));
+            var view = ((PreferencesView)_activeDialog!.Content).Contacts!;
+            await WaitForUpdateUiAsync(() => Descendants(view).OfType<TextBox>().Any(t => t.Header as string == "Name"));
+            TextBox Field(string header) => Descendants(view).OfType<TextBox>().Single(t => t.Header as string == header);
+            Field("Name").Text = "Amiga José ☕";
+            Field("Email").Text = "amiga@example.com";
+            await InvokeAsync(FindButton(view, "Add detail"));
+            await WaitForUpdateUiAsync(() => Descendants(view).OfType<TextBox>().Any(t => t.Header as string == "Notes"));
+            if (Field("Name").Text != "Amiga José ☕" || Field("Email").Text != "amiga@example.com")
+                throw new InvalidOperationException("Adding another detail must preserve the fields already entered.");
+            Field("Notes").Text = "Dato original 雪";
+            Field("Label (optional)").Text = "Personal";
+            await InvokeAsync(FindButton(view, "Add contact"));
             await WaitForUpdateUiAsync(() => !view.IsBusy);
-            if (_services.Contacts.Book.People.Length != 1 || view.Preview is not null)
-                throw new InvalidOperationException("Import must save only the selected records.");
-            view.BeginPreview(new(source, contacts)); view.Refresh(); await Task.Delay(60);
-            await InvokeAsync(FindButton(view, "Import selected contacts")); await WaitForUpdateUiAsync(() => !view.IsBusy);
-            if (_services.Contacts.Book.People.Length != 2)
-                throw new InvalidOperationException("Importing again must update existing records without duplicates.");
-            File.AppendAllText(log, "PASS: selected contact import and repeat import\n");
-            var google = new ContactSource(ContactBook.NewId(), "google", "Google · synthetic@example.com", "synthetic@example.com", false);
-            await _services.Contacts.ChangeAsync(b => b.Import(google, [Candidate("people/amiga", "Amiga from Google", "amiga@example.com")]));
-            view.SelectDuplicates(); await Task.Delay(60);
-            File.AppendAllText(log, "CHECK: duplicate suggestions displayed\n");
-            await InvokeAsync(FindButton(view, "Review suggestion"));
-            File.AppendAllText(log, "CHECK: comparison displayed\n");
-            if (!Descendants(view).OfType<TextBlock>().Any(t => t.Text == "Amiga José ☕") ||
-                !Descendants(view).OfType<TextBlock>().Any(t => t.Text == "Amiga from Google"))
-                throw new InvalidOperationException("Duplicate review must show both original people before merging.");
-            await InvokeAsync(FindButton(view, "Confirm merge")); await WaitForUpdateUiAsync(() => !view.IsBusy);
-            if (_services.Contacts.Book.People.Length != 2 || _services.Contacts.Book.Records.Length != 3)
-                throw new InvalidOperationException("Confirm merge must group people without deleting records.");
-            var merged = _services.Contacts.Book.People.Single(p => p.RecordIds.Length == 2);
-            view.SelectPerson(merged.Id); await Task.Delay(60);
-            await InvokeAsync(FindButton(view, "Undo last merge")); await WaitForUpdateUiAsync(() => !view.IsBusy);
-            if (_services.Contacts.Book.People.Length != 3) throw new InvalidOperationException("Undo must restore the original groupings.");
-            view.SelectDuplicates(); await Task.Delay(60);
-            await InvokeAsync(FindButton(view, "Review suggestion"));
-            await InvokeAsync(FindButton(view, "Keep separate")); await WaitForUpdateUiAsync(() => !view.IsBusy);
-            if (_services.Contacts.Book.Suggestions().Length != 0) throw new InvalidOperationException("Keep separate must persist the rejection.");
-
-            // Manual merge must work even when the records have no matching key.
-            var first = _services.Contacts.Book.People.First();
-            view.SelectPerson(first.Id); await Task.Delay(60);
-            var mergeChoice = Descendants(view).OfType<ComboBox>().Single(c => c.Header as string == "Merge with");
-            mergeChoice.SelectedIndex = 0;
-            await InvokeAsync(FindButton(view, "Review merge"));
-            await InvokeAsync(FindButton(view, "Confirm merge")); await WaitForUpdateUiAsync(() => !view.IsBusy);
-            if (_services.Contacts.Book.People.Length != 2) throw new InvalidOperationException("Manual merge must require and honor explicit review.");
-            view.SelectPerson(first.Id); await Task.Delay(60);
-            await InvokeAsync(FindButton(view, "Undo last merge")); await WaitForUpdateUiAsync(() => !view.IsBusy);
-            _activeDialog.Hide(); await showing; showing = null;
-            if (fake.Reads != 0 || Composer.Text != keptDraft || _destination != destination)
-                throw new InvalidOperationException("Settings must preserve the draft and destination without implicit provider reads.");
-            FacebookContactSearch.Text = "  AMIGA@EXAMPLE.COM  ";
-            await WaitForUpdateUiAsync(() => FacebookAvatars.Children.Count == 2);
-            if (FacebookAvatars.Children.Count != 2) throw new InvalidOperationException("Contact search must include email addresses.");
-            FacebookContactSearch.Text = "Jose";
-            await WaitForUpdateUiAsync(() => FacebookAvatars.Children.Count == 1);
-            if (FacebookAvatars.Children.Count != 1) throw new InvalidOperationException("Search must ignore accents without translating names.");
-            Uri? openedDraft = null;
-            _launchBrowser = uri => { openedDraft = uri; return Task.FromResult(true); };
-            var contactCard = (Button)FacebookAvatars.Children[0];
-            await InvokeAsync(contactCard);
-            if (ContactProfile.IsOpen || Composer.Text != "" || !IsEmailContactDestination(_destination) ||
-                openedDraft is not null || ComposerHint.Text != "Email Amiga José ☕…" || SendButton.Content as string != "Draft email")
-                throw new InvalidOperationException("A single email channel must select its own HABITAT editor without opening Gmail or copying another destination's draft.");
-            SelectDestination(destination);
-            if (Composer.Text != keptDraft) throw new InvalidOperationException("The previous destination's draft must remain intact after selecting an email contact.");
-            SetFacebookOpen(true); await WaitForUpdateUiAsync(() => !_facebookBusy);
-            FacebookContactSearch.Text = "Jose";
-            await WaitForUpdateUiAsync(() => FacebookAvatars.Children.Count == 1);
-            contactCard = (Button)FacebookAvatars.Children[0];
-            if (contactCard.ContextFlyout is not MenuFlyout menu || menu.Items.OfType<MenuFlyoutItem>().Single().Text != "Contact details")
-                throw new InvalidOperationException("Contact details must remain available as an explicit secondary action.");
-            ShowContactProfile((string)contactCard.Tag, contactCard);
-            if (!ContactProfile.IsOpen) throw new InvalidOperationException("The explicit details action must open the contact profile.");
-            var profile = (ScrollViewer)ContactProfile.Content;
-            await WaitForUpdateUiAsync(() => Descendants(profile).OfType<Button>().Any());
-            if (!Descendants(profile).OfType<Button>().Any(b => (b.Content as string)?.StartsWith("Write email", StringComparison.Ordinal) == true) ||
-                Descendants(profile).OfType<Button>().Any(b => (b.Content as string)?.Contains("iMessage", StringComparison.Ordinal) == true))
-                throw new InvalidOperationException("Profiles must expose supported channels without inventing iMessage availability.");
-            ContactProfile.Hide();
-            SetFacebookOpen(true); await WaitForUpdateUiAsync(() => !_facebookBusy);
-            _launchBrowser = _ => throw new InvalidOperationException("Unexpected browser launch in contact checks.");
-            var extra = Enumerable.Range(0, 150).Select(i => Candidate("extra-" + i, "Paged person " + i.ToString("D3"), "page" + i + "@example.com")).ToArray();
-            await _services.Contacts.ChangeAsync(b => b.Import(source, extra));
-            FacebookContactSearch.Text = "";
-            await WaitForUpdateUiAsync(() => FacebookAvatars.Children.Count == 100);
-            if (ContactsLoadMore.Visibility != Visibility.Visible) throw new InvalidOperationException("Long agendas must offer bounded pages.");
-            await InvokeAsync(ContactsLoadMore);
-            await WaitForUpdateUiAsync(() => FacebookAvatars.Children.Count == 153);
-            if (FacebookAvatars.Children.Count != 153) throw new InvalidOperationException($"Load more must reveal remaining contacts. Cards={FacebookAvatars.Children.Count}, people={_services.Contacts.Book.ListedPeople.Count()}, limit={_contactVisibleLimit}, open={_facebookPanelOpen}.");
-            FacebookContactSearch.Text = "page149@example.com";
-            await WaitForUpdateUiAsync(() => FacebookAvatars.Children.Count == 1);
-            if (Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(FacebookAvatars.Children[0]) != "Paged person 149")
-                throw new InvalidOperationException("Search must find contacts beyond the first page.");
-
+            if (_services.Contacts.Book.People.Length != 1)
+                throw new InvalidOperationException("Manual creation failed: " + string.Join(" | ", Descendants(view).OfType<TextBlock>().Select(t => t.Text)) + " Session: " + _services.Contacts.Error);
+            var personId = _services.Contacts.Book.People.Single().Id;
+            var recordId = _services.Contacts.Book.Records.Single().Id;
+            if (!_services.Contacts.Book.Records.Single().Current.Values.Contains(new("note", "Dato original 雪", "Personal")))
+                throw new InvalidOperationException("Custom details and their labels must be saved with the contact.");
+            await InvokeAsync(FindButton(view, "Add contact"));
+            await WaitForUpdateUiAsync(() => Descendants(view).OfType<TextBox>().Any(t => t.Header as string == "Email"));
+            Field("Name").Text = "Duplicate attempt";
+            Field("Email").Text = "AMIGA@example.com";
+            await InvokeAsync(FindButton(view, "Add contact"));
+            await WaitForUpdateUiAsync(() => !view.IsBusy);
+            if (_services.Contacts.Book.People.Length != 1 || _services.Contacts.Error is not null || Field("Name").Text != "Duplicate attempt" ||
+                !Descendants(view).OfType<TextBlock>().Any(t => t.Text.Contains("already belong")))
+                throw new InvalidOperationException("Duplicate addresses must be rejected without losing entered data or locking the address book.");
+            await InvokeAsync(FindButton(view, "Cancel"));
+            view.SelectPerson(personId); await Task.Delay(60);
+            Field("Name").Text = "Amiga José editada ☕";
+            Field("Phone").Text = "+34 600 111 222";
+            await InvokeAsync(FindButton(view, "Save contact")); await WaitForUpdateUiAsync(() => !view.IsBusy);
+            if (_services.Contacts.Book.People.Single().Id != personId || _services.Contacts.Book.Records.Single().Id != recordId ||
+                ContactChannels.For(_services.Contacts.Book, _services.Contacts.Book.People.Single()).Length != 2)
+                throw new InvalidOperationException("Editing must add channels to the same person rather than create another card.");
+            _activeDialog.Hide(); await WaitForUpdateUiAsync(() => !_appearanceDialogOpen);
+            if (Composer.Text != kept || _destination != destination || fake.Reads != 0)
+                throw new InvalidOperationException("Adding and editing contacts must preserve the current editor without provider reads.");
+            FacebookContactSearch.Text = "JOSE"; await WaitForUpdateUiAsync(() => FacebookAvatars.Children.Count == 1);
+            await InvokeAsync((Button)FacebookAvatars.Children.Single());
+            if (!IsPhoneContactDestination(_destination) || Composer.Text.Length != 0 || ContactMessageName.Text != "Amiga José editada ☕" ||
+                ComposerHint.Text != "Message Amiga José editada ☕…" || SendButton.Content as string != "Send" ||
+                _destinationSections[_destination].HasContent)
+                throw new InvalidOperationException("A manual contact must open its own initial destination with a centered composer and no result content.");
+            var contactDestination = _destination;
+            Composer.Text = "Manual contact draft";
             showing = ShowPreferencesAsync("Contacts");
             await WaitForUpdateUiAsync(() => _activeDialog?.Content is PreferencesView);
             view = ((PreferencesView)_activeDialog!.Content).Contacts!;
-            await WaitForUpdateUiAsync(() => Descendants(view).OfType<Button>().Any(b => b.Content as string == "Other contact options"));
-            await InvokeAsync(FindButton(view, "Other contact options"));
-            await WaitForUpdateUiAsync(() => Descendants(view).OfType<TextBox>().Any(t => t.Header as string == "Facebook account name"));
-            var account = Descendants(view).OfType<TextBox>().Single(t => t.Header as string == "Facebook account name");
-            account.Text = "Synthetic cancelled source";
-            await Task.Delay(40);
-            fake.Pending = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            await InvokeAsync(FindButton(view, "Preview Facebook contacts"));
-            if (!view.IsBusy || fake.Reads != 1) throw new InvalidOperationException($"An explicit Facebook preview must use a cancellable source read. Busy={view.IsBusy}, reads={fake.Reads}.");
+            view.SelectPerson(personId); await Task.Delay(60);
+            Field("Name").Text = "Renamed destination";
+            await InvokeAsync(FindButton(view, "Save contact")); await WaitForUpdateUiAsync(() => !view.IsBusy);
+            if (_destination != contactDestination || Composer.Text != "Manual contact draft" || ContactMessageName.Text != "Renamed destination")
+                throw new InvalidOperationException("Renaming must update the selected destination while retaining its draft and identity.");
+            view.SelectPerson(personId); await Task.Delay(60);
+            await InvokeAsync(FindButton(view, "Remove contact"));
+            if (_services.Contacts.Book.People.Length != 1) throw new InvalidOperationException("Removal must await its explicit confirmation.");
+            await InvokeAsync(FindButton(view, "Keep contact"));
+            await InvokeAsync(FindButton(view, "Remove contact"));
+            await InvokeAsync(FindButton(view, "Confirm remove")); await WaitForUpdateUiAsync(() => !view.IsBusy);
+            if (_services.Contacts.Book.People.Length != 0 || IsContactDestination(_destination))
+                throw new InvalidOperationException("Removing the selected person must remove the card and its actionable destination.");
             _activeDialog.Hide(); await showing; showing = null;
-            if (!fake.Canceled || _services.Contacts.Book.Sources.Any(s => s.Account == "Synthetic cancelled source"))
-                throw new InvalidOperationException("Closing settings must cancel its pending import without adding a source or contacts.");
-            File.AppendAllText(log, "PASS: Contacts settings starts empty; selected import, idempotent reload, provenance, side-by-side duplicate review, manual merge, undo, remembered rejection, email channels, original names, full-book search, paging and source cancellation. No real provider reads or messages.\n");
+            await _services.Contacts.LoadAsync();
+            SetFacebookOpen(true); await WaitForUpdateUiAsync(() => !_facebookBusy);
+            if (FacebookAvatars.Children.Count != 0 || fake.Reads != 0) throw new InvalidOperationException("The empty manual agenda must persist on reload.");
+            File.AppendAllText(log, "PASS: Add contact shortcut; manual create/edit; duplicate rejection with fields preserved; one person and multiple channels; accent-insensitive search; initial destination layout; rename preserves identity/draft; removal confirmation and restart. No real providers or messages.\n");
         }
         finally
         {
             _activeDialog?.Hide(); if (showing is not null) await showing;
-            ContactProfile.Hide(); SetFacebookOpen(false);
+            SetFacebookOpen(false);
             await _services.Contacts.ChangeAsync(_ => original);
-            _services.Facebook = service; _services.FacebookPhoto = photo; _launchBrowser = launch;
+            _services.Facebook = service; _launchBrowser = launch;
             SelectDestination(destination); Composer.Text = draft;
+            foreach (var id in _destinationSections.Keys.Where(id => !previousSections.Contains(id)).ToArray())
+            {
+                var section = _destinationSections[id]; await section.StopAsync(); section.Dispose(); _destinationSections.Remove(id);
+                _emailRecipients.Remove(id); _phoneRecipients.Remove(id); _facebookRecipients.Remove(id); _facebookSendRecipients.Remove(id);
+                _contactChannelSelections.Remove(id);
+            }
         }
     }
 }

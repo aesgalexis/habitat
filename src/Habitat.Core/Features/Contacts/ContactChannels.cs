@@ -7,15 +7,16 @@ namespace Habitat.Features.Contacts;
 internal sealed record ContactChannel(string Kind, string Address, string Label, string SourceId);
 internal static class ContactChannels
 {
-    internal static ContactChannel[] For(ContactBook book, ContactPerson person) => book.For(person)
+    internal static ContactChannel[] For(ContactBook book, ContactPerson person) => (person.Hidden ? [] : book.For(person))
         .OrderByDescending(record => book.Source(record).Connected).ThenByDescending(record => record.Current.ObservedAt)
         .SelectMany(record => record.Current.Values.Select(value => (record, value)))
-        .Where(x => x.value.Kind == "email" && IsEmail(x.value.Value) && !IsNoReply(x.value.Value) ||
-            x.value.Kind == "messenger" && FacebookContactsService.SafeLink(x.value.Value))
+        .Where(x => x.value.Kind == "email" && IsEmail(x.value.Value) && (!IsNoReply(x.value.Value) || book.Source(x.record).Kind == "local") ||
+            x.value.Kind == "messenger" && FacebookContactsService.SafeLink(x.value.Value) ||
+            x.value.Kind == "phone" && ContactBook.NormalizePhone(x.value.Value).Length > 0)
         .Select(x => new ContactChannel(x.value.Kind, x.value.Value,
-            x.value.Kind == "email" ? "Write email" : "Message in Messenger", x.record.SourceId))
+            x.value.Kind switch { "email" => "Write email", "phone" => "Message with Phone Link", _ => "Message in Messenger" }, x.record.SourceId))
         .DistinctBy(c => (c.Kind, c.Kind == "messenger" ? ContactBook.FacebookProfileIdentity(c.Address) ?? c.Address :
-            ContactBook.NormalizeEmail(c.Address))).ToArray();
+            c.Kind == "phone" ? ContactBook.NormalizePhone(c.Address) : ContactBook.NormalizeEmail(c.Address))).ToArray();
 
     internal static bool IsEmail(string value) => value.Length <= 320 && !value.Any(char.IsControl) &&
         MailAddress.TryCreate(value, out var address) && address.Address.Equals(value, StringComparison.OrdinalIgnoreCase);

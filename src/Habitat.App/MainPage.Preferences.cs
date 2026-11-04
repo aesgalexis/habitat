@@ -16,6 +16,7 @@ public sealed partial class MainPage
         var contacts = CreateContactsPreferences();
         _contactsPreferences = contacts;
         await contacts.InitializeAsync();
+        if (_newContact) { contacts.NewContact(); _newContact = false; }
         if (_contactToManage is { } personId) { contacts.SelectPerson(personId); _contactToManage = null; }
         if (_reviewContactDuplicates) { contacts.SelectDuplicates(); _reviewContactDuplicates = false; }
         var view = new PreferencesView(_preferences, _services.DiscoverWindowsAppsAsync,

@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "HABITAT · browser bridge",
-  "version": "0.10.8",
+  "version": "0.10.9",
   "minimum_chrome_version": "120",
-  "description": "Connect HABITAT to ChatGPT, search and Translate, with optional automatic browser contacts and explicit Messenger submissions.",
+  "description": "Connect HABITAT to ChatGPT, search and Translate, with explicit Messenger submissions for contacts you create in HABITAT.",
   "permissions": [
     "storage",
     "tabs",

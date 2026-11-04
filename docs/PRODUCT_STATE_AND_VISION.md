@@ -8,6 +8,10 @@ Habitat is a lightweight Windows desktop surface for conversations with ChatGPT.
 
 The principle is simple: **ChatGPT remains the conversation system of record; Habitat makes using it on Windows feel more natural.** Habitat is not intended to become a competing assistant, a separate model client, or a heavy control dashboard.
 
+## Contact destinations — 28 October 2026
+
+Contacts are people explicitly entered by the HABITAT user. A person is one destination with their phone numbers, email addresses and other details attached. The new address book begins empty; provider discovery, address book imports and automatic browser additions are outside the current contact flow. Existing imported data is retained separately. See [contacts](CONTACTS.md) for the implemented behavior and migration.
+
 ## Current implementation and historical feedback
 
 Use [PROJECT_STATUS.md](PROJECT_STATUS.md) for the inspected source state and [USER_GUIDE.md](USER_GUIDE.md) for current usage. Release metadata, local implementation and published assets are distinct; this page does not certify a release or a test run.

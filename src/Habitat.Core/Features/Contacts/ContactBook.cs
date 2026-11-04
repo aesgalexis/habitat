@@ -11,13 +11,14 @@ internal sealed record ContactRecord(string Id, string SourceId, string RemoteId
     ContactSnapshot[] History, bool Missing = false);
 internal sealed record ContactSource(string Id, string Kind, string Label, string Account, bool Connected,
     DateTimeOffset? LastImported = null);
-internal sealed record ContactPerson(string Id, string[] RecordIds, string? PreferredRecordId = null);
+internal sealed record ContactPerson(string Id, string[] RecordIds, string? PreferredRecordId = null,
+    bool Hidden = false, bool BrowserReviewed = false);
 internal sealed record ContactMerge(string Id, string PersonId, ContactPerson[] Before, DateTimeOffset At);
 internal sealed record ContactCandidate(string RemoteId, ContactValue[] Values, string Raw);
 internal sealed record ContactSuggestion(string LeftId, string RightId, string Reason);
 
 // A person is a local grouping of source records. Linking never edits a provider.
-internal sealed record ContactBook(int Schema, long Revision, ContactSource[] Sources, ContactRecord[] Records,
+internal sealed partial record ContactBook(int Schema, long Revision, ContactSource[] Sources, ContactRecord[] Records,
     ContactPerson[] People, ContactMerge[] Merges, string[] DismissedPairs)
 {
     internal static ContactBook Empty => new(1, 0, [], [], [], [], []);
@@ -25,17 +26,19 @@ internal sealed record ContactBook(int Schema, long Revision, ContactSource[] So
     private static readonly ConditionalWeakTable<ContactBook, Index> Indices = new();
     private Index Lookup => Indices.GetValue(this, b => new(b.Records.ToDictionary(r => r.Id), b.Sources.ToDictionary(s => s.Id)));
     internal ContactRecord[] For(ContactPerson person) => person.RecordIds.Select(id => Lookup.Records[id]).ToArray();
-    internal IEnumerable<ContactPerson> ListedPeople => People.Where(person => !For(person).All(record =>
+    internal IEnumerable<ContactPerson> ListedPeople => People.Where(person => !person.Hidden && !For(person).All(record =>
     {
+        if (Source(record).Kind == "local") return false;
         var emails = record.Current.Values.Where(v => v.Kind == "email").ToArray();
         return emails.Length > 0 && emails.All(v => ContactChannels.IsNoReply(v.Value)) &&
             !record.Current.Values.Any(v => v.Kind is "phone" or "messenger" or "profile");
     }));
     internal string Name(ContactPerson person)
     {
-        var records = For(person).OrderByDescending(r => r.Id == person.PreferredRecordId).ToArray();
+        var records = For(person).OrderByDescending(r => r.Id == person.PreferredRecordId)
+            .ThenBy(r => Source(r).Kind == "google-browser").ToArray();
         return records.SelectMany(r => r.Current.Values).FirstOrDefault(v => v.Kind == "name")?.Value
-            ?? records.SelectMany(r => r.Current.Values).FirstOrDefault(v => v.Kind is "email" or "phone")?.Value
+            ?? records.SelectMany(r => r.Current.Values).FirstOrDefault(v => v.Kind is "email" or "phone" or "organization" or "messenger" or "other")?.Value
             ?? "Unnamed contact";
     }
     internal ContactSource Source(ContactRecord record) => Lookup.Sources[record.SourceId];

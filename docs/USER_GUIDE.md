@@ -92,3 +92,7 @@ Appearance also includes the [wallpaper library](WALLPAPERS.md): import images o
 **Ctrl+H** focuses HABITAT and can import selected text without sending it. Configure it in **Preferences… → Shortcuts**. Replacing an existing draft requires confirmation. If selection or clipboard backup cannot be verified, the shortcut only focuses HABITAT. See [GLOBAL_SHORTCUT.md](GLOBAL_SHORTCUT.md).
 
 Updates preserve drafts, saved tasks, preferences and credentials. Save transient results you want to keep. [UPDATES.md](UPDATES.md) is the reference for detection, confirmation and recovery. For connection failures or uncertain sends, use [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+
+## Manual contact destinations (0.18.0)
+
+Open **Contacts → Add contact** and enter a name, phone, email or other detail. The new agenda starts empty. Each person has one card with their channels attached. **Manage contacts → Edit contact** updates the same destination; duplicate emails, phones and Messenger profiles are rejected. Click a card to write in its own editor. Contacts without a sending channel are still selectable. Automatic sources and imports are disabled; earlier imported data is preserved separately. See [contacts](CONTACTS.md).
