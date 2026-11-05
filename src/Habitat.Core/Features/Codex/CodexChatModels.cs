@@ -70,10 +70,13 @@ internal interface ICodexHistoryReader
     Task<CodexChatHistory> ReadAsync(CodexChatTarget target, CancellationToken token);
 }
 
-internal sealed record CodexVisibleChat(CodexComposer Composer, IReadOnlyList<string> SelectedTitles, bool IsEmpty, bool CanAccept);
+internal sealed record CodexVisibleChat(CodexComposer Composer, IReadOnlyList<string> SelectedTitles, bool IsEmpty, bool CanAccept,
+    bool IsForeground = false);
 internal interface ICodexChatDesktop
 {
     Task<CodexVisibleChat?> ReadVisibleAsync(CancellationToken token);
+    async Task<IReadOnlyList<CodexVisibleChat>> ReadChatsAsync(CancellationToken token) =>
+        await ReadVisibleAsync(token) is { } chat ? [chat] : [];
     Task<CodexDeliveryResult> SubmitVisibleAsync(CodexVisibleChat expected, string text, CancellationToken token);
     Task<bool> OpenChatAsync(CodexChatTarget? target, CancellationToken token);
     void ReturnFocus(nint ownerWindow);

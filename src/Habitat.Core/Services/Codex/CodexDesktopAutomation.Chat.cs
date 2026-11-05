@@ -26,27 +26,57 @@ internal sealed partial class CodexDesktopAutomation
         {
             var windows = FindWindows();
             if (windows.Length == 0) return null;
-            if (windows.Length != 1) throw new InvalidDataException("Activate the Codex window you want to use, then return to HABITAT.");
+            if (windows.Length != 1) return null; // Existing-chat sends resolve all windows by their chat identity.
             _lastChatWindow = windows[0];
         }
         using var automation = new Automation();
-        var state = ReadWindow(automation, _lastChatWindow);
+        return ReadChatWindow(automation, _lastChatWindow, foreground);
+    }, token);
+
+    public async Task<IReadOnlyList<CodexVisibleChat>> ReadChatsAsync(CancellationToken token) => await Task.Run<IReadOnlyList<CodexVisibleChat>>(() =>
+    {
+        token.ThrowIfCancellationRequested();
+        var foreground = GetForegroundWindow();
+        using var automation = new Automation();
+        var chats = new List<CodexVisibleChat>();
+        foreach (var window in FindWindows())
+        {
+            token.ThrowIfCancellationRequested();
+            try { if (ReadChatWindow(automation, window, foreground) is { } chat) chats.Add(chat); }
+            catch (COMException exception) when (exception.HResult == unchecked((int)0x80040201))
+            { trace?.Invoke("Codex window controls are changing; waiting before selecting its editor."); }
+        }
+        return chats;
+    }, token).WaitAsync(token);
+
+    private CodexVisibleChat? ReadChatWindow(Automation automation, nint window, nint foreground)
+    {
+        var state = ReadWindow(automation, window, trace);
         // Codex home/Work views may have no chat editor. They are not an
         // existing conversation and do not prevent starting a separate chat.
         if (state.Composers.Count == 0) return null;
-        if (state.Composers.Count != 1) throw new InvalidDataException("Open a chat in Codex, then reload.");
+        if (state.Composers.Count != 1) throw new InvalidDataException("Open one unambiguous chat editor in the Codex window, then reload.");
         var composer = state.Composers[0];
-        var root = automation.Root(_lastChatWindow);
-        var editor = automation.Elements(root, 30003, 50004).Single(element => Id(element, _lastChatWindow) == composer.EditorId);
+        var root = automation.Root(window);
+        var editor = automation.Elements(root, 30003, 50004).Single(element => Id(element, window) == composer.EditorId);
         return new CodexVisibleChat(composer, SelectedTitles(automation, root), IsEmptyEditor(editor, composer.Text),
             !state.Blocked && editor.GetCurrentPropertyValue(30010) is true &&
-            editor.GetCurrentPropertyValue(30043) is true && editor.GetCurrentPropertyValue(30046) is false);
+            editor.GetCurrentPropertyValue(30043) is true && editor.GetCurrentPropertyValue(30046) is false, window == foreground);
+    }
+
+    private Task<CodexVisibleChat?> ReadPinnedAsync(nint window, CancellationToken token) => Task.Run(() =>
+    {
+        token.ThrowIfCancellationRequested();
+        if (!IsCodexWindow(window)) return null;
+        using var automation = new Automation();
+        return ReadChatWindow(automation, window, GetForegroundWindow());
     }, token);
 
     private static string[] SelectedTitles(Automation automation, IElement root) =>
-        new[] { 50000, 50005 }.SelectMany(type => automation.Elements(root, 30003, type))
+        new[] { 50000, 50005, 50007 }.SelectMany(type => automation.Elements(root, 30003, type))
             .Where(element => element.GetCurrentPropertyValue(30022) is not true &&
-                element.GetCurrentPropertyValue(30102) is string aria && aria.Split(';').Contains("current=page"))
+                (element.GetCurrentPropertyValue(30102) is string aria && aria.Split(';').Any(value => value.Trim() == "current=page") ||
+                 element.GetCurrentPropertyValue(30003) is 50007 && element.GetCurrentPropertyValue(30079) is true))
             .Select(element => element.GetCurrentPropertyValue(30005) as string ?? "")
             .Where(title => title.Length > 0).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
 
@@ -58,25 +88,30 @@ internal sealed partial class CodexDesktopAutomation
         var cancellation = timeout.Token;
         try
         {
-            var current = await ReadVisibleAsync(cancellation).WaitAsync(cancellation);
+            CodexDeliveryResult Reject(string stage)
+            {
+                trace?.Invoke($"Codex visible-chat delivery blocked: {stage}; no submission invoked.");
+                return CodexDeliveryResult.NotSent;
+            }
+            var current = await ReadPinnedAsync(expected.Composer.Window, cancellation).WaitAsync(cancellation);
             if (current is null || current.Composer.Window != expected.Composer.Window ||
                 current.Composer.EditorId != expected.Composer.EditorId || !current.CanAccept ||
                 !current.SelectedTitles.SequenceEqual(expected.SelectedTitles) ||
-                !CodexDelivery.SameText(current.Composer.Text, expected.Composer.Text)) return CodexDeliveryResult.NotSent;
+                !CodexDelivery.SameText(current.Composer.Text, expected.Composer.Text)) return Reject("editor-changed");
             if (!await SetTextCoreAsync(current.Composer, text, cancellation, allowEmpty: true, expected.SelectedTitles).WaitAsync(cancellation))
-                return CodexDeliveryResult.NotSent;
+                return Reject("literal-transfer");
             for (var attempt = 0; attempt < 40; attempt++)
             {
                 cancellation.ThrowIfCancellationRequested();
-                current = await ReadVisibleAsync(cancellation).WaitAsync(cancellation);
+                current = await ReadPinnedAsync(expected.Composer.Window, cancellation).WaitAsync(cancellation);
                 if (current is null || current.Composer.Window != expected.Composer.Window ||
                     current.Composer.EditorId != expected.Composer.EditorId || !current.SelectedTitles.SequenceEqual(expected.SelectedTitles))
-                    return CodexDeliveryResult.NotSent;
+                    return Reject("selection-changed");
                 if (current.Composer.CanSend && CodexDelivery.SameText(current.Composer.Text, text))
                 {
                     invoked = true;
                     if (!await PressEnterCoreAsync(current.Composer, cancellation, expected.SelectedTitles).WaitAsync(cancellation))
-                        return CodexDeliveryResult.NotSent;
+                        return Reject("send-control-or-focus-unavailable");
                     _submittedWindow = current.Composer.Window;
                     timeout.CancelAfter(TimeSpan.FromSeconds(8));
                     for (var confirmation = 0; confirmation < 40; confirmation++)
@@ -92,7 +127,7 @@ internal sealed partial class CodexDesktopAutomation
                 }
                 await Task.Delay(100, cancellation);
             }
-            return CodexDeliveryResult.NotSent;
+            return Reject("send-control-not-ready");
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         { return invoked ? CodexDeliveryResult.Unconfirmed : CodexDeliveryResult.Cancelled; }

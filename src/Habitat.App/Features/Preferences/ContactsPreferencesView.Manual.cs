@@ -7,7 +7,7 @@ namespace Habitat.Features.Preferences;
 
 internal sealed partial class ContactsPreferencesView
 {
-    private bool _contactEditorOpen, _confirmContactRemoval;
+    private bool _contactEditorOpen, _confirmContactRemoval, _driveAdvancedSetup;
     private string? _editingContact;
     private readonly List<ContactValue> _contactEditValues = new();
     private readonly List<(TextBox Input, ComboBox? Kind, TextBox? Label)> _contactFormRows = new();
@@ -107,10 +107,22 @@ internal sealed partial class ContactsPreferencesView
 
             if (_pickDriveClient is { } pickClient)
             {
-                var advanced = new StackPanel { Spacing = 8 };
+                var advanced = new StackPanel { Spacing = 8,
+                    Visibility = _driveAdvancedSetup ? Visibility.Visible : Visibility.Collapsed };
                 advanced.Children.Add(Text("Use the same custom Google OAuth client if you already sync contacts with one."));
                 Action(advanced, "Choose custom OAuth client…", () => _drive.ConnectAsync(_stop.Token, pickClient), !_drive.Busy);
-                panel.Children.Add(new Expander { Header = "Advanced setup", Content = advanced });
+                // Expander's default template crashes in the bundled WinUI runtime.
+                // Keep this section on the same basic-control pattern as Tasks.
+                var toggle = new Button { Content = _driveAdvancedSetup ? "Hide advanced setup" : "Advanced setup" };
+                AutomationProperties.SetName(toggle, (string)toggle.Content);
+                toggle.Click += (_, _) =>
+                {
+                    _driveAdvancedSetup = !_driveAdvancedSetup;
+                    advanced.Visibility = _driveAdvancedSetup ? Visibility.Visible : Visibility.Collapsed;
+                    toggle.Content = _driveAdvancedSetup ? "Hide advanced setup" : "Advanced setup";
+                    AutomationProperties.SetName(toggle, (string)toggle.Content);
+                };
+                panel.Children.Add(toggle); panel.Children.Add(advanced);
             }
         }
         else

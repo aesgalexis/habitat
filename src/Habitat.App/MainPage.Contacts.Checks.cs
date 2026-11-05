@@ -10,6 +10,7 @@ public sealed partial class MainPage
 {
     private async Task CheckContactsSettingsUiAsync(string log)
     {
+        await CheckContactDrivePreferencesUiAsync(log);
         await _services.Contacts.LoadAsync();
         var original = _services.Contacts.Book;
         var service = _services.Facebook;

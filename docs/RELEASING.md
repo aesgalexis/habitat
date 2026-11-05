@@ -21,6 +21,8 @@ La fuente 0.18.0 incorpora un cambio de modelo: solo los contactos creados por e
 
 ## Instalar una publicación
 
+La versión **0.18.2** corrige el cierre de Contacts con Drive desconectado y la entrega programada a Codex con varias ventanas. Incorpora invocación del botón Send, motivos concretos de revisión, esperas seguras anteriores a la transferencia y diagnóstico local limitado. No reactiva programaciones antiguas con resultado incierto ni modifica los datos de contactos.
+
 La versión **0.11.0** incorpora el aviso automático de versiones nuevas mediante **Update HABITAT**, los destinos personalizados y la gestión de aplicaciones de Windows.
 
 La versión **0.14.0** añade Mercados, la interfaz en inglés/español, fondos personalizables y cinco ilustraciones. También corrige el cierre causado por márgenes negativos de la barra de ventana al minimizar/restaurar. Incluye los cambios de 0.12.0 a 0.13.1 que aún no tenían paquetes publicados en GitHub.

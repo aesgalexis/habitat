@@ -11,7 +11,6 @@ namespace Habitat.Services;
 internal sealed partial class CodexDesktopAutomation(string packageFamily, Func<Uri, Task<bool>> openNewChat,
     string? executablePath = null, Action<string>? trace = null) : ICodexDesktop, Habitat.Features.Codex.ICodexChatDesktop
 {
-    private nint[]? _windows;
     public Task<bool> OpenNewChatAsync(Uri uri, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -21,10 +20,10 @@ internal sealed partial class CodexDesktopAutomation(string packageFamily, Func<
     public Task<IReadOnlyList<CodexComposer>> ReadComposersAsync(CancellationToken cancellationToken) => Task.Run<IReadOnlyList<CodexComposer>>(() =>
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var window = GetForegroundWindow();
-        var windows = IsCodexWindow(window) ? [window] :
-            (_windows ??= FindWindows()).Where(IsCodexWindow).ToArray();
-        if (windows.Length == 0) { _windows = null; trace?.Invoke("Waiting for the installed Codex window."); return []; }
+        // A new-chat marker can land in another Codex window without taking
+        // foreground focus. Its exact marker, not window order, identifies it.
+        var windows = FindWindows();
+        if (windows.Length == 0) { trace?.Invoke("Waiting for the installed Codex window."); return []; }
         using var automation = new Automation();
         return windows.SelectMany(handle => ReadWindow(automation, handle, trace).Composers).ToArray();
     }, cancellationToken);
@@ -66,12 +65,6 @@ internal sealed partial class CodexDesktopAutomation(string packageFamily, Func<
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!IsCodexWindow(composer.Window)) return false;
-        if (IsIconic(composer.Window)) ShowWindowAsync(composer.Window, 9); // SW_RESTORE
-        if (GetForegroundWindow() != composer.Window && !SetForegroundWindow(composer.Window))
-        {
-            trace?.Invoke("Codex could not take foreground focus; Enter was not sent.");
-            return false;
-        }
         using var automation = new Automation();
         var state = ReadWindow(automation, composer.Window, trace);
         if (state.Blocked) return false;
@@ -81,10 +74,32 @@ internal sealed partial class CodexDesktopAutomation(string packageFamily, Func<
         if (current is null) return false;
         var root = automation.Root(composer.Window);
         if (selection is not null && !SelectedTitles(automation, root).SequenceEqual(selection)) return false;
+        var send = automation.Elements(root, 30003, 50000).SingleOrDefault(element => Id(element, composer.Window) == composer.SendId);
+        if (send?.GetCurrentPropertyValue(30031) is true) // IsInvokePatternAvailable
+        {
+            var invoke = (IInvoke)automation.Keep(send.GetCurrentPattern(10000));
+            cancellationToken.ThrowIfCancellationRequested();
+            // Invoke the verified Send control once. Background schedules do
+            // not depend on Windows granting foreground keyboard focus.
+            invoke.Invoke();
+            _submittedWindow = composer.Window;
+            trace?.Invoke("Codex Send control invoked; waiting for acknowledgement.");
+            return true;
+        }
+        if (IsIconic(composer.Window)) ShowWindowAsync(composer.Window, 9);
+        if (GetForegroundWindow() != composer.Window && !SetForegroundWindow(composer.Window))
+        {
+            trace?.Invoke("Codex could not take foreground focus; Enter was not sent.");
+            return false;
+        }
         foreach (var editor in automation.Elements(root, 30003, 50004))
         {
             if (Id(editor, composer.Window) != composer.EditorId) continue;
             editor.SetFocus();
+            // Focus can navigate/re-render an Electron window. Recheck the
+            // target and availability immediately before keyboard fallback.
+            if (ReadWindow(automation, composer.Window).Blocked ||
+                selection is not null && !SelectedTitles(automation, automation.Root(composer.Window)).SequenceEqual(selection)) return false;
             var focused = automation.FocusedElement();
             // Keyboard input is allowed only for this verified editor, in the
             // foreground Codex window, with no user-held modifier keys.
@@ -266,6 +281,8 @@ internal sealed partial class CodexDesktopAutomation(string packageFamily, Func<
     private interface IElementArray { int Length { get; } IElement GetElement(int index); }
     [ComImport, Guid("A94CD8B1-0844-4CD6-9D2D-640537AB39E9"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IValue { void SetValue([MarshalAs(UnmanagedType.LPWStr)] string value); }
+    [ComImport, Guid("FB377FBE-8EA6-46D5-9C73-6499642D3059"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IInvoke { void Invoke(); }
     [ComImport, Guid("32EBA289-3583-42C9-9C59-3B6D9A1E9B6A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IText
     {

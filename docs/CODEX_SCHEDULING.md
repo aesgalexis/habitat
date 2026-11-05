@@ -14,6 +14,12 @@ La entrega de una reanudación comprueba que el chat siga sin archivar y que su 
 
 ## Ejecución y gestión
 
+Desde 0.18.2, HABITAT busca el identificador del chat entre todas las ventanas de Codex y mantiene la ventana verificada durante la transferencia y confirmación. Reutiliza el destino ya abierto. Si el mismo chat está abierto en varias ventanas, usa la que esté en primer plano; si ninguna lo está, pide revisión. Un título que coincide con varios chats sigue requiriendo un nombre único.
+
+La entrega invoca una vez el botón **Send** verificado si ofrece ese patrón de accesibilidad, sin necesitar foco de teclado. El proveedor de accesibilidad puede activar su propia ventana; no se garantiza que el envío sea invisible. Si no ofrece ese patrón, se mantiene la alternativa de Enter con comprobaciones de ventana en primer plano, editor, selección, texto y modificadores. Un editor deshabilitado o lector temporalmente indisponible pospone treinta segundos antes de transferir texto. Los borradores y los turnos que han cambiado requieren revisión. La incertidumbre después de intentar enviar no admite reintento automático, aunque hubiera una fecha de reintento anterior.
+
+La cola conserva el motivo concreto de espera o revisión. El archivo local `%LOCALAPPDATA%\HABITAT\codex-delivery.log` registra fases, resultados, recuentos y tipos de error/HRESULT; no incluye instrucciones, títulos ni credenciales. Rota tras 1 MiB y conserva una sola copia anterior. Un fallo de diagnóstico no cambia el resultado del envío. Las programaciones antiguas marcadas para revisión conservan su estado: actualizar no vuelve a enviarlas.
+
 Desde 0.15.5, el calendario muestra el número de mensajes pendientes (hasta **99+**); su tooltip y etiqueta accesible indican el próximo envío, incluida una espera por recuperación de la cuenta. Los enviados, cancelados y revisables no suman al contador. La señal **!** ámbar indica mensajes que requieren revisión o un problema de almacenamiento; se mantiene hasta resolverlo, reprogramar o retirar el registro correspondiente. Estos indicadores se reconstruyen al abrir HABITAT y siguen el idioma elegido.
 
 Guardar muestra una confirmación durante cinco segundos junto al calendario y conserva el foco en el editor. Al abrir el calendario con el editor vacío, la lista de programaciones aparece antes del formulario para facilitar su consulta, edición y cancelación.

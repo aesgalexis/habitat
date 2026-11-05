@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.18.2 — 2026-11-05
+
+- Se corrige el cierre al abrir **Preferences → Contacts** con Google Drive desconectado. **Advanced setup** usa controles básicos, conserva su estado al refrescar y evita la plantilla inestable de `Expander`.
+- Los mensajes programados para Codex verifican el chat por identificador entre todas sus ventanas y conservan esa ventana durante la entrega. Un chat correcto ya abierto se reutiliza; otro chat o borrador en primer plano no cambia el destino.
+- La entrega utiliza el botón **Send** verificado mediante accesibilidad cuando está disponible. El envío en segundo plano deja de depender de que Windows permita activar Codex para pulsar Enter; la alternativa de teclado mantiene sus comprobaciones de foco, identidad y texto exacto.
+- Un editor o lector temporalmente indisponible pospone el intento antes de escribir. Los borradores, destinos ambiguos y turnos que ya cambiaron muestran motivos específicos. Un resultado incierto siempre requiere revisión y nunca se reintenta automáticamente.
+- Diagnósticos locales de fases y resultados en `codex-delivery.log`, con rotación limitada y sin instrucciones, títulos de chats ni credenciales. Pruebas nativas con dos ventanas sintéticas verifican el envío en segundo plano, la protección de borradores y ambos temas de Contacts sin contactar proveedores.
+
 ## 0.18.1 — 2026-11-05
 
 - **Connect Google Drive** abre el inicio de sesión de Google directamente con el cliente de escritorio incluido en el instalador. En el segundo PC basta elegir la misma cuenta y autorizar los archivos de HABITAT.

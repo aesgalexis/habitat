@@ -7,7 +7,15 @@ namespace Habitat.Features.Codex;
 
 internal sealed record CodexScheduleTarget(CodexChatTarget? Target, bool UsageLimited, DateTimeOffset? ResumeAt = null,
     string? InterruptedTurnId = null);
-internal sealed record CodexScheduledAttempt(CodexDeliveryResult Result, DateTimeOffset? RetryAt = null);
+internal sealed record CodexScheduledAttempt(CodexDeliveryResult Result, DateTimeOffset? RetryAt = null, string? Issue = null);
+internal static class CodexScheduleIssues
+{
+    internal static bool IsKnown(string? issue) => issue is null or
+        "CodexScheduleUnconfirmed" or "CodexScheduleNotSent" or "CodexScheduleMissed" or
+        "CodexScheduleTargetUnavailable" or "CodexScheduleTurnChanged" or "CodexScheduleDraftPresent" or
+        "CodexScheduleEditorUnavailable" or "CodexScheduleChatAmbiguous" or "CodexScheduleDeliveryBlocked" or
+        "CodexScheduleReaderUnavailable";
+}
 internal enum CodexScheduleState { Pending, Sending, Sent, NeedsAttention, Cancelled }
 internal sealed record CodexScheduledMessage(Guid Id, CodexChatTarget? Target, string Text, DateTimeOffset SendAt,
     CodexScheduleState State = CodexScheduleState.Pending, string? Issue = null, DateTimeOffset? RetryAt = null,
@@ -52,7 +60,7 @@ internal sealed class CodexScheduleQueue(string path)
             doc.Messages.Any(item => item is null || item.Id == Guid.Empty || !Valid(item.Target, item.Text) ||
                 item.StartNewChat != (item.Target is null) || doc.Version == 1 && item.StartNewChat ||
                 item.InterruptedTurnId is not null && (item.Target is null || string.IsNullOrWhiteSpace(item.InterruptedTurnId) || item.InterruptedTurnId.Length > 200) ||
-                !Enum.IsDefined(item.State) || item.Issue is not (null or "CodexScheduleUnconfirmed" or "CodexScheduleNotSent" or "CodexScheduleMissed")) ||
+                !Enum.IsDefined(item.State) || !CodexScheduleIssues.IsKnown(item.Issue)) ||
             doc.Messages.Select(item => item.Id).Distinct().Count() != doc.Messages.Length)
             throw new InvalidDataException("Invalid Codex outbox.");
         var recovered = doc.Messages.Select(item => item.State == CodexScheduleState.Sending
@@ -191,11 +199,13 @@ internal sealed class CodexScheduleQueue(string path)
             catch { attempt = new(CodexDeliveryResult.Unconfirmed); }
             var next = attempt.Result == CodexDeliveryResult.Sent
                 ? item with { State = CodexScheduleState.Sent, Issue = null, RetryAt = null }
-                : attempt.RetryAt is { } retry && retry > now
-                ? item with { RetryAt = retry, State = CodexScheduleState.Pending }
+                : attempt.Result == CodexDeliveryResult.NotSent && attempt.RetryAt is { } retry && retry > now
+                ? item with { RetryAt = retry, State = CodexScheduleState.Pending,
+                    Issue = CodexScheduleIssues.IsKnown(attempt.Issue) ? attempt.Issue : null }
                 : item with { State = CodexScheduleState.NeedsAttention,
-                    Issue = attempt.Result == CodexDeliveryResult.NotSent
-                        ? "CodexScheduleNotSent" : "CodexScheduleUnconfirmed" };
+                    Issue = attempt.Result == CodexDeliveryResult.NotSent && attempt.Issue is not null && CodexScheduleIssues.IsKnown(attempt.Issue)
+                        ? attempt.Issue : attempt.Result == CodexDeliveryResult.NotSent
+                            ? "CodexScheduleNotSent" : "CodexScheduleUnconfirmed" };
             await Task.Run(() => Change(next));
         }
         finally { IsSending = false; _running.Release(); }

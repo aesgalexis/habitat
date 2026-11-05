@@ -18,6 +18,16 @@ Comprueba primero la conversación original en Chrome o Codex. Un fallo de confi
 
 En Codex, **Reload chat** vuelve a leer el historial y **Open in Codex** permite revisar herramientas o solicitudes de aprobación. Conserva los borradores escritos directamente en Codex y espera a que finalice un turno activo. Si hay títulos duplicados, utiliza títulos distintos para que HABITAT pueda identificar el destino. **Stop waiting** solo detiene la espera en HABITAT.
 
+## Un mensaje programado de Codex necesita revisión
+
+Desde 0.18.2, el calendario distingue un borrador protegido, un turno que ya cambió, un destino ambiguo y una entrega bloqueada. Un editor o lector temporalmente indisponible se vuelve a comprobar antes de escribir. Si el mismo chat está abierto en varias ventanas, activa la que quieras utilizar. Los títulos que coincidan con varios chats requieren nombres distintos.
+
+Revisa el chat antes de volver a programar un resultado incierto. Si el turno seleccionado ya cambió, crea una programación nueva para el turno actual. Actualizar no reactiva mensajes antiguos pendientes de revisión. El diagnóstico local `codex-delivery.log` y su única copia `.previous` están en `%LOCALAPPDATA%\HABITAT`; registran fases sin instrucciones, títulos ni credenciales. Consulta [programación de Codex](CODEX_SCHEDULING.md).
+
+## Contacts cierra la aplicación
+
+Actualiza a 0.18.2 o posterior. Esa versión sustituye la plantilla de **Advanced setup** que fallaba al abrir **Preferences → Contacts** con Google Drive desconectado. Los contactos y el vínculo de Drive se conservan. Consulta [Contactos](CONTACTS.md).
+
 ## Google, YouTube o Translate requieren una acción
 
 Abre la página del proveedor en Chrome y completa el consentimiento o la verificación que muestre. Después usa **Retry** o vuelve a ejecutar la acción en HABITAT. Comprueba también el canal correspondiente en la guía de conexión; una conexión de ChatGPT correcta no demuestra que los otros canales estén listos.

@@ -30,53 +30,104 @@ internal sealed class CodexChatService(ICodexChatDesktop desktop, ICodexHistoryR
 
     public async Task<CodexScheduledAttempt> SendScheduledAsync(CodexChatTarget? target, string text, CancellationToken token, string? interruptedTurnId = null)
     {
+        CodexScheduledAttempt Reject(string issue)
+        {
+            trace?.Invoke($"Codex scheduled preflight: {issue}; no submission attempted.");
+            return new(CodexDeliveryResult.NotSent, Issue: issue);
+        }
+        CodexScheduledAttempt Wait(string issue)
+        {
+            trace?.Invoke($"Codex scheduled preflight: {issue}; checking again in 30 seconds.");
+            return new(CodexDeliveryResult.NotSent, DateTimeOffset.UtcNow.AddSeconds(30), issue);
+        }
         if (string.IsNullOrWhiteSpace(text) || text.Contains('\0')) return new(CodexDeliveryResult.NotSent);
         if (target is null)
         {
             if (interruptedTurnId is not null) return new(CodexDeliveryResult.NotSent);
-            var visible = await desktop.ReadVisibleAsync(token);
-            if (visible is { Composer.IsNewChat: true, IsEmpty: false }) return new(CodexDeliveryResult.NotSent);
-            if (await reader.ReadLimitResetAsync(token) is { } newReset && newReset > DateTimeOffset.UtcNow)
-                return new(CodexDeliveryResult.NotSent, newReset.AddSeconds(5));
+            using var preflight = CancellationTokenSource.CreateLinkedTokenSource(token);
+            preflight.CancelAfter(TimeSpan.FromSeconds(12));
+            try
+            {
+                if ((await desktop.ReadChatsAsync(preflight.Token)).Any(chat => chat.Composer.IsNewChat && !chat.IsEmpty))
+                    return Reject("CodexScheduleDraftPresent");
+                if (await reader.ReadLimitResetAsync(preflight.Token) is { } newReset && newReset > DateTimeOffset.UtcNow)
+                    return new(CodexDeliveryResult.NotSent, newReset.AddSeconds(5));
+            }
+            catch (InvalidDataException) { return Reject("CodexScheduleChatAmbiguous"); }
+            catch (IOException) { return Wait("CodexScheduleReaderUnavailable"); }
+            catch (OperationCanceledException) when (!token.IsCancellationRequested) { return Wait("CodexScheduleEditorUnavailable"); }
             return new((await StartNewAsync(text, null, token, link: false)).Result);
         }
         if (!CodexReadClient.ValidId(target.Id) || !origins.Contains(target) && string.IsNullOrWhiteSpace(interruptedTurnId))
-            return new(CodexDeliveryResult.NotSent);
+            return Reject("CodexScheduleTargetUnavailable");
         // External chats require an explicitly selected interrupted turn.
         // This does not adopt them into HABITAT's ordinary chat history.
-        if (interruptedTurnId is not null && !(await reader.ListAsync(token)).Any(item => item.Id == target.Id))
-            return new(CodexDeliveryResult.NotSent);
-        var before = await reader.ReadAsync(target, token);
-        if (before.Target.Id != target.Id) return new(CodexDeliveryResult.NotSent);
-        if (interruptedTurnId is not null && (before.LatestTurnId != interruptedTurnId || !CodexUsageLimit.IsLimited(before)))
-            return new(CodexDeliveryResult.NotSent);
-        if (before.IsRunning) return new(CodexDeliveryResult.NotSent, DateTimeOffset.UtcNow.AddSeconds(30));
-        if (CodexUsageLimit.IsLimited(before) && await reader.ReadLimitResetAsync(token) is { } reset && reset > DateTimeOffset.UtcNow)
-            return new(CodexDeliveryResult.NotSent, reset.AddSeconds(5));
-        if (!await desktop.OpenChatAsync(target, token)) return new(CodexDeliveryResult.NotSent);
+        CodexVisibleChat? ready = null;
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromSeconds(12));
-        while (true)
+        try
         {
-            timeout.Token.ThrowIfCancellationRequested();
-            var visible = await desktop.ReadVisibleAsync(timeout.Token);
-            if (visible is not null && !visible.Composer.IsNewChat)
+            var cancellation = timeout.Token;
+            if (interruptedTurnId is not null && !(await reader.ListAsync(cancellation)).Any(item => item.Id == target.Id))
+                return Reject("CodexScheduleTargetUnavailable");
+            var before = await reader.ReadAsync(target, cancellation);
+            if (before.Target.Id != target.Id) return Reject("CodexScheduleTargetUnavailable");
+            if (interruptedTurnId is not null && (before.LatestTurnId != interruptedTurnId || !CodexUsageLimit.IsLimited(before)))
+                return Reject("CodexScheduleTurnChanged");
+            if (before.IsRunning) return new(CodexDeliveryResult.NotSent, DateTimeOffset.UtcNow.AddSeconds(30));
+            if (CodexUsageLimit.IsLimited(before) && await reader.ReadLimitResetAsync(cancellation) is { } reset && reset > DateTimeOffset.UtcNow)
+                return new(CodexDeliveryResult.NotSent, reset.AddSeconds(5));
+            // A schedule owns a chat ID, not whichever Codex window has focus.
+            // Reuse an already visible target, without navigating away from a draft.
+            ready = await ReadExpectedAsync(target, cancellation);
+            if (ready is null && !await desktop.OpenChatAsync(target, cancellation))
+                return Wait("CodexScheduleEditorUnavailable");
+            while (true)
             {
-                var selected = await reader.ResolveAsync(visible.SelectedTitles, timeout.Token);
-                if (selected?.Id == target.Id)
+                cancellation.ThrowIfCancellationRequested();
+                ready ??= await ReadExpectedAsync(target, cancellation);
+                if (ready is not null)
                 {
-                    if (!visible.CanAccept || !visible.IsEmpty) return new(CodexDeliveryResult.NotSent);
-                    var current = await reader.ReadAsync(target, timeout.Token);
+                    if (!ready.IsEmpty) return Reject("CodexScheduleDraftPresent");
+                    if (!ready.CanAccept) return Wait("CodexScheduleEditorUnavailable");
+                    var current = await reader.ReadAsync(target, cancellation);
                     if (current.Target.Id != target.Id || interruptedTurnId is not null &&
                         (current.LatestTurnId != interruptedTurnId || !CodexUsageLimit.IsLimited(current)))
-                        return new(CodexDeliveryResult.NotSent);
+                        return Reject("CodexScheduleTurnChanged");
                     if (current.IsRunning)
                         return new(CodexDeliveryResult.NotSent, DateTimeOffset.UtcNow.AddSeconds(30));
-                    return new(await desktop.SubmitVisibleAsync(visible, text, timeout.Token));
+                    break;
                 }
+                await Task.Delay(150, cancellation);
             }
-            await Task.Delay(150, timeout.Token);
         }
+        catch (InvalidDataException) { return Reject("CodexScheduleChatAmbiguous"); }
+        catch (IOException) { return Wait("CodexScheduleReaderUnavailable"); }
+        catch (OperationCanceledException) when (!token.IsCancellationRequested) { return Wait("CodexScheduleEditorUnavailable"); }
+        // No automatic retry from this point: an adapter can have written text
+        // or invoked Send before losing its acknowledgement.
+        var result = await desktop.SubmitVisibleAsync(ready!, text, token);
+        trace?.Invoke($"Codex scheduled delivery: {result}.");
+        return new(result, Issue: result == CodexDeliveryResult.NotSent ? "CodexScheduleDeliveryBlocked" : null);
+    }
+
+    private async Task<CodexVisibleChat?> ReadExpectedAsync(CodexChatTarget expected, CancellationToken token)
+    {
+        var matches = new List<CodexVisibleChat>();
+        var ambiguous = false;
+        foreach (var chat in await desktop.ReadChatsAsync(token))
+        {
+            if (chat.Composer.IsNewChat) continue;
+            CodexChatTarget? selected;
+            try { selected = await reader.ResolveAsync(chat.SelectedTitles, token); }
+            catch (InvalidDataException) { ambiguous = true; continue; }
+            if (selected?.Id == expected.Id) matches.Add(chat);
+        }
+        if (matches.Count == 0 && ambiguous) throw new InvalidDataException("The Codex chat title is ambiguous.");
+        if (matches.Count <= 1) return matches.SingleOrDefault();
+        var foreground = matches.Where(chat => chat.IsForeground).ToArray();
+        return foreground.Length == 1 ? foreground[0] :
+            throw new InvalidDataException("The same Codex chat is open in more than one window.");
     }
 
     public async Task<CodexChatSelection> GetVisibleAsync(CancellationToken token)
@@ -132,6 +183,8 @@ internal sealed class CodexChatService(ICodexChatDesktop desktop, ICodexHistoryR
             return new(await desktop.SubmitVisibleAsync(selected, text, token), expected, before.LatestTurnId);
         }
         var visible = await desktop.ReadVisibleAsync(token);
+        if ((await desktop.ReadChatsAsync(token)).Any(chat => chat.Composer.IsNewChat &&
+            !chat.IsEmpty && !CodexDelivery.SameText(chat.Composer.Text, text))) return new(CodexDeliveryResult.NotSent);
         var target = visible is null || visible.Composer.IsNewChat ? null : await reader.ResolveAsync(visible.SelectedTitles, token);
         if (visible is not null && !visible.Composer.IsNewChat && target is null) return new(CodexDeliveryResult.NotSent);
         if (target is null && visible is { IsEmpty: false } && !CodexDelivery.SameText(visible.Composer.Text, text))
@@ -141,14 +194,7 @@ internal sealed class CodexChatService(ICodexChatDesktop desktop, ICodexHistoryR
 
     private async Task<CodexVisibleChat?> GetExpectedVisibleAsync(CodexChatTarget expected, CancellationToken token)
     {
-        async Task<CodexVisibleChat?> ReadExpectedAsync(CancellationToken cancellation)
-        {
-            var visible = await desktop.ReadVisibleAsync(cancellation);
-            if (visible is null || visible.Composer.IsNewChat) return null;
-            var target = await reader.ResolveAsync(visible.SelectedTitles, cancellation);
-            return target?.Id == expected.Id ? visible : null;
-        }
-        if (await ReadExpectedAsync(token) is { } ready) return ready;
+        if (await ReadExpectedAsync(expected, token) is { } ready) return ready;
         if (!await desktop.OpenChatAsync(expected, token)) return null;
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromSeconds(8));
@@ -156,7 +202,7 @@ internal sealed class CodexChatService(ICodexChatDesktop desktop, ICodexHistoryR
         {
             while (true)
             {
-                if (await ReadExpectedAsync(timeout.Token) is { } visible) return visible;
+                if (await ReadExpectedAsync(expected, timeout.Token) is { } visible) return visible;
                 await Task.Delay(150, timeout.Token);
             }
         }

@@ -11,6 +11,7 @@ public sealed partial class MainPage
 {
     private async Task CheckCodexSchedulesUiAsync(string log)
     {
+        await CheckCodexDesktopSchedulingUiAsync(log);
         var dispatch = typeof(CodexLauncher).GetInterfaceMap(typeof(ICodexChatService));
         var scheduled = Array.FindIndex(dispatch.InterfaceMethods, method => method.Name == nameof(ICodexChatService.SendScheduledAsync));
         if (scheduled < 0 || dispatch.TargetMethods[scheduled].DeclaringType != typeof(CodexLauncher))

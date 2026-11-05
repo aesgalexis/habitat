@@ -86,6 +86,7 @@ internal static class CodexScheduleChecks
         await CheckServiceAsync(root, check);
         await CheckNewChatsAsync(root, now, check);
         await CheckResumptionsAsync(root, now, check);
+        await CheckMultipleWindowsAsync(root, now, check);
         CheckLimitMetadata(now, check);
     }
 
@@ -210,7 +211,7 @@ internal static class CodexScheduleChecks
         var now = DateTimeOffset.UtcNow;
         legacy.Add(B, "Persisted by an older version", now.AddMinutes(1), now);
         await legacy.RunDueAsync(now.AddMinutes(1), (item, token) => service.SendScheduledAsync(item.Target, item.Text, token), default);
-        check(legacy.Messages.Single() is { State: CodexScheduleState.NeedsAttention, Issue: "CodexScheduleNotSent" } &&
+        check(legacy.Messages.Single() is { State: CodexScheduleState.NeedsAttention, Issue: "CodexScheduleTargetUnavailable" } &&
             desktop.Opens == 0 && desktop.Sends == 0 && reader.Reads.Count == reads,
             "An older persisted foreign-chat schedule cannot bypass the origin boundary or send automatically");
         check((await service.GetVisibleAsync(default)).Target is null && (await service.SendAsync(B, "ordinary send", default)).Result == CodexDeliveryResult.NotSent,
@@ -230,7 +231,7 @@ internal static class CodexScheduleChecks
             "A draft in the destination Codex editor is never replaced by a scheduled message");
         desktop.Empty = true;
         check((await service.SendScheduledAsync(B, "  Exact ☕\ntext ", default)).Result == CodexDeliveryResult.Sent &&
-            desktop.Sends == 1 && desktop.LastTarget == B && desktop.Text == "  Exact ☕\ntext " && origins.Contains(B),
+            desktop.Sends == 1 && desktop.LastWindow == 1 && desktop.Text == "  Exact ☕\ntext " && origins.Contains(B),
             "Scheduled delivery submits once to the chosen HABITAT chat without changing its provenance or user text");
         reader.ResolveWrong = true;
         using var cancel = new CancellationTokenSource(80);
@@ -272,15 +273,85 @@ internal static class CodexScheduleChecks
         reader.LatestId = "last"; reader.Listed = false;
         check((await service.SendScheduledAsync(B, "Continue", default, "last")).Result == CodexDeliveryResult.NotSent && desktop.Opens == 0,
             "A chat archived or removed after scheduling is not reopened");
-        reader.Listed = true; desktop.OnOpen = () => reader.LatestId = "racing-turn";
+        reader.Listed = true; desktop.NoEditor = true;
+        desktop.OnOpen = () => { reader.LatestId = "racing-turn"; desktop.NoEditor = false; };
         check((await service.SendScheduledAsync(B, "Continue", default, "last")).Result == CodexDeliveryResult.NotSent && desktop.Sends == 0,
             "A new turn between navigation and delivery cancels the stale resumption");
         desktop.OnOpen = null; reader.LatestId = "last";
         check((await service.SendScheduledAsync(B, "Continúa", default, "last")).Result == CodexDeliveryResult.Sent && desktop.Sends == 1 &&
-            desktop.LastTarget == B && !origins.Contains(B), "External resumption reaches the exact selected chat without adopting it into HABITAT history");
+            desktop.LastWindow == 1 && !origins.Contains(B), "External resumption reaches the exact selected chat without adopting it into HABITAT history");
         var item = queue.Messages.First();
         queue.Reschedule(item.Id, item.Target, item.Text, now.AddMinutes(3), now);
         check(queue.Messages.First().InterruptedTurnId == item.InterruptedTurnId, "Editing the time preserves the interrupted-turn guard");
+    }
+
+    private static async Task CheckMultipleWindowsAsync(string root, DateTimeOffset now, Action<bool, string> check)
+    {
+        var reader = new Reader { Reset = null };
+        var desktop = new Desktop();
+        var origins = new CodexChatOrigins(null); origins.Register(B);
+        var traces = new List<string>();
+        await using var service = new CodexChatService(desktop, reader, (_, _) => throw new Exception("No new chat expected"), origins, traces.Add);
+        var other = new CodexVisibleChat(new(11, "other-editor", "other-send", "Private draft", false, true), [A.Title], false, true, true);
+        var chosen = new CodexVisibleChat(new(22, "chosen-editor", "chosen-send", "", false, false), [B.Title], true, true);
+        desktop.Chats = [other, chosen];
+        check((await service.SendScheduledAsync(B, "Exact background instruction", default)).Result == CodexDeliveryResult.Sent &&
+            desktop.LastWindow == 22 && desktop.Sends == 1 && desktop.Opens == 0 && other.Composer.Text == "Private draft",
+            "An already open scheduled target is selected by chat ID across windows, preserving another foreground chat and draft without navigation");
+        desktop.Chats = [chosen with { CanAccept = false }];
+        var waiting = await service.SendScheduledAsync(B, "Wait for editor", default);
+        check(waiting is { Result: CodexDeliveryResult.NotSent, RetryAt: not null, Issue: "CodexScheduleEditorUnavailable" } && desktop.Sends == 1,
+            "A temporarily disabled target editor defers before writing or invoking Send");
+        desktop.Chats = [chosen with { IsEmpty = false, Composer = chosen.Composer with { Text = "Protected target draft" } }];
+        check((await service.SendScheduledAsync(B, "Keep draft", default)) is
+            { Result: CodexDeliveryResult.NotSent, RetryAt: null, Issue: "CodexScheduleDraftPresent" } && desktop.Sends == 1,
+            "A protected target draft has a specific review reason and is never automatically retried");
+        desktop.Chats = [chosen, chosen with { Composer = chosen.Composer with { Window = 33 } }];
+        check((await service.SendScheduledAsync(B, "Ambiguous", default)).Issue == "CodexScheduleChatAmbiguous" && desktop.Sends == 1,
+            "The same chat in multiple background windows requires review rather than selecting an arbitrary editor");
+        desktop.Chats[1] = desktop.Chats[1] with { IsForeground = true };
+        check((await service.SendScheduledAsync(B, "Foreground exact target", default)).Result == CodexDeliveryResult.Sent && desktop.LastWindow == 33,
+            "An explicitly foregrounded duplicate target window can be uniquely selected");
+        desktop.Chats = [other, chosen with { IsEmpty = false,
+            Composer = chosen.Composer with { IsNewChat = true, Text = "Private new-chat draft" } }];
+        check((await service.SendScheduledAsync(null, "New scheduled chat", default)).Issue == "CodexScheduleDraftPresent" &&
+            (await service.SendAsync(null, "New ordinary chat", default)).Result == CodexDeliveryResult.NotSent && desktop.Sends == 2,
+            "New-chat delivery protects a draft in another Codex home window even when an existing chat is foregrounded");
+        desktop.ThrowRead = true;
+        var unavailable = await service.SendScheduledAsync(B, "Reader unavailable", default);
+        check(unavailable is { RetryAt: not null, Issue: "CodexScheduleReaderUnavailable" } && desktop.Sends == 2,
+            "A failed read before transfer can be retried without treating it as an uncertain submission");
+        check((await service.SendScheduledAsync(null, "New chat while unavailable", default)) is
+            { Result: CodexDeliveryResult.NotSent, RetryAt: not null, Issue: "CodexScheduleReaderUnavailable" },
+            "A new-chat preflight failure also defers before creating or transferring anything");
+        desktop.ThrowRead = false;
+
+        var file = Path.Combine(root, "reason-persistence.json");
+        var queue = new CodexScheduleQueue(file);
+        queue.Add(B, "Retained message", now.AddMinutes(1), now);
+        await queue.RunDueAsync(now.AddMinutes(1), (_, _) => Task.FromResult(waiting with { RetryAt = now.AddMinutes(2) }), default);
+        queue = new CodexScheduleQueue(file);
+        check(queue.Messages.Single() is { State: CodexScheduleState.Pending, Issue: "CodexScheduleEditorUnavailable", RetryAt: not null },
+            "Deferred deliveries preserve their specific reason and retry time across restarts");
+        await queue.RunDueAsync(now.AddMinutes(2), (_, _) => Task.FromResult(new CodexScheduledAttempt(CodexDeliveryResult.Unconfirmed,
+            now.AddMinutes(3), "CodexScheduleEditorUnavailable")), default);
+        await queue.RunDueAsync(now.AddMinutes(3), (_, _) => throw new Exception("Never retry uncertainty"), default);
+        check(queue.Messages.Single() is { State: CodexScheduleState.NeedsAttention, Issue: "CodexScheduleUnconfirmed" },
+            "An uncertain result overrides retry metadata and never causes an automatic duplicate submission");
+        queue.Reschedule(queue.Messages.Single().Id, B, "Retained message", now.AddMinutes(4), now);
+        await queue.RunDueAsync(now.AddMinutes(4), (_, _) => Task.FromResult(new CodexScheduledAttempt(CodexDeliveryResult.NotSent,
+            Issue: "CodexScheduleTurnChanged")), default);
+        check(new CodexScheduleQueue(file).Messages.Single().Issue == "CodexScheduleTurnChanged",
+            "A permanent preflight rejection persists the actionable reason for review");
+        check(!string.Join("\n", traces).Contains("Exact background instruction") && !string.Join("\n", traces).Contains(B.Title),
+            "Scheduled phase diagnostics omit instructions and chat titles");
+        var logPath = Path.Combine(root, "codex-delivery.log");
+        var log = new CodexDeliveryLog(logPath);
+        for (var i = 0; i < 1100; i++) log.Write(new string('x', 1000));
+        check(File.Exists(logPath + ".previous") && new FileInfo(logPath).Length < 1024 * 1024 &&
+            new FileInfo(logPath + ".previous").Length < 1024 * 1024 + 1100,
+            "Local Codex phase diagnostics rotate to one bounded previous file");
+        new CodexDeliveryLog(root).Write("A logging failure must not interrupt delivery.");
     }
 
     private sealed class Reader : ICodexHistoryReader
@@ -294,7 +365,8 @@ internal static class CodexScheduleChecks
         public DateTimeOffset? Reset = DateTimeOffset.UtcNow.AddHours(1);
         public Task<IReadOnlyList<CodexChatTarget>> ListAsync(CancellationToken token) => Task.FromResult<IReadOnlyList<CodexChatTarget>>(!Listed ? [] : Created is null ? [A, B] : [A, B, Created]);
         public Task<DateTimeOffset?> ReadLimitResetAsync(CancellationToken token) => Task.FromResult(Reset);
-        public Task<CodexChatTarget?> ResolveAsync(IReadOnlyList<string> titles, CancellationToken token) => Task.FromResult<CodexChatTarget?>(Created ?? (ResolveWrong ? A : B));
+        public Task<CodexChatTarget?> ResolveAsync(IReadOnlyList<string> titles, CancellationToken token) =>
+            Task.FromResult<CodexChatTarget?>(Created ?? (ResolveWrong || titles.Contains(A.Title) ? A : B));
         public Task<CodexChatHistory> ReadAsync(CodexChatTarget target, CancellationToken token)
         {
             Reads.Add(target.Id);
@@ -306,13 +378,21 @@ internal static class CodexScheduleChecks
     private sealed class Desktop : ICodexChatDesktop
     {
         public bool Empty = true, NewChat, NoEditor;
+        public bool ThrowRead;
+        public CodexVisibleChat[]? Chats;
+        public nint LastWindow;
         public int Opens, Sends;
         public CodexChatTarget? LastTarget;
         public string? Text;
         public Action? OnOpen;
         public Task<CodexVisibleChat?> ReadVisibleAsync(CancellationToken token) => Task.FromResult<CodexVisibleChat?>(NoEditor ? null : new(new(1, "editor", "send", Empty ? "" : "Protected draft", NewChat, true), [B.Title], Empty, true));
+        public async Task<IReadOnlyList<CodexVisibleChat>> ReadChatsAsync(CancellationToken token)
+        {
+            if (ThrowRead) throw new IOException("Synthetic unavailable reader.");
+            return Chats ?? (await ReadVisibleAsync(token) is { } chat ? [chat] : []);
+        }
         public Task<bool> OpenChatAsync(CodexChatTarget? target, CancellationToken token) { Opens++; LastTarget = target; OnOpen?.Invoke(); return Task.FromResult(true); }
-        public Task<CodexDeliveryResult> SubmitVisibleAsync(CodexVisibleChat expected, string text, CancellationToken token) { Sends++; Text = text; return Task.FromResult(CodexDeliveryResult.Sent); }
+        public Task<CodexDeliveryResult> SubmitVisibleAsync(CodexVisibleChat expected, string text, CancellationToken token) { Sends++; LastWindow = expected.Composer.Window; Text = text; return Task.FromResult(CodexDeliveryResult.Sent); }
         public void ReturnFocus(nint ownerWindow) { }
     }
 }

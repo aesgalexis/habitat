@@ -186,7 +186,8 @@ internal sealed class AppServices : IAsyncDisposable
             ? (_, _, _) => Task.FromResult<IReadOnlyList<Habitat.Features.Contacts.PhoneLinkConversationMessage>?>(null)
             : phoneLink.ReadConversationAsync;
         KeepPhoneLinkBackground = paths.IsIsolated ? _ => PhoneLinkForegroundGuard.Disabled : PhoneLinkForegroundGuard.Start;
-        var codex = paths.IsIsolated ? null : new CodexLauncher(paths: paths);
+        var codex = paths.IsIsolated ? null : new CodexLauncher(
+            new CodexDeliveryLog(Path.Combine(paths.LocalDirectory, "codex-delivery.log")).Write, paths);
         LaunchCodex = codex is null ? (_, _) => Task.FromResult(CodexDeliveryResult.NotSent) : codex.OpenAsync;
         Codex = codex is null ? new DisabledCodexChatService() : codex;
         CodexSchedules = new(paths.CodexSchedulesPath);

@@ -42,6 +42,8 @@ El [script WinUI](../scripts/check-tasks-ui.ps1) compila con `HabitatUiChecks=tr
 
 Prioriza comprobaciones no visuales. El control visual requiere una necesidad real o una solicitud expresa, conforme a [AGENTS.md](../AGENTS.md).
 
+Desde 0.18.2, los casos de Contacts abren Preferences con Drive desconectado y con un vínculo guardado, prueban ambos temas y verifican el desplegable avanzado tras refrescar. Los casos de programación de Codex añaden dos ventanas nativas sintéticas: verifican selección por chat, transferencia y confirmación en la ventana fijada, invocación del botón Send desde segundo plano y conservación del otro borrador. El proveedor puede activar la ventana verificada; no se inyecta Enter en ese caso. Los servicios y credenciales están aislados y no se abre ni se envía nada al Codex real.
+
 ## Pruebas con aplicaciones y servicios reales
 
 Los modos `--live` y los smoke tests de navegador, Notepad o Codex son optativos y tienen efectos reales: pueden abrir aplicaciones, consultar proveedores o enviar mensajes sintéticos. No forman parte de una revisión de documentación ni de la verificación sintética ordinaria. Antes de ejecutarlos, consulta las condiciones del área en [arquitectura](ARCHITECTURE.md), [Gmail](GMAIL_SETUP.md) o [atajo global](GLOBAL_SHORTCUT.md).
