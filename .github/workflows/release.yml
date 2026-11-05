@@ -34,7 +34,33 @@ jobs:
         run: ./scripts/verify.ps1
       - name: Build self-contained package
         shell: powershell
-        run: ./scripts/package-release.ps1
+        env:
+          HABITAT_DRIVE_OAUTH_CLIENT_JSON: ${{ secrets.HABITAT_DRIVE_OAUTH_CLIENT_JSON }}
+        run: |
+          $clientJson = $env:HABITAT_DRIVE_OAUTH_CLIENT_JSON
+          Remove-Item Env:HABITAT_DRIVE_OAUTH_CLIENT_JSON -ErrorAction SilentlyContinue
+          if (-not $clientJson) {
+            throw 'Google Drive desktop client is required for the official release.'
+          } else {
+            try {
+              $client = ConvertFrom-Json -InputObject $clientJson -ErrorAction Stop
+              if ($clientJson.Length -gt 65536 -or $client.installed.client_id -notmatch '^[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$' -or
+                  [string]::IsNullOrWhiteSpace($client.installed.client_secret)) { throw 'Invalid client.' }
+            } catch { throw 'Configure a Google Desktop OAuth client for Drive release builds.' }
+            $clientPath = Join-Path $env:RUNNER_TEMP ('habitat-drive-' + [guid]::NewGuid().ToString('N') + '.json')
+            try {
+              $env:HabitatDriveOAuthClientFile = $clientPath
+              $configuration = @{ installed = @{
+                client_id = $client.installed.client_id
+                client_secret = $client.installed.client_secret
+              }} | ConvertTo-Json -Compress
+              [IO.File]::WriteAllText($clientPath, $configuration, [Text.UTF8Encoding]::new($false))
+              ./scripts/package-release.ps1
+            } finally {
+              Remove-Item -LiteralPath $clientPath -ErrorAction SilentlyContinue
+              Remove-Item Env:HabitatDriveOAuthClientFile -ErrorAction SilentlyContinue
+            }
+          }
       - name: Verify real package and isolated installation
         shell: powershell
         run: |

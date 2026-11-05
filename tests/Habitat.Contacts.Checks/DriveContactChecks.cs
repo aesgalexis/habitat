@@ -6,6 +6,7 @@ using System.Text.Json;
 using Habitat.Features.Contacts;
 using Habitat.Models;
 using Habitat.Services;
+using Microsoft.AspNetCore.WebUtilities;
 
 internal static class DriveContactChecks
 {
@@ -28,13 +29,34 @@ internal static class DriveContactChecks
         var first = new ContactSession(new ContactStore(Path.Combine(root, "drive-first.json")));
         var second = new ContactSession(new ContactStore(Path.Combine(root, "drive-second.json")));
         var firstState = Path.Combine(root, "drive-first-link.json");
-        using var syncFirst = new ContactDriveSync(first, firstState, Auth, http);
-        using var syncSecond = new ContactDriveSync(second, Path.Combine(root, "drive-second-link.json"), Auth, http);
-        GmailAuthService Auth() => new(new Credentials(), http, driveOnly: true);
+        var bundled = new GmailClientConfiguration("drive.apps.googleusercontent.com", "test-secret");
+        var otherClient = new GmailClientConfiguration("other.apps.googleusercontent.com", "test-secret");
+        var signIns = 0;
+        using var callback = new HttpClient(new SocketsHttpHandler { UseProxy = false }) { Timeout = TimeSpan.FromSeconds(5) };
+        using var syncFirst = new ContactDriveSync(first, firstState, Auth, http, otherClient);
+        using var syncSecond = new ContactDriveSync(second, Path.Combine(root, "drive-second-link.json"), FreshAuth, http, bundled);
+        GmailAuthService Auth() => new(new Credentials(), http,
+            _ => throw new InvalidOperationException("A saved client should be reused without opening the browser."), driveOnly: true);
+        GmailAuthService FreshAuth() => new(new Credentials(fresh: true), http, async url =>
+        {
+            signIns++;
+            var query = QueryHelpers.ParseQuery(new Uri(url).Query);
+            check(query["client_id"] == bundled.ClientId && query["code_challenge_method"] == "S256",
+                "The normal connect action must start Google sign-in with the bundled desktop client and PKCE.");
+            var redirect = QueryHelpers.AddQueryString(query["redirect_uri"].ToString(), new Dictionary<string, string?>
+            {
+                ["state"] = query["state"].ToString(), ["code"] = "synthetic-code"
+            });
+            using var response = await callback.GetAsync(redirect);
+            response.EnsureSuccessStatusCode();
+        }, driveOnly: true);
         await first.LoadAsync();
         await first.ChangeAsync(book => book.SaveContact(sample));
-        await syncFirst.ConnectAsync(() => throw new InvalidOperationException(), default);
-        await syncSecond.ConnectAsync(() => throw new InvalidOperationException(), default);
+        await syncFirst.ConnectAsync(default);
+        check(syncFirst.Connected && syncFirst.HasLink, "The bundled client must not replace a previously configured custom client.");
+        check(syncSecond.CanConnect && !syncSecond.Connected, "A fresh install with a bundled client can connect without choosing a file.");
+        await syncSecond.ConnectAsync(default);
+        check(signIns == 1 && syncSecond.Connected, "The fresh PC must connect through one Google sign-in.");
         var person = first.Book.People.Single();
         check(second.Book.People.Single().Id == person.Id && second.Book.For(second.Book.People.Single())[0].Current.Values.SequenceEqual(sample),
             "Connecting a second PC must restore details and preserve the contact identifier.");
@@ -79,9 +101,9 @@ internal static class DriveContactChecks
             "Drive authorization must be isolated from Gmail and Google Contacts scopes.");
     }
 
-    private sealed class Credentials : IGmailCredentialStore
+    private sealed class Credentials(bool fresh = false) : IGmailCredentialStore
     {
-        private GmailAccount _account = new(new("drive.apps.googleusercontent.com", "test-secret"),
+        private GmailAccount _account = fresh ? new(null, null, null) : new(new("drive.apps.googleusercontent.com", "test-secret"),
             new("access", "refresh", DateTimeOffset.UtcNow.AddHours(1)), "owner@example.test");
         public GmailAccount Load() => _account;
         public void Save(GmailAccount account) => _account = account;
@@ -107,7 +129,10 @@ internal static class DriveContactChecks
         {
             var uri = request.RequestUri!;
             var path = uri.AbsolutePath;
-            if (path.EndsWith("/about")) return Json(new { user = new { permissionId = Owner } });
+            if (uri.Host == "oauth2.googleapis.com" && path == "/token")
+                return Json(new { access_token = "access", refresh_token = "refresh", expires_in = 3600,
+                    scope = GmailAuthService.DriveFileScope + " " + GmailAuthService.DriveAppDataScope });
+            if (path.EndsWith("/about")) return Json(new { user = new { permissionId = Owner, emailAddress = "owner@example.test" } });
             if (path.EndsWith("/generateIds")) return Json(new { ids = new[] { "generated-" + Interlocked.Increment(ref _ids) } });
             if (request.Method == HttpMethod.Get)
             {

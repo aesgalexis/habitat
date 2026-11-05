@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.18.1 — 2026-11-05
+
+- **Connect Google Drive** abre el inicio de sesión de Google directamente con el cliente de escritorio incluido en el instalador. En el segundo PC basta elegir la misma cuenta y autorizar los archivos de HABITAT.
+- Se conserva el cliente de las agendas ya vinculadas para encontrar el mismo historial. La selección manual de otro cliente queda en **Advanced setup**.
+- El flujo de publicación incorpora solo la configuración de la aplicación. La autorización de cada usuario se realiza en su PC y se guarda en el Administrador de credenciales de Windows.
+- Pruebas con un segundo PC simulado, inicio de sesión con PKCE, recuperación de la agenda y compilación con el cliente incorporado.
+
 ## 0.18.0 — 2026-11-04
 
 - Contactos manuales como destinos. La agenda nueva empieza con cero contactos; solo **Add contact** añade personas. Nombre, teléfono, correo y otros datos se reúnen en una ficha editable. Los correos, teléfonos y perfiles repetidos se rechazan sin perder el formulario. Editar conserva la identidad y los borradores del destino.

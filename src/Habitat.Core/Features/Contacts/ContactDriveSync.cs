@@ -6,7 +6,7 @@ using Habitat.Services;
 namespace Habitat.Features.Contacts;
 
 internal sealed class ContactDriveSync(ContactSession contacts, string statePath, Func<GmailAuthService> createAuth,
-    HttpClient http) : IDisposable
+    HttpClient http, GmailClientConfiguration? bundledClient = null) : IDisposable
 {
     private sealed record Link(string ClientId, string Owner, string? FileId = null, string? RootId = null,
         string? HeadId = null, byte[]? Baseline = null, string? PendingId = null);
@@ -20,16 +20,18 @@ internal sealed class ContactDriveSync(ContactSession contacts, string statePath
     internal bool NeedsAttention { get; private set; }
     internal bool HasConflict { get; private set; }
     internal string? Status { get; private set; }
-    internal string? Email => _auth?.Email;
-    internal bool Connected => _auth?.IsSignedIn == true;
-    internal bool Configured => _auth?.IsConfigured == true;
+    internal string? Email => Auth.Email;
+    internal bool Connected => Auth.IsSignedIn;
+    internal bool CanConnect => Auth.IsConfigured || bundledClient is not null;
 
-    internal async Task ConnectAsync(Func<Task<GmailClientConfiguration?>> pickClient, CancellationToken token, bool chooseClient = false)
+    internal async Task ConnectAsync(CancellationToken token, Func<Task<GmailClientConfiguration?>>? pickCustomClient = null)
     {
         await _gate.WaitAsync(token);
         try
         {
-            var client = chooseClient ? await pickClient() : Auth.Client ?? await pickClient();
+            var client = pickCustomClient is null
+                ? Auth.Client ?? bundledClient ?? throw new InvalidOperationException("This build has no Google Drive sign-in configuration.")
+                : await pickCustomClient();
             if (client is null) return;
             var link = ReadLink();
             if (link is not null && client.ClientId != link.ClientId)

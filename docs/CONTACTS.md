@@ -34,9 +34,11 @@ Las pruebas usan contactos sintéticos y almacenamiento explícito dentro de `ar
 
 ## Sincronizar con Google Drive
 
-1. En tu proyecto de Google Cloud, habilita **Google Drive API**, configura la pantalla de consentimiento y crea un cliente OAuth de tipo **Desktop app**. Descarga su JSON. Si el proyecto usa **Testing** para usuarios externos, añade tu cuenta como usuario de prueba. En ese modo Google emite autorizaciones que caducan a los siete días. [Configuración de OAuth para escritorio](https://developers.google.com/identity/protocols/oauth2/native-app) · [Caducidad en modo Testing](https://developers.google.com/identity/protocols/oauth2#expiration)
-2. En el primer PC abre **Contacts → Manage contacts → Connect Google Drive**, selecciona ese JSON y autoriza tu cuenta en el navegador. Conectar habilita la sincronización e incorpora las fichas de ese PC. En **My Drive** aparecerá **HABITAT Contacts.csv**.
-3. Cuando el primer PC indique **Contacts synced to Google Drive**, repite **Connect Google Drive** en el segundo PC con el **mismo JSON y la misma cuenta de Google**. Las siguientes aperturas usan la autorización guardada por Windows en ese equipo. Puedes pulsar **Sync now** o esperar a la sincronización automática, que se comprueba aproximadamente cada 30 segundos mientras HABITAT está abierto y el editor de contactos está cerrado.
+1. En **Contacts → Manage contacts**, pulsa **Connect Google Drive**.
+2. En el navegador, elige tu cuenta de Google y permite el acceso a los archivos de HABITAT.
+3. Cuando aparezca **Contacts synced to Google Drive**, repite los pasos en el segundo PC con la misma cuenta. HABITAT encuentra la agenda y sincroniza las fichas. Puedes pulsar **Sync now** para actualizarla al momento.
+
+El acceso normal está disponible en los instaladores que incluyen el cliente OAuth de HABITAT. Si ya vinculaste la agenda con tu propio proyecto, HABITAT conserva ese cliente. En otro PC usa **Advanced setup → Choose custom OAuth client…** con el mismo cliente, o un instalador que lo incluya. Un cliente de otro proyecto abre un espacio de datos distinto. Consulta [cómo preparar el instalador](RELEASING.md#cliente-de-google-drive).
 
 El CSV se puede consultar o descargar desde Drive. Contiene una fila por detalle con el identificador de ficha, tipo, etiqueta y valor. Los valores que una hoja de cálculo podría interpretar como fórmulas llevan un apóstrofo protector. Haz las altas, ediciones y eliminaciones desde HABITAT. Las revisiones de sincronización se guardan en el espacio privado de la aplicación en el Drive del usuario para conservar cambios simultáneos. El CSV visible refleja el último estado publicado y se actualiza al volver a sincronizar si dos equipos publican a la vez.
 

@@ -87,7 +87,7 @@ internal sealed partial class ContactsPreferencesView
 
     private void ShowDriveContactsSync()
     {
-        if (_drive is null || _pickDriveClient is null) return;
+        if (_drive is null) return;
         var panel = Panel("Google Drive", _drive.HasLink
             ? "Sync your manually created contacts with HABITAT Contacts.csv in My Drive."
             : "Connect to sync your manually created contacts, including the ones on this PC, with a readable CSV in My Drive.");
@@ -101,9 +101,17 @@ internal sealed partial class ContactsPreferencesView
         if (!_drive.Connected)
         {
             Action(panel, _drive.HasLink ? "Reconnect Google Drive" : "Connect Google Drive",
-                () => _drive.ConnectAsync(_pickDriveClient, _stop.Token), !_drive.Busy);
-            if (!_drive.HasLink && _drive.Configured)
-                Action(panel, "Change Google OAuth client", () => _drive.ConnectAsync(_pickDriveClient, _stop.Token, chooseClient: true), !_drive.Busy);
+                () => _drive.ConnectAsync(_stop.Token), _drive.CanConnect && !_drive.Busy);
+            if (!_drive.CanConnect)
+                panel.Children.Add(Text("This build needs a Google Drive sign-in configuration."));
+
+            if (_pickDriveClient is { } pickClient)
+            {
+                var advanced = new StackPanel { Spacing = 8 };
+                advanced.Children.Add(Text("Use the same custom Google OAuth client if you already sync contacts with one."));
+                Action(advanced, "Choose custom OAuth client…", () => _drive.ConnectAsync(_stop.Token, pickClient), !_drive.Busy);
+                panel.Children.Add(new Expander { Header = "Advanced setup", Content = advanced });
+            }
         }
         else
         {

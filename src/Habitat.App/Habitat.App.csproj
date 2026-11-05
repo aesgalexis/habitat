@@ -70,6 +70,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="$(HabitatDriveOAuthClientFile)" Condition="'$(HabitatDriveOAuthClientFile)' != ''"
+                      LogicalName="Habitat.GoogleDriveOAuthClient.json" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../Habitat.Core/Habitat.Core.csproj" />
     <ProjectReference Include="../Habitat.Activation/Habitat.Activation.csproj" />

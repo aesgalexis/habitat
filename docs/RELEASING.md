@@ -69,6 +69,14 @@ Para actualizar el ZIP, repite su instalación sobre la misma ruta. Se conserva 
 
 Para retirar una instalación ZIP, desactiva primero **Preferences… → Global shortcut (Ctrl+H)**, cierra HABITAT y elimina su carpeta y la entrada del menú Inicio. Para retirar el EXE, utiliza la desinstalación registrada en Windows. Los datos de usuario se conservan.
 
+## Cliente de Google Drive
+
+Para que **Connect Google Drive** abra Google directamente, el instalador necesita un cliente OAuth **Desktop app** del proyecto de HABITAT, con Drive API habilitada y pantalla de consentimiento configurada. Si ya hay contactos sincronizados, usa el mismo cliente de escritorio que creó el vínculo o planifica una migración. Drive aísla el historial de cada aplicación.
+
+Configura el JSON del cliente de escritorio destinado a distribución como secreto de GitHub Actions llamado HABITAT_DRIVE_OAUTH_CLIENT_JSON. El workflow lo pasa a la compilación en HabitatDriveOAuthClientFile. Para un paquete privado local, apunta esa variable de entorno a un JSON de escritorio fuera del repositorio. Una compilación sin ese parámetro ofrece la configuración avanzada. El cliente OAuth de escritorio distribuido es público y puede extraerse del instalador. Los tokens de cada usuario se autorizan en el navegador y se guardan en el almacén de credenciales de Windows.
+
+[OAuth para aplicaciones de escritorio](https://developers.google.com/identity/protocols/oauth2/native-app) · [Alcances de Google Drive](https://developers.google.com/workspace/drive/api/guides/api-specific-auth)
+
 ## Preparar y publicar
 
 La aplicación consulta la última release pública de GitHub al arrancar y cada seis horas mientras permanece abierta. Solo avisa si su versión estable es superior a la instalada y tiene un EXE o ZIP de Windows ya subido. Al pulsar el icono **Actualizar HABITAT**, se refrescan los metadatos y se descarga el formato correspondiente con su SHA-256. Tras verificarlo, espera las acciones en curso y se cierra para instalar y reabrirse. Las copias de desarrollo ofrecen la página oficial como alternativa. No descarga paquetes sin pulsar el icono. Los fallos de red o de metadatos se registran sin interrumpir y se reintentan tras una hora; un aviso ya encontrado se conserva durante esos fallos.

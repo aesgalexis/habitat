@@ -119,6 +119,23 @@ internal sealed class AppServices : IAsyncDisposable
         catch (UnauthorizedAccessException) { }
     }
 
+    private GmailClientConfiguration? ReadBundledDriveClient()
+    {
+        using var stream = typeof(AppServices).Assembly.GetManifestResourceStream("Habitat.GoogleDriveOAuthClient.json");
+        if (stream is null) return null;
+        try
+        {
+            if (stream.Length > 65536) throw new InvalidDataException("Google Drive sign-in configuration is too large.");
+            using var reader = new StreamReader(stream);
+            return GmailClientConfiguration.FromJson(reader.ReadToEnd());
+        }
+        catch (Exception error) when (error is InvalidDataException or System.Text.Json.JsonException or InvalidOperationException)
+        {
+            ReportError("Load Google Drive sign-in configuration", error);
+            return null;
+        }
+    }
+
     public AppServices(AppDataPaths paths)
     {
 #if HABITAT_UI_CHECKS
@@ -139,7 +156,7 @@ internal sealed class AppServices : IAsyncDisposable
             ContactDrive = new(Contacts, Path.Combine(paths.DesktopDirectory, "contacts-drive.json"),
                 () => new GmailAuthService(new GmailCredentialStore(
                     Path.Combine(paths.DesktopDirectory, "contacts-drive-account.bin"), "HABITAT/Contacts/Drive/v1"),
-                    _contactDriveHttp, driveOnly: true), _contactDriveHttp);
+                    _contactDriveHttp, driveOnly: true), _contactDriveHttp, ReadBundledDriveClient());
         }
         Weather = new WeatherService(_isolatedHttp);
         Markets = new MarketsService(_isolatedHttp);
