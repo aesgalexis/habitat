@@ -14,7 +14,7 @@ La entrega de una reanudación comprueba que el chat siga sin archivar y que su 
 
 ## Ejecución y gestión
 
-Desde 0.18.2, HABITAT busca el identificador del chat entre todas las ventanas de Codex y mantiene la ventana verificada durante la transferencia y confirmación. Reutiliza el destino ya abierto. Si el mismo chat está abierto en varias ventanas, usa la que esté en primer plano; si ninguna lo está, pide revisión. Un título que coincide con varios chats sigue requiriendo un nombre único.
+Desde 0.18.2, HABITAT busca el identificador del chat entre todas las ventanas de Codex y mantiene la ventana verificada durante la transferencia y confirmación. Reutiliza el destino ya abierto. El botón **Stop** bloquea la transferencia mientras Codex sigue ocupado, incluso si el historial guardado aún muestra un turno cerrado. Si el mismo chat está abierto en varias ventanas, usa la que esté en primer plano; si ninguna lo está, pide revisión. Un título que coincide con varios chats sigue requiriendo un nombre único.
 
 La entrega invoca una vez el botón **Send** verificado si ofrece ese patrón de accesibilidad, sin necesitar foco de teclado. El proveedor de accesibilidad puede activar su propia ventana; no se garantiza que el envío sea invisible. Si no ofrece ese patrón, se mantiene la alternativa de Enter con comprobaciones de ventana en primer plano, editor, selección, texto y modificadores. Un editor deshabilitado o lector temporalmente indisponible pospone treinta segundos antes de transferir texto. Los borradores y los turnos que han cambiado requieren revisión. La incertidumbre después de intentar enviar no admite reintento automático, aunque hubiera una fecha de reintento anterior.
 

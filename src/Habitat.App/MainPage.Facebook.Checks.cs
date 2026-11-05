@@ -151,6 +151,10 @@ public sealed partial class MainPage
             FacebookContactSearch.Text = "";
             await WaitForUpdateUiAsync(() => FacebookAvatars.Children.Count == 30 && FacebookAvatars.Children.All(card => card.Visibility == Visibility.Visible));
             await WaitForUpdateUiAsync(() => FacebookAvatars.ActualHeight >= 30 * 36);
+            // Search clearing enqueues a native scroll-to-top request. Let that
+            // view transition settle before testing an independent scroll;
+            // otherwise the pending reset can override ChangeView below.
+            await Task.Delay(100);
             FacebookRail.UpdateLayout();
             if (FacebookRail.ScrollableHeight <= 0 || FacebookSidebar.ActualWidth != 200 || FacebookAvatars.Children.Count != 30 ||
                 FacebookRail.ScrollableWidth > 0)

@@ -15,7 +15,8 @@ public sealed partial class MainPage
         var targetEditor = new SchedulingTestEditor();
         var other = SchedulingTestWindow("Other chat", otherEditor, () => throw new InvalidOperationException("Wrong window submitted."));
         var sends = 0;
-        var chosen = SchedulingTestWindow("Scheduled target", targetEditor, () => { sends++; targetEditor.Text = ""; });
+        var stop = new Button { Content = "Stop" };
+        var chosen = SchedulingTestWindow("Scheduled target", targetEditor, () => { sends++; targetEditor.Text = ""; }, stop);
         try
         {
             other.AppWindow.Show(false); chosen.AppWindow.Show(false);
@@ -25,6 +26,13 @@ public sealed partial class MainPage
                 Environment.ProcessPath, traces.Add);
             var chats = await desktop.ReadChatsAsync(default);
             var target = chats.Single(chat => chat.SelectedTitles.Contains("Scheduled target"));
+            if (target.CanAccept || await desktop.SubmitVisibleAsync(target, "Must wait", default) != CodexDeliveryResult.NotSent ||
+                targetEditor.Text.Length != 0 || sends != 0)
+                throw new InvalidOperationException("A live Stop control must block transfer even when the editor is enabled and persisted history appears finished.");
+            stop.Visibility = Visibility.Collapsed;
+            await Task.Delay(50);
+            chats = await desktop.ReadChatsAsync(default);
+            target = chats.Single(chat => chat.SelectedTitles.Contains("Scheduled target"));
             if (!target.IsEmpty || !target.CanAccept || target.IsForeground || chats.Count(chat => chat.SelectedTitles.Contains("Other chat")) != 1)
                 throw new InvalidOperationException("Native accessibility must distinguish both synthetic Codex windows and accept the empty target.");
             var result = await desktop.SubmitVisibleAsync(target, "Synthetic scheduled instruction ☕", default);
@@ -35,12 +43,12 @@ public sealed partial class MainPage
             if (await desktop.SubmitVisibleAsync(target, "Do not overwrite", default) != CodexDeliveryResult.NotSent ||
                 targetEditor.Text != "Protected target draft" || sends != 1)
                 throw new InvalidOperationException("A draft changed after selection must prevent native transfer and submission.");
-            File.AppendAllText(log, "PASS: native accessibility with two synthetic windows; exact background target pinned through Send invocation and acknowledgement; no keyboard input, other draft mutation or external messages.\n");
+            File.AppendAllText(log, "PASS: native accessibility with two synthetic windows; live Stop blocks transfer; exact background target pinned through Send invocation and acknowledgement; no keyboard input, other draft mutation or external messages.\n");
         }
         finally { chosen.Close(); other.Close(); }
     }
 
-    private static Window SchedulingTestWindow(string title, SchedulingTestEditor editor, Action submit)
+    private static Window SchedulingTestWindow(string title, SchedulingTestEditor editor, Action submit, Button? stop = null)
     {
         AutomationProperties.SetName(editor, "Synthetic Codex editor");
         var selected = new ListView { SelectionMode = ListViewSelectionMode.Single };
@@ -51,6 +59,7 @@ public sealed partial class MainPage
         editor.TextChanged += (_, _) => send.IsEnabled = editor.Text.Length > 0;
         var content = new StackPanel { Spacing = 8 };
         content.Children.Add(selected); content.Children.Add(editor); content.Children.Add(send);
+        if (stop is not null) content.Children.Add(stop);
         var window = new Window { Title = title, Content = new SchedulingTestConversation { Content = content } };
         window.AppWindow.Resize(new(380, 240));
         return window;

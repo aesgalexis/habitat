@@ -158,7 +158,15 @@ internal sealed partial class CodexDesktopAutomation(string packageFamily, Func<
         var blocked = root.GetCurrentPropertyValue(30174) is true ||
             automation.Elements(root, 30174, true).Any(element => element.GetCurrentPropertyValue(30022) is not true) || // IsDialog
             automation.Elements(root, 30077, true).Any(element => element.GetCurrentPropertyValue(30022) is not true); // Window.IsModal
-        var buttons = automation.Elements(root, 30003, 50000).Where(element =>
+        var visibleButtons = automation.Elements(root, 30003, 50000).Where(element =>
+            element.GetCurrentPropertyValue(30022) is not true).ToArray();
+        // The private history reader sees persisted turns, not the desktop's
+        // live execution state. A visible Stop control must block transfer even
+        // when that reader still reports a completed/failed/interrupted turn.
+        var running = visibleButtons.Any(element => element.GetCurrentPropertyValue(30010) is true &&
+            element.GetCurrentPropertyValue(30005) is string name && name is "Stop" or "Stop generating" or "Detener");
+        blocked |= running;
+        var buttons = visibleButtons.Where(element =>
             element.GetCurrentPropertyValue(30022) is not true &&
             element.GetCurrentPropertyValue(30005) is string name && name is "Send" or "Enviar").ToArray();
         var send = buttons.Length == 1 ? buttons[0] : null;
@@ -167,7 +175,7 @@ internal sealed partial class CodexDesktopAutomation(string packageFamily, Func<
             .Select(element => new CodexComposer(
                 window, Id(element, window), send is null ? "" : Id(send, window), automation.Text(element),
                 isNewChat && !blocked, send?.GetCurrentPropertyValue(30010) is true)).ToArray();
-        trace?.Invoke($"Codex controls: home={isNewChat}, blocked={blocked}, sendButtons={buttons.Length}, editors={composers.Length}, ready={composers.Count(item => item.CanSend)}.");
+        trace?.Invoke($"Codex controls: home={isNewChat}, blocked={blocked}, running={running}, sendButtons={buttons.Length}, editors={composers.Length}, ready={composers.Count(item => item.CanSend)}.");
         return new(composers, blocked);
     }
 

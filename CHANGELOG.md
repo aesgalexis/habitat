@@ -6,6 +6,7 @@
 - Los mensajes programados para Codex verifican el chat por identificador entre todas sus ventanas y conservan esa ventana durante la entrega. Un chat correcto ya abierto se reutiliza; otro chat o borrador en primer plano no cambia el destino.
 - La entrega utiliza el botón **Send** verificado mediante accesibilidad cuando está disponible. El envío en segundo plano deja de depender de que Windows permita activar Codex para pulsar Enter; la alternativa de teclado mantiene sus comprobaciones de foco, identidad y texto exacto.
 - Un editor o lector temporalmente indisponible pospone el intento antes de escribir. Los borradores, destinos ambiguos y turnos que ya cambiaron muestran motivos específicos. Un resultado incierto siempre requiere revisión y nunca se reintenta automáticamente.
+- El botón **Stop** de Codex bloquea la transferencia aunque el historial persistido todavía muestre un turno cerrado. La programación espera al editor disponible sin dejar el mensaje como borrador durante una ejecución activa.
 - Diagnósticos locales de fases y resultados en `codex-delivery.log`, con rotación limitada y sin instrucciones, títulos de chats ni credenciales. Pruebas nativas con dos ventanas sintéticas verifican el envío en segundo plano, la protección de borradores y ambos temas de Contacts sin contactar proveedores.
 
 ## 0.18.1 — 2026-11-05
