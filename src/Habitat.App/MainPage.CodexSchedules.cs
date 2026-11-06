@@ -66,7 +66,8 @@ public sealed partial class MainPage
                     if (_codexSendCancellation is not null || _composer.IsExclusiveBusy || CodexChat.IsSubmitting ||
                         HasAppearanceOverlay || _activeDialog is not null || _openingUpdate)
                         return new(CodexDeliveryResult.NotSent, DateTimeOffset.UtcNow.AddSeconds(30));
-                    return await _services.Codex.SendScheduledAsync(message.Target, message.Text, token, message.InterruptedTurnId);
+                    return await _services.Codex.SendScheduledAsync(message.Target, message.Text, token,
+                        message.InterruptedTurnId, message.TargetSelected);
                 }, _operations.Token);
                 _codexScheduleSnapshot = await Task.Run(() => _services.CodexSchedules.Messages, _operations.Token);
                 RenderCodexScheduleNotice();

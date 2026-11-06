@@ -19,7 +19,7 @@ internal static class CodexScheduleIssues
 internal enum CodexScheduleState { Pending, Sending, Sent, NeedsAttention, Cancelled }
 internal sealed record CodexScheduledMessage(Guid Id, CodexChatTarget? Target, string Text, DateTimeOffset SendAt,
     CodexScheduleState State = CodexScheduleState.Pending, string? Issue = null, DateTimeOffset? RetryAt = null,
-    bool StartNewChat = false, string? InterruptedTurnId = null);
+    bool StartNewChat = false, string? InterruptedTurnId = null, bool TargetSelected = false);
 internal sealed class CodexResumptionAlreadyQueuedException() : InvalidOperationException("A resumption is already pending.");
 
 internal static class CodexUsageLimit
@@ -56,9 +56,10 @@ internal sealed class CodexScheduleQueue(string path)
         if (!File.Exists(path)) { _messages = []; return; }
         if (new FileInfo(path).Length > 16 * 1024 * 1024) throw new InvalidDataException("The Codex outbox is too large.");
         var doc = JsonSerializer.Deserialize<Document>(File.ReadAllBytes(path), Json);
-        if (doc is not { Version: 1 or 2 or 3, Messages: not null } || doc.Messages.Length > 500 ||
+        if (doc is not { Version: 1 or 2 or 3 or 4, Messages: not null } || doc.Messages.Length > 500 ||
             doc.Messages.Any(item => item is null || item.Id == Guid.Empty || !Valid(item.Target, item.Text) ||
                 item.StartNewChat != (item.Target is null) || doc.Version == 1 && item.StartNewChat ||
+                item.TargetSelected && (doc.Version < 4 || item.Target is null) ||
                 item.InterruptedTurnId is not null && (item.Target is null || string.IsNullOrWhiteSpace(item.InterruptedTurnId) || item.InterruptedTurnId.Length > 200) ||
                 !Enum.IsDefined(item.State) || !CodexScheduleIssues.IsKnown(item.Issue)) ||
             doc.Messages.Select(item => item.Id).Distinct().Count() != doc.Messages.Length)
@@ -75,7 +76,7 @@ internal sealed class CodexScheduleQueue(string path)
         text is { Length: > 0 and <= 200_000 } && !string.IsNullOrWhiteSpace(text) && !text.Contains('\0');
     private void Save(List<CodexScheduledMessage> next)
     {
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(new Document(3, next.ToArray()), Json);
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(new Document(4, next.ToArray()), Json);
         if (bytes.Length > 16 * 1024 * 1024) throw new InvalidDataException("The Codex outbox is full.");
         AtomicFile.Write(path, bytes);
     }
@@ -96,7 +97,8 @@ internal sealed class CodexScheduleQueue(string path)
         {
             Load();
             if (_messages!.Count >= 500) throw new InvalidDataException("The Codex outbox is full.");
-            var item = new CodexScheduledMessage(Guid.NewGuid(), target, text, when.ToUniversalTime(), StartNewChat: target is null);
+            var item = new CodexScheduledMessage(Guid.NewGuid(), target, text, when.ToUniversalTime(),
+                StartNewChat: target is null, TargetSelected: target is not null);
             var next = new List<CodexScheduledMessage>(_messages) { item };
             Save(next); _messages = next;
             return item;
@@ -134,7 +136,7 @@ internal sealed class CodexScheduleQueue(string path)
                 item.State is CodexScheduleState.Pending or CodexScheduleState.Sending)))
                 throw new CodexResumptionAlreadyQueuedException();
             var added = targets.Select(target => new CodexScheduledMessage(Guid.NewGuid(), target.Target, text,
-                when.ToUniversalTime(), InterruptedTurnId: target.InterruptedTurnId)).ToArray();
+                when.ToUniversalTime(), InterruptedTurnId: target.InterruptedTurnId, TargetSelected: true)).ToArray();
             var next = new List<CodexScheduledMessage>(_messages);
             next.AddRange(added);
             Save(next); _messages = next;
@@ -155,7 +157,8 @@ internal sealed class CodexScheduleQueue(string path)
             if (item is null || item.State is not (CodexScheduleState.Pending or CodexScheduleState.NeedsAttention))
                 throw new InvalidOperationException("This scheduled message can no longer be edited.");
             Change(new(id, target, text, when.ToUniversalTime(), StartNewChat: target is null,
-                InterruptedTurnId: target?.Id == item.Target?.Id ? item.InterruptedTurnId ?? interruptedTurnId : interruptedTurnId));
+                InterruptedTurnId: target?.Id == item.Target?.Id ? item.InterruptedTurnId ?? interruptedTurnId : interruptedTurnId,
+                TargetSelected: target is not null));
         }
     }
 

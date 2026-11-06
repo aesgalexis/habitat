@@ -25,6 +25,8 @@ La versión **0.18.2** corrige el cierre de Contacts con Drive desconectado y la
 
 La versión **0.18.3** recupera las lecturas del editor de Codex cuando cambian sus controles de accesibilidad después de escribir. Verifica de nuevo la misma ventana, el chat y el texto exacto, con reintentos limitados y cancelables que nunca repiten la acción de envío.
 
+La versión **0.19.0** permite programar mensajes en cualquier chat local disponible sin archivar, incluidos los iniciados directamente en Codex. El formato 4 conserva esa selección por mensaje sin ampliar las programaciones antiguas. Al volver a 0.18.x se necesita la copia previa de la cola; véase [compatibilidad de la cola](CODEX_SCHEDULING.md#compatibilidad-de-la-cola).
+
 La versión **0.11.0** incorpora el aviso automático de versiones nuevas mediante **Update HABITAT**, los destinos personalizados y la gestión de aplicaciones de Windows.
 
 La versión **0.14.0** añade Mercados, la interfaz en inglés/español, fondos personalizables y cinco ilustraciones. También corrige el cierre causado por márgenes negativos de la barra de ventana al minimizar/restaurar. Incluye los cambios de 0.12.0 a 0.13.1 que aún no tenían paquetes publicados en GitHub.

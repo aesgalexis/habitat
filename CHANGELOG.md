@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.19.0 — 2026-11-06
+
+- El selector de mensajes programados incluye todos los chats locales disponibles sin archivar, también los iniciados directamente en Codex y los que están trabajando. Los detenidos por límite siguen apareciendo primero; un chat en ejecución espera antes del envío.
+- La selección de un chat autoriza únicamente esa programación. Se conserva su identificador y se comprueba su disponibilidad antes de navegar y antes de escribir. No se incorpora el chat al registro de origen de HABITAT ni cambia el envío normal.
+- El formato 4 de la cola conserva la selección explícita y carga los formatos anteriores sin conceder permisos nuevos. Las reanudaciones mantienen la protección del turno interrumpido. La actualización debe conservar una copia de la cola anterior si se prevé volver a 0.18.x; consulta [la migración](docs/CODEX_SCHEDULING.md#compatibilidad-de-la-cola).
+- Nuevas pruebas aisladas cubren chats externos normales o activos, persistencia y edición de la selección, chats archivados durante la navegación y programaciones antiguas. Un diagnóstico optativo comprueba el selector real y puede añadir una única prueba a la cola con HABITAT cerrado.
+
 ## 0.18.3 — 2026-11-06
 
 - La entrega a chats de Codex vuelve a leer la misma ventana cuando un control de accesibilidad deja de estar disponible, también después de escribir el mensaje. Un editor temporalmente ausente o sustituido puede recuperarse tras comprobar el destino y el texto exacto.

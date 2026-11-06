@@ -16,7 +16,7 @@ internal static class CodexScheduleChecks
         var queue = new CodexScheduleQueue(file);
         const string text = "  Continúa mañana ☕\r\n**literal** 雪  ";
         var first = queue.Add(A, text, now.AddMinutes(5), now);
-        check(new CodexScheduleQueue(file).Messages.Single() is { State: CodexScheduleState.Pending } saved &&
+        check(new CodexScheduleQueue(file).Messages.Single() is { State: CodexScheduleState.Pending, TargetSelected: true } saved &&
             saved.Target == A && saved.Text == text && saved.SendAt == now.AddMinutes(5),
             "Codex schedules persist the exact target ID, original text and absolute time across restarts");
         var calls = 0;
@@ -86,6 +86,7 @@ internal static class CodexScheduleChecks
         await CheckServiceAsync(root, check);
         await CheckNewChatsAsync(root, now, check);
         await CheckResumptionsAsync(root, now, check);
+        await CheckSelectedLocalChatsAsync(root, now, check);
         await CheckMultipleWindowsAsync(root, now, check);
         CheckLimitMetadata(now, check);
     }
@@ -112,8 +113,10 @@ internal static class CodexScheduleChecks
             desktop.NoEditor = false;
             return Task.FromResult(CodexDeliveryResult.Sent);
         }, origins);
-        check((await service.ListScheduleTargetsAsync(default)).Single() is { Target: var limited, InterruptedTurnId: "last" } && limited == B,
-            "An empty registry still offers external chats stopped by a usage limit for explicit resumption");
+        var available = await service.ListScheduleTargetsAsync(default);
+        check(available.Count == 2 && available[0] is { Target: var limited, InterruptedTurnId: "last" } && limited == B &&
+            available.Any(item => item.Target == A && !item.UsageLimited),
+            "An empty registry offers ordinary local chats and prioritizes usage-limit resumptions");
         origins.Register(A, link: true);
         reader.Reads.Clear();
         await queue.RunDueAsync(now, (item, token) => service.SendScheduledAsync(item.Target, item.Text, token), default);
@@ -152,6 +155,7 @@ internal static class CodexScheduleChecks
         var doc = JsonNode.Parse(File.ReadAllText(legacyPath))!;
         doc["Version"] = 1;
         doc["Messages"]![0]!.AsObject().Remove("StartNewChat");
+        doc["Messages"]![0]!.AsObject().Remove("TargetSelected");
         File.WriteAllText(legacyPath, doc.ToJsonString());
         check(new CodexScheduleQueue(legacyPath).Messages.Single() is { Target: not null, StartNewChat: false },
             "Version-one schedules retain their existing destination and can still be loaded");
@@ -210,7 +214,13 @@ internal static class CodexScheduleChecks
         var legacy = new CodexScheduleQueue(Path.Combine(root, "legacy-outbox.json"));
         var now = DateTimeOffset.UtcNow;
         legacy.Add(B, "Persisted by an older version", now.AddMinutes(1), now);
-        await legacy.RunDueAsync(now.AddMinutes(1), (item, token) => service.SendScheduledAsync(item.Target, item.Text, token), default);
+        var legacyDocument = JsonNode.Parse(File.ReadAllText(Path.Combine(root, "legacy-outbox.json")))!;
+        legacyDocument["Version"] = 3;
+        legacyDocument["Messages"]![0]!.AsObject().Remove("TargetSelected");
+        File.WriteAllText(Path.Combine(root, "legacy-outbox.json"), legacyDocument.ToJsonString());
+        legacy = new CodexScheduleQueue(Path.Combine(root, "legacy-outbox.json"));
+        await legacy.RunDueAsync(now.AddMinutes(1), (item, token) =>
+            service.SendScheduledAsync(item.Target, item.Text, token, item.InterruptedTurnId, item.TargetSelected), default);
         check(legacy.Messages.Single() is { State: CodexScheduleState.NeedsAttention, Issue: "CodexScheduleTargetUnavailable" } &&
             desktop.Opens == 0 && desktop.Sends == 0 && reader.Reads.Count == reads,
             "An older persisted foreign-chat schedule cannot bypass the origin boundary or send automatically");
@@ -245,10 +255,12 @@ internal static class CodexScheduleChecks
         var reader = new Reader(); var desktop = new Desktop(); var origins = new CodexChatOrigins(null);
         await using var service = new CodexChatService(desktop, reader, (_, _) => throw new Exception("Must not start a chat"), origins);
         var candidates = await service.ListScheduleTargetsAsync(default);
-        check(candidates.Count == 1 && candidates[0].Target == B && candidates[0].InterruptedTurnId == "last",
-            "External completed chats are excluded while the current usage-limit interruption is identifiable");
+        check(candidates.Count == 2 && candidates[0].Target == B && candidates[0].InterruptedTurnId == "last" &&
+            candidates.Any(item => item.Target == A && item.InterruptedTurnId is null),
+            "Ordinary external chats remain selectable while a usage-limit resumption keeps its interrupted turn");
         reader.Running = true;
-        check((await service.ListScheduleTargetsAsync(default)).Count == 0, "Running external chats are not offered as interrupted");
+        check((await service.ListScheduleTargetsAsync(default)) is { Count: 2 } running && running.All(item => !item.UsageLimited),
+            "Running local chats stay in the picker without being marked as interrupted");
         reader.Running = false;
         var file = Path.Combine(root, "resumptions.json");
         var queue = new CodexScheduleQueue(file);
@@ -283,6 +295,71 @@ internal static class CodexScheduleChecks
         var item = queue.Messages.First();
         queue.Reschedule(item.Id, item.Target, item.Text, now.AddMinutes(3), now);
         check(queue.Messages.First().InterruptedTurnId == item.InterruptedTurnId, "Editing the time preserves the interrupted-turn guard");
+    }
+
+    private static async Task CheckSelectedLocalChatsAsync(string root, DateTimeOffset now, Action<bool, string> check)
+    {
+        var reader = new Reader { Reset = null };
+        var desktop = new Desktop { Chats = [new(new(7, "local-editor", "local-send", "", false, true), [A.Title], true, true)] };
+        var origins = new CodexChatOrigins(null);
+        await using var service = new CodexChatService(desktop, reader, (_, _) => throw new Exception("Must not create a chat"), origins);
+        var candidates = await service.ListScheduleTargetsAsync(default);
+        check(candidates.Any(item => item.Target == A && !item.UsageLimited),
+            "A chat started directly in Codex appears in the schedule picker without HABITAT provenance");
+        var queuePath = Path.Combine(root, "selected-local-chat.json");
+        var queue = new CodexScheduleQueue(queuePath);
+        var item = queue.Add(A, "  Test in the same local chat ☕  ", now.AddMinutes(1), now);
+        queue = new CodexScheduleQueue(queuePath);
+        check(queue.Messages.Single() is { TargetSelected: true, InterruptedTurnId: null } &&
+            JsonNode.Parse(File.ReadAllText(queuePath))!["Version"]!.GetValue<int>() == 4,
+            "Explicit local-chat selection survives a restart independently of origin and usage-limit resumptions");
+        reader.Running = true;
+        check(await service.SendScheduledAsync(A, item.Text, default, targetSelected: true) is
+            { Result: CodexDeliveryResult.NotSent, RetryAt: not null } && desktop.Sends == 0,
+            "Scheduling this currently running chat waits for it to become idle without writing or sending");
+        reader.Running = false;
+        await queue.RunDueAsync(now.AddMinutes(1), (message, token) =>
+            service.SendScheduledAsync(message.Target, message.Text, token, message.InterruptedTurnId, message.TargetSelected), default);
+        check(queue.Messages.Single().State == CodexScheduleState.Sent && desktop.Sends == 1 && desktop.LastWindow == 7 &&
+            desktop.Text == item.Text && !origins.Contains(A) && origins.Linked is null,
+            "The authorized external chat receives one exact scheduled message without changing HABITAT provenance or linkage");
+        await queue.RunDueAsync(now.AddMinutes(2), (_, _) => throw new Exception("Must not repeat"), default);
+        check((await service.SendAsync(A, "Unscheduled instruction", default)).Result == CodexDeliveryResult.NotSent && desktop.Sends == 1,
+            "A scheduled external selection never grants access to ordinary HABITAT chat sending");
+
+        reader.Listed = false;
+        check((await service.SendScheduledAsync(A, "Archived", default, targetSelected: true)).Issue == "CodexScheduleTargetUnavailable" &&
+            desktop.Sends == 1, "An explicitly selected chat that was archived or removed cannot receive the scheduled message");
+        reader.Listed = true; desktop.Chats = []; desktop.NoEditor = true;
+        desktop.OnOpen = () => { reader.Listed = false; desktop.Chats = [new(new(7, "editor", "send", "", false, true), [A.Title], true, true)]; };
+        check((await service.SendScheduledAsync(A, "Archived while navigating", default, targetSelected: true)).Issue == "CodexScheduleTargetUnavailable" &&
+            desktop.Sends == 1, "The selected chat is checked again for archiving immediately before transfer");
+        desktop.OnOpen = null; reader.Listed = true;
+
+        var legacyPath = Path.Combine(root, "unselected-local-chat.json");
+        new CodexScheduleQueue(legacyPath).Add(A, "An old external entry", now.AddMinutes(1), now);
+        var legacy = JsonNode.Parse(File.ReadAllText(legacyPath))!;
+        legacy["Messages"]![0]!.AsObject().Remove("TargetSelected");
+        foreach (var version in new[] { 1, 2, 3 })
+        {
+            legacy["Version"] = version;
+            File.WriteAllText(legacyPath, legacy.ToJsonString());
+            var old = new CodexScheduleQueue(legacyPath).Messages.Single();
+            check(!old.TargetSelected && (await service.SendScheduledAsync(old.Target, old.Text, default,
+                old.InterruptedTurnId, old.TargetSelected)).Issue == "CodexScheduleTargetUnavailable" && desktop.Sends == 1,
+                "Loading an older outbox never invents explicit external selection, schema " + version);
+        }
+        var edited = new CodexScheduleQueue(legacyPath);
+        edited.Reschedule(edited.Messages.Single().Id, A, "Explicitly selected again", now.AddMinutes(2), now);
+        check(new CodexScheduleQueue(legacyPath).Messages.Single().TargetSelected,
+            "Explicitly editing an old schedule records the newly chosen local destination");
+        edited.Reschedule(edited.Messages.Single().Id, null, "New chat instead", now.AddMinutes(3), now);
+        check(edited.Messages.Single() is { Target: null, StartNewChat: true, TargetSelected: false },
+            "Changing to a new chat clears existing-chat selection authorization");
+        legacy["Version"] = 3; legacy["Messages"]![0]!["TargetSelected"] = true;
+        File.WriteAllText(legacyPath, legacy.ToJsonString());
+        try { _ = new CodexScheduleQueue(legacyPath).Messages; check(false, "Legacy authorization must fail closed"); }
+        catch (InvalidDataException) { check(true, "Explicit-selection metadata is rejected in a legacy schema"); }
     }
 
     private static async Task CheckMultipleWindowsAsync(string root, DateTimeOffset now, Action<bool, string> check)

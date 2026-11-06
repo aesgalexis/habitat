@@ -8,6 +8,12 @@ if (args.Length > 0 && args[0] == "app-server" && args.Contains("--stdio"))
     return;
 }
 
+if (args.Contains("--codex-schedule-probe"))
+{
+    await CodexScheduleProbe.RunAsync(args);
+    return;
+}
+
 if (args.Contains("--windows-apps-smoke"))
 {
     if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();

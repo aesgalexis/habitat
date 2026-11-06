@@ -23,12 +23,13 @@ internal sealed class CodexChatService(ICodexChatDesktop desktop, ICodexHistoryR
             finally { gate.Release(); }
         }));
         var reset = candidates.Any(item => item.UsageLimited) ? await reader.ReadLimitResetAsync(token) : null;
-        return candidates.Where(item => item.UsageLimited || origins.Contains(item.Target!))
+        return candidates
             .Select(item => item.UsageLimited ? item with { ResumeAt = reset } : item)
             .OrderByDescending(item => item.UsageLimited).ToArray();
     }
 
-    public async Task<CodexScheduledAttempt> SendScheduledAsync(CodexChatTarget? target, string text, CancellationToken token, string? interruptedTurnId = null)
+    public async Task<CodexScheduledAttempt> SendScheduledAsync(CodexChatTarget? target, string text, CancellationToken token,
+        string? interruptedTurnId = null, bool targetSelected = false)
     {
         CodexScheduledAttempt Reject(string issue)
         {
@@ -43,7 +44,7 @@ internal sealed class CodexChatService(ICodexChatDesktop desktop, ICodexHistoryR
         if (string.IsNullOrWhiteSpace(text) || text.Contains('\0')) return new(CodexDeliveryResult.NotSent);
         if (target is null)
         {
-            if (interruptedTurnId is not null) return new(CodexDeliveryResult.NotSent);
+            if (interruptedTurnId is not null || targetSelected) return new(CodexDeliveryResult.NotSent);
             using var preflight = CancellationTokenSource.CreateLinkedTokenSource(token);
             preflight.CancelAfter(TimeSpan.FromSeconds(12));
             try
@@ -58,17 +59,19 @@ internal sealed class CodexChatService(ICodexChatDesktop desktop, ICodexHistoryR
             catch (OperationCanceledException) when (!token.IsCancellationRequested) { return Wait("CodexScheduleEditorUnavailable"); }
             return new((await StartNewAsync(text, null, token, link: false)).Result);
         }
-        if (!CodexReadClient.ValidId(target.Id) || !origins.Contains(target) && string.IsNullOrWhiteSpace(interruptedTurnId))
+        if (!CodexReadClient.ValidId(target.Id) || !origins.Contains(target) && !targetSelected && string.IsNullOrWhiteSpace(interruptedTurnId))
             return Reject("CodexScheduleTargetUnavailable");
-        // External chats require an explicitly selected interrupted turn.
-        // This does not adopt them into HABITAT's ordinary chat history.
+        // A newly selected local chat is authorized for this scheduled message
+        // only. Legacy external schedules still need an interrupted turn and
+        // no selection changes HABITAT's new-chat provenance or normal sending.
+        var mustBeListed = targetSelected || interruptedTurnId is not null;
         CodexVisibleChat? ready = null;
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromSeconds(12));
         try
         {
             var cancellation = timeout.Token;
-            if (interruptedTurnId is not null && !(await reader.ListAsync(cancellation)).Any(item => item.Id == target.Id))
+            if (mustBeListed && !(await reader.ListAsync(cancellation)).Any(item => item.Id == target.Id))
                 return Reject("CodexScheduleTargetUnavailable");
             var before = await reader.ReadAsync(target, cancellation);
             if (before.Target.Id != target.Id) return Reject("CodexScheduleTargetUnavailable");
@@ -90,6 +93,8 @@ internal sealed class CodexChatService(ICodexChatDesktop desktop, ICodexHistoryR
                 {
                     if (!ready.IsEmpty) return Reject("CodexScheduleDraftPresent");
                     if (!ready.CanAccept) return Wait("CodexScheduleEditorUnavailable");
+                    if (mustBeListed && !(await reader.ListAsync(cancellation)).Any(item => item.Id == target.Id))
+                        return Reject("CodexScheduleTargetUnavailable");
                     var current = await reader.ReadAsync(target, cancellation);
                     if (current.Target.Id != target.Id || interruptedTurnId is not null &&
                         (current.LatestTurnId != interruptedTurnId || !CodexUsageLimit.IsLimited(current)))
