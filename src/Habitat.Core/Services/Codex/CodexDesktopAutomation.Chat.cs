@@ -58,7 +58,8 @@ internal sealed partial class CodexDesktopAutomation
         if (state.Composers.Count != 1) throw new InvalidDataException("Open one unambiguous chat editor in the Codex window, then reload.");
         var composer = state.Composers[0];
         var root = automation.Root(window);
-        var editor = automation.Elements(root, 30003, 50004).Single(element => Id(element, window) == composer.EditorId);
+        var editor = automation.Elements(root, 30003, 50004).SingleOrDefault(element => Id(element, window) == composer.EditorId);
+        if (editor is null) return null; // The editor can be replaced between the two snapshots.
         return new CodexVisibleChat(composer, SelectedTitles(automation, root), IsEmptyEditor(editor, composer.Text),
             !state.Blocked && editor.GetCurrentPropertyValue(30010) is true &&
             editor.GetCurrentPropertyValue(30043) is true && editor.GetCurrentPropertyValue(30046) is false, window == foreground);
@@ -80,63 +81,12 @@ internal sealed partial class CodexDesktopAutomation
             .Select(element => element.GetCurrentPropertyValue(30005) as string ?? "")
             .Where(title => title.Length > 0).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
 
-    public async Task<CodexDeliveryResult> SubmitVisibleAsync(CodexVisibleChat expected, string text, CancellationToken token)
-    {
-        var invoked = false;
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
-        timeout.CancelAfter(TimeSpan.FromSeconds(16));
-        var cancellation = timeout.Token;
-        try
-        {
-            CodexDeliveryResult Reject(string stage)
-            {
-                trace?.Invoke($"Codex visible-chat delivery blocked: {stage}; no submission invoked.");
-                return CodexDeliveryResult.NotSent;
-            }
-            var current = await ReadPinnedAsync(expected.Composer.Window, cancellation).WaitAsync(cancellation);
-            if (current is null || current.Composer.Window != expected.Composer.Window ||
-                current.Composer.EditorId != expected.Composer.EditorId || !current.CanAccept ||
-                !current.SelectedTitles.SequenceEqual(expected.SelectedTitles) ||
-                !CodexDelivery.SameText(current.Composer.Text, expected.Composer.Text)) return Reject("editor-changed");
-            if (!await SetTextCoreAsync(current.Composer, text, cancellation, allowEmpty: true, expected.SelectedTitles).WaitAsync(cancellation))
-                return Reject("literal-transfer");
-            for (var attempt = 0; attempt < 40; attempt++)
-            {
-                cancellation.ThrowIfCancellationRequested();
-                current = await ReadPinnedAsync(expected.Composer.Window, cancellation).WaitAsync(cancellation);
-                if (current is null || current.Composer.Window != expected.Composer.Window ||
-                    current.Composer.EditorId != expected.Composer.EditorId || !current.SelectedTitles.SequenceEqual(expected.SelectedTitles))
-                    return Reject("selection-changed");
-                if (current.Composer.CanSend && CodexDelivery.SameText(current.Composer.Text, text))
-                {
-                    invoked = true;
-                    if (!await PressEnterCoreAsync(current.Composer, cancellation, expected.SelectedTitles).WaitAsync(cancellation))
-                        return Reject("send-control-or-focus-unavailable");
-                    _submittedWindow = current.Composer.Window;
-                    timeout.CancelAfter(TimeSpan.FromSeconds(8));
-                    for (var confirmation = 0; confirmation < 40; confirmation++)
-                    {
-                        try
-                        {
-                            if (await WasSubmittedAsync(current.Composer, cancellation).WaitAsync(cancellation)) return CodexDeliveryResult.Sent;
-                        }
-                        catch (COMException exception) when (exception.HResult == unchecked((int)0x80040201)) { }
-                        await Task.Delay(150, cancellation);
-                    }
-                    return CodexDeliveryResult.Unconfirmed;
-                }
-                await Task.Delay(100, cancellation);
-            }
-            return Reject("send-control-not-ready");
-        }
-        catch (OperationCanceledException) when (token.IsCancellationRequested)
-        { return invoked ? CodexDeliveryResult.Unconfirmed : CodexDeliveryResult.Cancelled; }
-        catch (Exception exception)
-        {
-            trace?.Invoke($"Codex visible-chat delivery failed: {exception.GetType().Name} {exception.HResult:X8}; invoked={invoked}.");
-            return invoked ? CodexDeliveryResult.Unconfirmed : CodexDeliveryResult.NotSent;
-        }
-    }
+    public Task<CodexDeliveryResult> SubmitVisibleAsync(CodexVisibleChat expected, string text, CancellationToken token) =>
+        new CodexVisibleChatDelivery(ReadPinnedAsync,
+            (chat, instruction, cancellation) => SetTextCoreAsync(chat.Composer, instruction, cancellation,
+                allowEmpty: true, chat.SelectedTitles),
+            (chat, cancellation) => PressEnterCoreAsync(chat.Composer, cancellation, chat.SelectedTitles),
+            WasSubmittedAsync, trace).SendAsync(expected, text, token);
 
     public Task<bool> OpenChatAsync(CodexChatTarget? target, CancellationToken token)
     {

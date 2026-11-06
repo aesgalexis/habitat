@@ -126,6 +126,7 @@ if (args.Contains("--notepad-smoke"))
 var destinations = ComposerDestinations.Ordered;
 await DestinationCatalogChecks.RunAsync(Check);
 await CodexDeliveryChecks.RunAsync(Check);
+await CodexVisibleChatDeliveryChecks.RunAsync(Check);
 await CodexChatChecks.RunAsync(Check);
 await CodexScheduleChecks.RunAsync(Check);
 CodexRetentionChecks.Run(Check);

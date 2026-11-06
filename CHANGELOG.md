@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.18.3 — 2026-11-06
+
+- La entrega a chats de Codex vuelve a leer la misma ventana cuando un control de accesibilidad deja de estar disponible, también después de escribir el mensaje. Un editor temporalmente ausente o sustituido puede recuperarse tras comprobar el destino y el texto exacto.
+- Los reintentos de lectura tienen límite y respetan la cancelación. No repiten la transferencia ni la acción de envío; un fallo durante el envío o un acuse incierto sigue requiriendo revisión.
+- Pruebas aisladas reproducen el fallo posterior a la escritura, la sustitución de controles, el retraso del editor y del botón Send, cambios de chat o borrador y cancelaciones. No envían mensajes reales ni cambian programaciones anteriores.
+
 ## 0.18.2 — 2026-11-05
 
 - Se corrige el cierre al abrir **Preferences → Contacts** con Google Drive desconectado. **Advanced setup** usa controles básicos, conserva su estado al refrescar y evita la plantilla inestable de `Expander`.

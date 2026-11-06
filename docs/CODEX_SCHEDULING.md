@@ -36,6 +36,8 @@ Desde 0.15.6, un acuse de recepción correcto de Codex mantiene el envío como *
 
 ## Implementación y pruebas
 
+Desde 0.18.3, la entrega a un chat existente recupera las lecturas de accesibilidad cuando Codex sustituye controles, incluso después de insertar el mensaje. Cada reintento obtiene controles nuevos de la misma ventana y vuelve a comprobar el chat y el texto exacto. La espera está limitada y se cancela al cerrar o cancelar la operación. Solo se reintentan lecturas: no se vuelve a escribir ni a invocar **Send**. Un cambio de destino o de borrador detiene la entrega y un resultado incierto sigue requiriendo revisión. Las programaciones antiguas no se reactivan automáticamente.
+
 `CodexScheduleQueue` conserva una cola independiente de la interfaz y evita solapamientos. El temporizador existente consulta la cola cada dos segundos; las operaciones participan en el drenaje de cierre y la actualización espera cualquier entrega programada en curso. La detección y el envío normal no descargan ni crean programaciones.
 
 `CodexReadClient` añade paginación de `thread/list`, conserva `codexErrorInfo` y permite `account/rateLimits/read`, siempre de solo lectura. El canal no reanuda hilos ni inicia turnos. Los contratos se contrastaron con [la documentación oficial del app-server de Codex](https://learn.chatgpt.com/docs/app-server). La entrega programada navega al chat elegido por su URI y vuelve a verificar la selección mediante el lector y los controles de escritorio ya utilizados por HABITAT.
