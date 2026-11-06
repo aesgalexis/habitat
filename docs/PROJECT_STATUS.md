@@ -1,6 +1,6 @@
 # Estado verificable del proyecto
 
-Revisión: **5 de noviembre de 2026**. La versión fuente **0.18.2** corrige el cierre de Contacts con Google Drive desconectado y refuerza la entrega programada a Codex entre varias ventanas, con esperas anteriores a la transferencia y motivos de revisión concretos. Conserva la agenda manual, la sincronización opcional con Drive, los borradores por canal y los datos de la agenda anterior. La conversación de Enlace Móvil muestra las respuestas disponibles.
+Revisión: **6 de noviembre de 2026**. La versión fuente **0.20.0** añade [sincronización opcional de Tasks y carpeta HABITAT en Google Drive](TASKS_DRIVE_SYNC.md), conservando la agenda manual y los chats programados ampliados de 0.19.0. Contacts y Tasks comparten autorización con activación independiente; las tareas empiezan sin sincronización. Las comprobaciones usan dos equipos simulados y almacenamiento aislado. La prueba de dos equipos físicos queda para la activación en ambos PCs.
 ## Recuperación de las funciones consolidadas
 
 La rama de Facebook partía de 4faa5e9 (0.10.0). Cambiar a esa rama sin integrar main dejó fuera 16 commits posteriores. El trabajo seguía guardado en Git y se ha fusionado conservando ambas líneas de historial. Véase [RECOVERY_2026-10-25.md](RECOVERY_2026-10-25.md).
@@ -20,6 +20,6 @@ La rama de Facebook partía de 4faa5e9 (0.10.0). Cambiar a esa rama sin integrar
 
 ## Distribución y decisiones
 
-La versión fuente declara **0.18.2**, la extensión de Chrome **0.10.9** y la de VS Code **0.2.0**. Las publicaciones se consultan en [GitHub Releases](https://github.com/aesgalexis/habitat/releases). Los scripts generan un release.json con el commit exacto de la etiqueta y verifican ambas instalaciones en CI. La versión instalada y las publicaciones son comprobaciones independientes. Las guías de Chrome Web Store y WinGet describen observaciones fechadas. La firma sigue aplazada conforme a [SIGNING.md](SIGNING.md).
+La versión fuente declara **0.20.0**, la extensión de Chrome **0.10.9** y la de VS Code **0.2.0**. Las publicaciones se consultan en [GitHub Releases](https://github.com/aesgalexis/habitat/releases). Los scripts generan un release.json con el commit exacto de la etiqueta y verifican ambas instalaciones en CI. La versión instalada y las publicaciones son comprobaciones independientes. Las guías de Chrome Web Store y WinGet describen observaciones fechadas. La firma sigue aplazada conforme a [SIGNING.md](SIGNING.md).
 
 Las comprobaciones de esta recuperación se registran en [RECOVERY_2026-10-25.md](RECOVERY_2026-10-25.md), sin atribuir a este árbol validaciones de otras revisiones.

@@ -8,7 +8,7 @@ A native Windows desktop application that lets you write to the active ChatGPT c
 
 The current application is built with **C# and WinUI 3 on .NET 10**. It includes eleven destinations, configurable appearance, persistent tasks, weather forecasts, Gmail, a [Markets sidebar widget](docs/MARKETS.md), and the Ctrl+H global shortcut. The Python/Tkinter prototype belongs to an earlier stage; the current entry point is `HABITAT.vbs`.
 
-Version **0.19.0** includes manually managed contact destinations, optional Google Drive contact sync and a single selection of text buttons for each contact's channels. **View conversation** shows available Phone Link messages and replies and refreshes the open thread every ten seconds. **Connect Google Drive** opens Google sign-in directly. Choose the same account on your other PC to sync the same address book. See [Contacts](docs/CONTACTS.md) and [project status](docs/PROJECT_STATUS.md).
+Source version **0.20.0** adds optional Tasks sync alongside Contacts in a shared **HABITAT** folder in My Drive. Open **Preferences → Google Drive**, connect the same account on each PC and enable **Sync tasks**. Changes are saved locally first; conflicts can be reviewed per task. See [Drive sync](docs/TASKS_DRIVE_SYNC.md), [Contacts](docs/CONTACTS.md) and [project status](docs/PROJECT_STATUS.md). The download examples below refer to the published 0.19.0 release.
 
 ## First-time installation
 

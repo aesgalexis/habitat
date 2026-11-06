@@ -29,8 +29,6 @@ public sealed partial class MainPage
     private bool _reviewContactDuplicates;
     private ContactsPreferencesView? _contactsPreferences;
 
-    private DateTimeOffset _nextDriveContactsSync;
-
     private ContactsPreferencesView CreateContactsPreferences() => new(_services.Contacts,
         drive: _services.ContactDrive, pickDriveClient: PickDriveClientAsync);
 
@@ -44,19 +42,19 @@ public sealed partial class MainPage
 
     private void TickDriveContacts()
     {
-        if (_services.ContactDrive is not { HasLink: true, Busy: false, NeedsAttention: false } drive ||
-            _contactsPreferences is { IsEditingContact: true } or { IsBusy: true } ||
-            DateTimeOffset.UtcNow < _nextDriveContactsSync) return;
-        _nextDriveContactsSync = DateTimeOffset.UtcNow.AddSeconds(30);
+        if (_operations.IsStopping || _services.DriveSync is not { Busy: false } drive) return;
         _ = RunOperationAsync(async () =>
         {
             var book = _services.Contacts.Book;
-            var status = drive.Status;
+            var status = drive.Contacts.Status;
             var settings = _contactsPreferences;
-            await drive.SyncAsync(_operations.Token);
+            await drive.TickAsync(DateTimeOffset.UtcNow,
+                _contactsPreferences is { IsEditingContact: true } or { IsBusy: true }, _operations.Token);
+            if (_operations.IsStopping) return;
             if (_contactsPreferences is { IsBusy: false, IsEditingContact: false } contacts &&
-                (!ReferenceEquals(book, _services.Contacts.Book) || status != drive.Status || !ReferenceEquals(settings, contacts)))
+                (!ReferenceEquals(book, _services.Contacts.Book) || status != drive.Contacts.Status || !ReferenceEquals(settings, contacts)))
                 contacts.Refresh();
+            RefreshDriveTasks();
         });
     }
 

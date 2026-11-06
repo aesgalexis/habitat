@@ -34,7 +34,7 @@ Las pruebas usan contactos sintéticos y almacenamiento explícito dentro de `ar
 
 ## Sincronizar con Google Drive
 
-1. En **Contacts → Manage contacts**, pulsa **Connect Google Drive**.
+1. Abre **Preferences → Google Drive**, también accesible desde **Contacts → Google Drive sync settings**, y pulsa **Connect Google Drive**.
 2. En el navegador, elige tu cuenta de Google y permite el acceso a los archivos de HABITAT.
 3. Cuando aparezca **Contacts synced to Google Drive**, repite los pasos en el segundo PC con la misma cuenta. HABITAT encuentra la agenda y sincroniza las fichas. Puedes pulsar **Sync now** para actualizarla al momento.
 
@@ -43,6 +43,8 @@ El acceso normal está disponible en los instaladores que incluyen el cliente OA
 Desde 0.18.2, **Advanced setup** y **Hide advanced setup** despliegan y ocultan esa opción con controles básicos. Se evita el cierre de WinUI al abrir **Preferences → Contacts** con Drive desconectado o pendiente de reconexión. El estado del desplegable se conserva al refrescar la sección.
 
 El CSV se puede consultar o descargar desde Drive. Contiene una fila por detalle con el identificador de ficha, tipo, etiqueta y valor. Los valores que una hoja de cálculo podría interpretar como fórmulas llevan un apóstrofo protector. Haz las altas, ediciones y eliminaciones desde HABITAT. Las revisiones de sincronización se guardan en el espacio privado de la aplicación en el Drive del usuario para conservar cambios simultáneos. El CSV visible refleja el último estado publicado y se actualiza al volver a sincronizar si dos equipos publican a la vez.
+
+Desde 0.20.0 el mismo CSV se traslada a **HABITAT**, una carpeta creada en la raíz de Mi unidad, conservando su ID e historial. **Sync contacts** permite pausarlo sin desconectar la cuenta. **Sync tasks** comparte opcionalmente la lista de tareas mediante un JSON en esa carpeta y empieza desactivado. Consulta [Tasks y carpeta compartida de Google Drive](TASKS_DRIVE_SYNC.md) para configuración, conflictos y recuperación.
 
 Los cambios de fichas distintas se combinan. Si se modifica la misma ficha en ambos PC, **Keep local conflicting contacts** o **Keep Drive conflicting contacts** permite elegir qué versión conservar para las fichas en conflicto. Si dos fichas distintas tienen el mismo teléfono, correo o perfil, revisa los duplicados antes de reintentar. **Disconnect Google Drive** pausa la sincronización en ese PC y conserva la agenda local y el vínculo con esa cuenta para poder reanudarlo.
 

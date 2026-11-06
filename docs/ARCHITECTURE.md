@@ -125,6 +125,8 @@ Las preferencias se escriben en un archivo temporal con flush y reemplazo atómi
 
 `tasks.json.history/index.json` es un resumen descartable con checksum de las revisiones verificadas. El catálogo incluye nombres, tamaños y fechas de modificación. Si cambia el catálogo o el índice no es válido, se recorren y validan los originales. El índice no sustituye las copias ni elimina revisiones. La detección de IDs ausentes usa un conjunto en lugar de búsquedas anidadas.
 
+Desde 0.20.0, `GoogleDriveConnection` es el propietario único de la autorización compartida; `DriveWorkspace` verifica la carpeta y la identidad antes de escribir. `DriveDocumentClient` mantiene proyecciones visibles y revisiones privadas con marcadores independientes para Contacts y Tasks. `TaskDriveSync` combina por ID y campo, confirma la revisión remota y vuelve a combinar las ediciones locales tardías bajo el bloqueo breve de `TaskSession`; la red queda fuera de ese bloqueo. `GoogleDriveSync` coordina activación independiente y reintentos. La recuperación local escribe una barrera persistente antes de restaurar y exige revisión antes de sincronizar. Véase [TASKS_DRIVE_SYNC.md](TASKS_DRIVE_SYNC.md).
+
 En el ensayo sintético de 1.000 tareas y 200 revisiones, la verificación final registró **646,7 ms de lectura completa y 28,8 ms con índice**. Es una medida local, no una garantía para otros discos o historiales. Se mantienen todas las revisiones para conservar la recuperación; no se ha introducido una política de borrado ni una migración de datos.
 
 ## Compilación y actualización

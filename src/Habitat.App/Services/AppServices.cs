@@ -2,6 +2,8 @@ using Habitat.Models;
 using Habitat.Features.Translation;
 using Habitat.Features.Search;
 using Habitat.Features.Codex;
+using Habitat.Features.Drive;
+using Habitat.Features.Tasks;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.System;
@@ -24,6 +26,9 @@ internal sealed class AppServices : IAsyncDisposable
     public TaskSession TaskSession { get; }
     internal Habitat.Features.Contacts.ContactSession Contacts { get; }
     internal Habitat.Features.Contacts.ContactDriveSync? ContactDrive { get; }
+    internal GoogleDriveConnection? DriveConnection { get; }
+    internal TaskDriveSync? TaskDrive { get; }
+    internal GoogleDriveSync? DriveSync { get; }
     private readonly HttpClient? _contactDriveHttp;
     private readonly Dictionary<string, IGmailCredentialStore> _contactsTestCredentials = new();
     public WeatherService Weather { get; }
@@ -153,10 +158,15 @@ internal sealed class AppServices : IAsyncDisposable
         else
         {
             _contactDriveHttp = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
-            ContactDrive = new(Contacts, Path.Combine(paths.DesktopDirectory, "contacts-drive.json"),
-                () => new GmailAuthService(new GmailCredentialStore(
+            var contactLink = Path.Combine(paths.DesktopDirectory, "contacts-drive.json");
+            GmailAuthService CreateDriveAuth() => new(new GmailCredentialStore(
                     Path.Combine(paths.DesktopDirectory, "contacts-drive-account.bin"), "HABITAT/Contacts/Drive/v1"),
-                    _contactDriveHttp, driveOnly: true), _contactDriveHttp, ReadBundledDriveClient());
+                    _contactDriveHttp, driveOnly: true);
+            DriveConnection = new(Path.Combine(paths.DesktopDirectory, "drive-workspace.json"), contactLink,
+                CreateDriveAuth, _contactDriveHttp, ReadBundledDriveClient(), Path.Combine(paths.DesktopDirectory, "tasks-drive.json"));
+            ContactDrive = new(Contacts, contactLink, CreateDriveAuth, _contactDriveHttp, sharedConnection: DriveConnection);
+            TaskDrive = new(TaskSession, DriveConnection, Path.Combine(paths.DesktopDirectory, "tasks-drive.json"));
+            DriveSync = new(DriveConnection, ContactDrive, TaskDrive, Path.Combine(paths.DesktopDirectory, "drive-sync-settings.json"));
         }
         Weather = new WeatherService(_isolatedHttp);
         Markets = new MarketsService(_isolatedHttp);
@@ -262,7 +272,7 @@ internal sealed class AppServices : IAsyncDisposable
             finally { await Bridge.DisposeAsync(); }
         }
         finally { Updates.Dispose(); UpdateDownload.Dispose(); Weather.Dispose(); Markets.Dispose(); VSCode.Dispose();
-            ContactDrive?.Dispose(); _contactDriveHttp?.Dispose(); _isolatedHttp?.Dispose(); await Codex.DisposeAsync(); }
+            ContactDrive?.Dispose(); DriveConnection?.Dispose(); _contactDriveHttp?.Dispose(); _isolatedHttp?.Dispose(); await Codex.DisposeAsync(); }
     }
 
     private sealed class MemoryCredentials : IGmailCredentialStore

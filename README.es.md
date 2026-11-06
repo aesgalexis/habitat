@@ -25,7 +25,7 @@ Mientras se revisa, puedes descargar el instalador directamente de GitHub Releas
 
 El paquete incluye browser bridge **0.10.9** y el VSIX **HABITAT Terminal 0.2.0**. El instalador aún no tiene firma de código. Consulta la [guía para otro PC](docs/GETTING_STARTED.md) y los [detalles de distribución](docs/RELEASING.md). Si prefieres trabajar desde el código fuente, clona el repositorio y sigue **Compilar**.
 
-La versión **0.19.0** incorpora contactos manuales, sincronización opcional con Google Drive y botones de texto para elegir un solo canal por contacto. La nueva agenda empieza vacía y conserva aparte los datos anteriores. **View conversation** carga los mensajes y respuestas disponibles en Enlace Móvil y actualiza el hilo abierto cada diez segundos. **Connect Google Drive** abre Google directamente. Elige la misma cuenta en el otro PC para recuperar la agenda. Consulta [Contactos](docs/CONTACTS.md).
+La versión fuente **0.20.0** añade sincronización opcional de Tasks junto a Contacts en una carpeta **HABITAT** en Mi unidad. Abre **Preferences → Google Drive**, conecta la misma cuenta en cada PC y activa **Sync tasks**. Los cambios se guardan primero en local y los conflictos se revisan por tarea. Consulta [la guía de Drive](docs/TASKS_DRIVE_SYNC.md) y [Contactos](docs/CONTACTS.md). Los ejemplos de descarga anteriores corresponden a la publicación 0.19.0.
 
 Como alternativa, extrae todo `HABITAT-0.19.0-win-x64.zip` y ejecuta `Install-HABITAT.cmd`. Usa siempre el mismo formato para actualizar: EXE y ZIP mantienen disposiciones distintas y rechazan sobrescribirse entre sí. Ambos conservan los datos de usuario; el ZIP conserva además la publicación anterior para recuperación. La preparación para WinGet se documenta en [WINGET.md](docs/WINGET.md).
 

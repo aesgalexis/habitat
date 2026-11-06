@@ -40,6 +40,7 @@ internal sealed partial class ContactsPreferencesView : StackPanel
     internal ContactImport? Preview => _preview;
     internal bool IsBusy => _busy;
     internal bool IsEditingContact => _contactEditorOpen;
+    internal Action? OpenDriveSettings { get; set; }
 
     internal ContactsPreferencesView(ContactSession session,
         Func<CancellationToken, Task<ContactImport?>>? connectGoogle = null,

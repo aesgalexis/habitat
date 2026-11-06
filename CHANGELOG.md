@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.20.0 — 2026-11-06
+
+- Tasks incorpora sincronización opcional con Google Drive: altas, completar y reabrir, combinación por ID y campo, revisión por tarea y conservación de cambios locales durante la red. Empieza desactivada y comparte la autorización de Contacts.
+- La nueva sección **Preferences → Google Drive** permite activar cada módulo, sincronizar, abrir la carpeta y desconectar. Ambos usan una carpeta **HABITAT** en la raíz de Mi unidad; el CSV existente se mueve sin cambiar su identidad ni su historial.
+- Los reintentos conservan IDs pendientes y revisiones confirmadas. Se detectan carpetas duplicadas, cuenta distinta y archivos alterados. La recuperación local de tareas exige revisión persistente antes de subir posibles estados anteriores.
+- Comprobaciones sintéticas con dos equipos, fallos de red y módulos independientes; controles WinUI probados en ambos temas con datos aislados. [Guía y límites](docs/TASKS_DRIVE_SYNC.md).
+
 ## 0.19.0 — 2026-11-06
 
 - El selector de mensajes programados incluye todos los chats locales disponibles sin archivar, también los iniciados directamente en Codex y los que están trabajando. Los detenidos por límite siguen apareciendo primero; un chat en ejecución espera antes del envío.

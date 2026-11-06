@@ -70,6 +70,8 @@ public sealed partial class MainPage
     }, ("Content", () => (object?)(UiText.Get("Completed"))));
     private readonly TextBox TaskInput = UiLanguage.Watch(new TextBox() { PlaceholderText = UiText.Get("NewTaskMessage"), MaxLength = 1000, MinWidth = 0, FontSize = 13, Padding = new Thickness(6, 4, 6, 4) }, ("PlaceholderText", () => (object?)(UiText.Get("NewTaskMessage"))));
     private readonly TextBlock TasksStatus = new() { FontSize = 12, TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
+    private readonly TextBlock TasksDriveStatus = new() { FontSize = 12, TextWrapping = TextWrapping.Wrap };
+    private List<TaskItem>? _renderedTasks;
     private readonly Button TasksRetry = UiLanguage.Watch(new Button() { Content = UiText.Get("ReloadTasks"), Visibility = Visibility.Collapsed }, ("Content", () => (object?)(UiText.Get("ReloadTasks"))));
     private readonly Button TaskAdd = new()
     {
@@ -147,6 +149,15 @@ public sealed partial class MainPage
         TasksPanel.Children.Add(inputRow);
         TasksPanel.Children.Add(TasksStatus);
         TasksPanel.Children.Add(TasksRetry);
+        if (_services.DriveSync is not null)
+        {
+            var syncSettings = new Button { Content = "Google Drive sync settings" };
+            AutomationProperties.SetName(syncSettings, "Google Drive sync settings");
+            syncSettings.Click += async (_, _) => await RunOperationAsync(() => ShowPreferencesAsync("GoogleDrive"));
+            TasksPanel.Children.Add(TasksDriveStatus);
+            TasksPanel.Children.Add(syncSettings);
+            RefreshDriveTaskStatus();
+        }
         TasksRetry.Click += async (_, _) => await RunOperationAsync(LoadTasksAsync);
         var lists = new StackPanel { Spacing = 12 };
         lists.Children.Add(TasksPending);
@@ -274,7 +285,11 @@ public sealed partial class MainPage
     {
         var saved = await _taskSession.UpdateAsync(update);
         if (_operations.IsStopping) return saved;
-        if (saved) TasksStatus.Visibility = Visibility.Collapsed;
+        if (saved)
+        {
+            TasksStatus.Visibility = Visibility.Collapsed;
+            _services.DriveSync?.RequestTasksSync();
+        }
         else if (_taskSession.Error is not null)
             ShowTaskError(_taskSession.Error is TaskStoreConflictException
                 ? UiText.Get("TasksChangedOnDiskReloadTasksBeforeSaving")
@@ -301,6 +316,7 @@ public sealed partial class MainPage
 
     private void RenderTasks()
     {
+        _renderedTasks = _tasks;
         var pending = _tasks.Count(task => !task.IsCompleted);
         TasksBadge.Text = _tasksLoaded ? pending.ToString() : "!";
         RenderTaskPreview();
@@ -319,6 +335,25 @@ public sealed partial class MainPage
         UiLanguage.SetName(TasksCompletedToggle, () => UiText.Format("ShowOrHideCompletedTasks", _tasks.Count - pending));
         TasksCompletedSection.Visibility = _tasks.Any(task => task.IsCompleted) ? Visibility.Visible : Visibility.Collapsed;
         PaintTasks();
+        RefreshDriveTaskStatus();
+    }
+
+    private void RefreshDriveTasks()
+    {
+        if (_operations.IsStopping) return;
+        if (!DispatcherQueue.HasThreadAccess)
+        { DispatcherQueue.TryEnqueue(RefreshDriveTasks); return; }
+        if (!ReferenceEquals(_renderedTasks, _tasks)) PresentTaskLoad();
+        RefreshDriveTaskStatus();
+    }
+
+    private void RefreshDriveTaskStatus()
+    {
+        if (_services.DriveSync is not { } drive) return;
+        TasksDriveStatus.Text = !drive.Settings.Tasks ? "Tasks sync is off." :
+            !drive.Connection.Connected ? "Connect Google Drive to sync tasks." :
+            drive.Tasks.Status ?? (drive.Tasks.HasPendingChanges ? "Changes waiting to sync." : "Tasks sync is ready.");
+        AutomationProperties.SetLiveSetting(TasksDriveStatus, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
     }
 
     private void RenderTaskPreview()

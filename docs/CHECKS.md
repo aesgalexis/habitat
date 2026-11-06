@@ -46,6 +46,8 @@ Desde 0.18.2, los casos de Contacts abren Preferences con Drive desconectado y c
 
 ## Pruebas con aplicaciones y servicios reales
 
+Desde 0.20.0, Contacts incluye pruebas del protocolo compartido de Drive y de Tasks con dos equipos simulados: concurrencia, revisión por tarea y decisiones caducadas, edición durante la red, respuesta perdida, pausa/reanudación, errores independientes, migración del mismo CSV, identidad y recuperación persistente. `-ContactDestinationsOnly` también comprueba **Preferences → Google Drive**, el acceso desde Contacts, **Sync contacts** y **Sync tasks** independientes y persistentes y el desplegable avanzado en ambos temas. Estas pruebas no usan Google real ni la lista de tareas del usuario. Consulta [TASKS_DRIVE_SYNC.md](TASKS_DRIVE_SYNC.md).
+
 Los modos `--live` y los smoke tests de navegador, Notepad o Codex son optativos y tienen efectos reales: pueden abrir aplicaciones, consultar proveedores o enviar mensajes sintéticos. No forman parte de una revisión de documentación ni de la verificación sintética ordinaria. Antes de ejecutarlos, consulta las condiciones del área en [arquitectura](ARCHITECTURE.md), [Gmail](GMAIL_SETUP.md) o [atajo global](GLOBAL_SHORTCUT.md).
 
 La instalación de paquetes se comprueba por separado con directorios sintéticos y `-NoLaunch -NoShortcuts`; los procedimientos están en [RELEASING.md](RELEASING.md). No mezcles una prueba de instalación con la instalación de uso diario.

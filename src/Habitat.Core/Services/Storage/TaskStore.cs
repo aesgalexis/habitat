@@ -29,6 +29,30 @@ internal sealed class TaskStore
     internal bool TemporaryProfileBlocked => _isolated;
     internal bool RecoveredFromBackup { get; private set; }
     private string HistoryPath => _path + ".history";
+    private string SyncRecoveryPath => _path + ".sync-recovery";
+    internal string? SyncRecoveryToken
+    {
+        get
+        {
+            try
+            {
+                if (new FileInfo(SyncRecoveryPath).Length != 32)
+                    throw new InvalidDataException("Review recovered tasks before syncing with Google Drive.");
+                var token = File.ReadAllText(SyncRecoveryPath);
+                if (!Guid.TryParseExact(token, "N", out _)) throw new InvalidDataException("Review recovered tasks before syncing with Google Drive.");
+                return token;
+            }
+            catch (FileNotFoundException) { return null; }
+            catch (DirectoryNotFoundException) { return null; }
+        }
+    }
+    internal void AcknowledgeSyncRecovery(string token)
+    {
+        EnsurePersistentProfile();
+        using var storageLock = AcquireLock();
+        if (SyncRecoveryToken != token) throw new InvalidOperationException("Tasks were recovered again. Review the current tasks before syncing.");
+        File.Delete(SyncRecoveryPath);
+    }
 
     internal static bool IsTemporaryProfile(string directory) => directory
         .Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries)
@@ -200,6 +224,9 @@ internal sealed class TaskStore
         var ids = recovered.Select(item => item.Id).ToHashSet();
         recovered.AddRange(history.Where(item => ids.Add(item.Id)));
         var bytes = JsonSerializer.SerializeToUtf8Bytes(recovered);
+        // Persist the review barrier before replacing the damaged file. It
+        // survives a restart even when the recovered main file is now healthy.
+        AtomicFile.Write(SyncRecoveryPath, System.Text.Encoding.UTF8.GetBytes(Guid.NewGuid().ToString("N")));
         WriteCurrent(bytes, original is not null);
         return bytes;
     }

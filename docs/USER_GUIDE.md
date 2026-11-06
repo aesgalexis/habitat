@@ -81,6 +81,8 @@ These external launches do not require the Chrome bridge, except that web destin
 
 Tasks are stored locally with recovery history. Keep task text in its original language. Do not use real task files as input for tests; development guidance is in [CHECKS.md](CHECKS.md).
 
+For optional cross-PC sync, open **Preferences → Google Drive**, connect the same Google account on each PC and enable **Sync tasks**. Tasks and contacts use the **HABITAT** folder in My Drive with independent switches. [Drive sync](TASKS_DRIVE_SYNC.md) explains offline changes, per-task conflicts and recovery review.
+
 Weather appears at the top of the sidebar. **Preferences… → Location** controls **Use current location (GPS / Windows)** and the saved city used as fallback. Windows may ask for location permission. Forecast requests use Open-Meteo; disabling device location uses the saved city and does not disable weather network requests. See [privacy notes](PRIVACY.md).
 
 **Preferences… → Appearance** offers **Day**, **Night**, **Hybrid** and background opacity. The default is Hybrid at 15% opacity. Appearance and window placement persist. The interface stays in English; this does not change the language of your content or the Translate target. See [LOCALIZATION.md](LOCALIZATION.md).

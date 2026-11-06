@@ -2,17 +2,20 @@ using System.Text.Json;
 using System.Security.Cryptography;
 using Habitat.Models;
 using Habitat.Services;
+using Habitat.Features.Drive;
 
 namespace Habitat.Features.Contacts;
 
 internal sealed class ContactDriveSync(ContactSession contacts, string statePath, Func<GmailAuthService> createAuth,
-    HttpClient http, GmailClientConfiguration? bundledClient = null) : IDisposable
+    HttpClient http, GmailClientConfiguration? bundledClient = null, GoogleDriveConnection? sharedConnection = null) : IDisposable
 {
     private sealed record Link(string ClientId, string Owner, string? FileId = null, string? RootId = null,
         string? HeadId = null, byte[]? Baseline = null, string? PendingId = null);
     private static readonly byte[] EmptyCsv = ContactDriveCsv.Encode(new Dictionary<string, ContactValue[]>());
-    private GmailAuthService? _auth;
-    private GmailAuthService Auth => _auth ??= createAuth();
+    private readonly GoogleDriveConnection _connection = sharedConnection ?? new(statePath + ".workspace.json", statePath, createAuth, http, bundledClient);
+    private readonly bool _ownsConnection = sharedConnection is null;
+    internal GoogleDriveConnection Connection => _connection;
+    private GmailAuthService Auth => _connection.Auth;
     private readonly SemaphoreSlim _gate = new(1);
     private string? _reviewedConflict;
     internal bool Busy => _gate.CurrentCount == 0;
@@ -22,22 +25,15 @@ internal sealed class ContactDriveSync(ContactSession contacts, string statePath
     internal string? Status { get; private set; }
     internal string? Email => Auth.Email;
     internal bool Connected => Auth.IsSignedIn;
-    internal bool CanConnect => Auth.IsConfigured || bundledClient is not null;
+    internal bool CanConnect => _connection.CanConnect;
+    internal DateTimeOffset? LastSyncedAt { get; private set; }
 
     internal async Task ConnectAsync(CancellationToken token, Func<Task<GmailClientConfiguration?>>? pickCustomClient = null)
     {
         await _gate.WaitAsync(token);
         try
         {
-            var client = pickCustomClient is null
-                ? Auth.Client ?? bundledClient ?? throw new InvalidOperationException("This build has no Google Drive sign-in configuration.")
-                : await pickCustomClient();
-            if (client is null) return;
-            var link = ReadLink();
-            if (link is not null && client.ClientId != link.ClientId)
-                throw new InvalidOperationException("Use the Google Desktop OAuth client already linked to these contacts.");
-            Auth.Configure(client);
-            await Auth.SignInAsync(token);
+            if (!await _connection.ConnectAsync(token, pickCustomClient)) return;
             await SynchronizeCoreAsync(null, token);
         }
         catch (Exception error) when (!token.IsCancellationRequested)
@@ -68,7 +64,7 @@ internal sealed class ContactDriveSync(ContactSession contacts, string statePath
         await _gate.WaitAsync(token);
         try
         {
-            await Auth.DisconnectAsync(token);
+            await _connection.DisconnectAsync(token);
             NeedsAttention = true;
             HasConflict = false;
             Status = "Google Drive is disconnected on this PC. Your local contacts were kept.";
@@ -81,13 +77,14 @@ internal sealed class ContactDriveSync(ContactSession contacts, string statePath
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromSeconds(45));
         var requestToken = timeout.Token;
-        var drive = new ContactDriveClient(Auth, http);
-        var owner = await drive.OwnerAsync(requestToken);
-        var clientId = Auth.Client!.ClientId;
+        await _connection.RunAsync(async workspace =>
+        {
+        var drive = new ContactDriveClient(workspace);
+        var owner = workspace.Owner;
+        var clientId = workspace.ClientId;
         var link = ReadLink();
         if (link is not null && (link.ClientId != clientId || link.Owner != owner))
         {
-            await Auth.DisconnectAsync(requestToken);
             throw new InvalidOperationException("Connect the same Google account and OAuth client previously linked on this PC.");
         }
         link ??= new Link(clientId, owner);
@@ -112,6 +109,7 @@ internal sealed class ContactDriveSync(ContactSession contacts, string statePath
                 throw new InvalidOperationException("The visible contacts CSV was edited outside HABITAT. Restore its previous version in Google Drive.");
             if (link.FileId is not null && link.RootId != projection.RootId)
                 throw new InvalidOperationException("The linked contacts CSV points to a different history. Restore the original file in Google Drive.");
+            projection = await drive.PlaceAsync(projection, requestToken);
             var baseline = link.Baseline is null ? new Dictionary<string, ContactValue[]>() : ContactDriveCsv.Decode(link.Baseline);
             var cachedHead = projection.HeadId ?? link.HeadId;
             var head = cachedHead is null ? null : await drive.ReadRevisionAsync(cachedHead, projection.RootId, requestToken)
@@ -154,8 +152,11 @@ internal sealed class ContactDriveSync(ContactSession contacts, string statePath
             }
             throw new InvalidOperationException("Another device is syncing contacts. Sync again in a moment.");
         }, requestToken);
+        return true;
+        }, requestToken);
         NeedsAttention = HasConflict = false;
         _reviewedConflict = null;
+        LastSyncedAt = DateTimeOffset.UtcNow;
         Status = "Contacts synced to Google Drive.";
     }
 
@@ -195,7 +196,7 @@ internal sealed class ContactDriveSync(ContactSession contacts, string statePath
             _ => "Could not sync with Google Drive. Your local changes were kept. Try again."
         };
         if (error is HttpRequestException { StatusCode: System.Net.HttpStatusCode.Unauthorized })
-            await Auth.DisconnectAsync(token);
+            await _connection.DisconnectAsync(token);
     }
 
     private Link? ReadLink()
@@ -232,5 +233,5 @@ internal sealed class ContactDriveSync(ContactSession contacts, string statePath
     }
 
     private static InvalidDataException InvalidLink() => new("The local Google Drive link is invalid. Your contacts were kept.");
-    public void Dispose() => _auth?.Dispose();
+    public void Dispose() { if (_ownsConnection) _connection.Dispose(); }
 }

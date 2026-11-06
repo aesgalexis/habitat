@@ -22,12 +22,14 @@ internal sealed class PreferencesView : Grid
     internal MarketsPreferencesView Markets { get; }
     internal SidebarPreferencesView Sidebar { get; }
     internal ContactsPreferencesView? Contacts { get; }
+    internal GoogleDrivePreferencesView? GoogleDrive { get; }
     internal string Category => ((ListViewItem)Categories.SelectedItem).Tag as string ?? "Appearance";
     private readonly ScrollViewer _scroll = ScrollEdgeFade.Enable(new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
 
     public PreferencesView(Habitat.Preferences saved, Func<Task<IReadOnlyList<WindowsAppDestination>>>? discoverApps = null,
         Func<Task<string?>>? browseApp = null, WallpaperService? wallpapers = null,
-        Func<Task<IReadOnlyList<string>>>? pickWallpapers = null, ContactsPreferencesView? contacts = null)
+        Func<Task<IReadOnlyList<string>>>? pickWallpapers = null, ContactsPreferencesView? contacts = null,
+        GoogleDrivePreferencesView? googleDrive = null)
     {
         ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(148) });
         ColumnDefinitions.Add(new ColumnDefinition());
@@ -88,6 +90,8 @@ internal sealed class PreferencesView : Grid
         Contacts = contacts;
         AddCategory("Contacts", "\uE716", "Add and edit the people you use as destinations in HABITAT.",
             contacts is null ? new TextBlock { Text = "Contacts are unavailable in this view." } : contacts);
+        GoogleDrive = googleDrive;
+        if (googleDrive is not null) AddCategory("GoogleDrive", "\uE753", "Choose which HABITAT data to sync between your PCs.", googleDrive);
         Categories.SelectionChanged += (_, _) =>
         {
             _scroll.Content = ((ListViewItem)Categories.SelectedItem).Content is StackPanel label ? label.Tag : null;

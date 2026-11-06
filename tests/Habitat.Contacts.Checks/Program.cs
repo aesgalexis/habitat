@@ -332,6 +332,7 @@ Check(ignored.Records.Length == 0 && !ignored.ListedPeople.Any() && ReferenceEqu
 checks += await BrowserSuggestionChecks.RunAsync(root);
 checks += await ManualContactChecks.RunAsync(root);
 await DriveContactChecks.RunAsync(root, Check);
+await DriveTaskChecks.RunAsync(root, Check);
 Console.WriteLine($"PASS: {checks} contact checks; empty manual agenda, legacy isolation, create/edit/remove, uniqueness and restart; legacy import/storage compatibility and channel routing. Synthetic data: {root}");
 
 static HttpResponseMessage Response(string json, HttpStatusCode status = HttpStatusCode.OK) => new(status) { Content = new StringContent(json, Encoding.UTF8, "application/json") };

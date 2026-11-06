@@ -88,6 +88,14 @@ internal sealed partial class ContactsPreferencesView
     private void ShowDriveContactsSync()
     {
         if (_drive is null) return;
+        if (OpenDriveSettings is { } open)
+        {
+            var shared = Panel("Google Drive", "Manage contact and task synchronization with your connected Google account.");
+            if (_drive.Status is { } syncStatus) shared.Children.Add(Text(syncStatus));
+            Action(shared, "Google Drive sync settings", () => { open(); return Task.CompletedTask; });
+            _body.Children.Add(Card(shared));
+            return;
+        }
         var panel = Panel("Google Drive", _drive.HasLink
             ? "Sync your manually created contacts with HABITAT Contacts.csv in My Drive."
             : "Connect to sync your manually created contacts, including the ones on this PC, with a readable CSV in My Drive.");

@@ -19,13 +19,20 @@ public sealed partial class MainPage
         if (_newContact) { contacts.NewContact(); _newContact = false; }
         if (_contactToManage is { } personId) { contacts.SelectPerson(personId); _contactToManage = null; }
         if (_reviewContactDuplicates) { contacts.SelectDuplicates(); _reviewContactDuplicates = false; }
+        var drive = _services.DriveSync is { } sync ? new GoogleDrivePreferencesView(sync, PickDriveClientAsync, _services.LaunchBrowser) : null;
+        if (drive is not null) drive.Changed += RefreshDriveTasks;
         var view = new PreferencesView(_preferences, _services.DiscoverWindowsAppsAsync,
             () => _services.PickWindowsAppAsync(_windowHost?.Handle ?? 0), _services.Wallpapers,
-            () => _services.PickWallpapersAsync(_windowHost?.Handle ?? 0), contacts)
+            () => _services.PickWallpapersAsync(_windowHost?.Handle ?? 0), contacts, drive)
         {
             Width = Math.Max(280, Math.Min(740, XamlRoot.Size.Width - 96)),
             Height = Math.Max(180, Math.Min(480, XamlRoot.Size.Height - 180))
         };
+        if (drive is not null)
+        {
+            contacts.OpenDriveSettings = () => view.SelectCategory("GoogleDrive");
+            contacts.Refresh();
+        }
         if (category is not null) view.SelectCategory(category);
         var dialog = UiLanguage.Watch(new ContentDialog { XamlRoot = XamlRoot, Title = UiText.Get("Preferences"), Content = view,
             CloseButtonText = UiText.Get("Close"), DefaultButton = ContentDialogButton.Close }, ("Title", () => (object?)(UiText.Get("Preferences"))), ("CloseButtonText", () => (object?)(UiText.Get("Close"))));
@@ -78,7 +85,13 @@ public sealed partial class MainPage
             // A file picker/import may still be finishing when the window closes.
             await view.Wallpaper.PendingImport;
         }
-        finally { _contactsPreferences = null; await contacts.StopAsync(); _appearanceDialogOpen = false; previewRevision++; }
+        finally
+        {
+            _contactsPreferences = null;
+            await contacts.StopAsync();
+            if (drive is not null) { drive.Changed -= RefreshDriveTasks; await drive.StopAsync(); }
+            _appearanceDialogOpen = false; previewRevision++;
+        }
 
         var locationChanged = _preferences.WeatherCity != view.WeatherCity.Text.Trim() ||
             _preferences.UseDeviceLocation != view.UseDeviceLocation.IsOn;

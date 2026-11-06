@@ -1,5 +1,6 @@
 using Habitat.Models;
 using Habitat.Services;
+using Habitat.Features.Tasks;
 
 namespace Habitat;
 
@@ -47,6 +48,44 @@ internal sealed class TaskSession(TaskStore store)
     }
 
     public async Task WaitForIdleAsync() { await _gate.WaitAsync(); _gate.Release(); }
+    internal async Task<(TaskItem[] Items, string? RecoveryToken)> SnapshotAsync(CancellationToken token)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            if (!IsLoaded) throw new InvalidOperationException("Reload tasks before syncing with Google Drive.");
+            return (Items.ToArray(), store.SyncRecoveryToken);
+        }
+        finally { _gate.Release(); }
+    }
+    internal async Task<TaskItem[]> ApplyDriveAsync(IReadOnlyList<TaskItem> snapshot, IReadOnlyList<TaskItem> confirmed,
+        CancellationToken token)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            if (!IsLoaded) throw new InvalidOperationException("Reload tasks before syncing with Google Drive.");
+            if (store.SyncRecoveryToken is not null) throw new InvalidOperationException("Review recovered tasks before syncing with Google Drive.");
+            var merge = TaskDriveDocument.Merge(snapshot, Items, confirmed);
+            if (merge.NeedsReview) throw new TaskSyncLocalChangeException();
+            if (!Items.SequenceEqual(merge.Items))
+            {
+                try { await Task.Run(() => store.Save(merge.Items), token); }
+                catch (Exception exception) when (IsStorageError(exception))
+                { IsLoaded = false; Error = exception; throw; }
+                Items = merge.Items.ToList();
+            }
+            Error = null;
+            return Items.ToArray();
+        }
+        finally { _gate.Release(); }
+    }
+    internal async Task AcknowledgeSyncRecoveryAsync(string recoveryToken, CancellationToken token)
+    {
+        await _gate.WaitAsync(token);
+        try { await Task.Run(() => store.AcknowledgeSyncRecovery(recoveryToken), token); }
+        finally { _gate.Release(); }
+    }
     private static bool IsStorageError(Exception exception) => exception is IOException or
         InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException;
 }
