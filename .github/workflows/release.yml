@@ -1,7 +1,7 @@
-name: Publish HABITAT
+name: Rehearse HABITAT release
 on:
   push:
-    tags: ['v*']
+    branches: [codex/measure-fast-release-a7c81ac1]
 permissions:
   contents: read
 concurrency:
@@ -68,9 +68,6 @@ jobs:
         shell: pwsh
         run: |
           $version = (Get-Content VERSION -Raw).Trim()
-          if ($env:GITHUB_REF_NAME -ne "v$version") { throw 'Tag differs from VERSION.' }
-          git merge-base --is-ancestor HEAD origin/main
-          if ($LASTEXITCODE -ne 0) { throw 'Release commit must belong to main.' }
           "version=$version" >> $env:GITHUB_OUTPUT
       - name: Install EXE compiler
         shell: powershell
@@ -79,28 +76,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed.' }
       - name: Build shared payload and test ZIP and EXE
         shell: powershell
-        env:
-          HABITAT_DRIVE_OAUTH_CLIENT_JSON: ${{ secrets.HABITAT_DRIVE_OAUTH_CLIENT_JSON }}
-        run: |
-          $clientJson = $env:HABITAT_DRIVE_OAUTH_CLIENT_JSON
-          Remove-Item Env:HABITAT_DRIVE_OAUTH_CLIENT_JSON -ErrorAction SilentlyContinue
-          if (-not $clientJson) { throw 'Google Drive desktop client is required for the official release.' }
-          try {
-            $client = ConvertFrom-Json -InputObject $clientJson -ErrorAction Stop
-            if ($clientJson.Length -gt 65536 -or $client.installed.client_id -notmatch '^[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$' -or
-                [string]::IsNullOrWhiteSpace($client.installed.client_secret)) { throw 'Invalid client.' }
-          } catch { throw 'Configure a Google Desktop OAuth client for Drive release builds.' }
-          $clientPath = Join-Path $env:RUNNER_TEMP ('habitat-drive-' + [guid]::NewGuid().ToString('N') + '.json')
-          try {
-            $configuration = @{ installed = @{
-              client_id = $client.installed.client_id
-              client_secret = $client.installed.client_secret
-            }} | ConvertTo-Json -Compress
-            [IO.File]::WriteAllText($clientPath, $configuration, [Text.UTF8Encoding]::new($false))
-            ./scripts/build-release-assets.ps1 -DriveClientPath $clientPath
-          } finally {
-            Remove-Item -LiteralPath $clientPath -ErrorAction SilentlyContinue
-          }
+        run: ./scripts/build-release-assets.ps1 -DriveClientPath tests/fixtures/drive-client.synthetic.json
       - uses: actions/upload-artifact@v4
         with:
           name: habitat-release-assets
@@ -119,7 +95,7 @@ jobs:
           (needs.verify.result == 'success' || (needs.verify.result == 'skipped' && needs.main_verification.outputs.reused == 'true')) }}
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -143,5 +119,4 @@ jobs:
           $section = [regex]::Match($changelog, '(?ms)^## ' + [regex]::Escape($version) + ' .*?(?=^## |\z)').Value
           if (-not $section) { throw 'Changelog section is missing.' }
           $section | Set-Content $notes -Encoding utf8
-          gh release create "v$version" $zip "$zip.sha256" $installer "$installer.sha256" --verify-tag --title "HABITAT $version" --notes-file $notes
-          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed.' }
+          Write-Host "Rehearsal complete. Both installers and their checksums arrived intact."
