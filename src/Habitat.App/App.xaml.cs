@@ -42,6 +42,7 @@ public partial class App : Application
         }
         var page = new MainPage(_services);
         var window = new Window { Content = page };
+        window.AppWindow.Resize(new Windows.Graphics.SizeInt32(900, 720));
         page.Loaded += async (_, _) => await page.CheckTasksUiAsync(window);
         window.Activate();
         return;

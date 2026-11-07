@@ -32,21 +32,31 @@ public sealed partial class MainPage
             await section.RefreshAsync();
             await Task.Delay(80);
             UpdateWritingLayout();
+            _root.UpdateLayout();
             var controls = (Microsoft.UI.Xaml.Controls.StackPanel)((Microsoft.UI.Xaml.Controls.ScrollViewer)section.View).Content;
             var directory = (Microsoft.UI.Xaml.Controls.TextBlock)controls.Children[1];
-            var directoryPosition = directory.TransformToVisual(_root).TransformPoint(new Windows.Foundation.Point());
-            var editorPosition = Composer.TransformToVisual(_root).TransformPoint(new Windows.Foundation.Point());
+            var directoryBottom = directory.TransformToVisual(_root).TransformPoint(new Windows.Foundation.Point(0, directory.ActualHeight)).Y;
+            var projectBottom = _destinationContent.TransformToVisual(_root)
+                .TransformPoint(new Windows.Foundation.Point(0, _destinationContent.ActualHeight)).Y;
+            var editorTop = Composer.TransformToVisual(_root).TransformPoint(new Windows.Foundation.Point()).Y;
+            var centerError = Math.Abs(editorTop + Composer.ActualHeight / 2 - _root.ActualHeight / 2);
+            var selectorWidth = section.ProjectSelector.ActualWidth;
+            const double layoutTolerance = 1;
             if (section.HasContent || _destinationContent.Visibility != Microsoft.UI.Xaml.Visibility.Visible ||
                 Composer.VerticalAlignment != Microsoft.UI.Xaml.VerticalAlignment.Top ||
                 Composer.TextAlignment != Microsoft.UI.Xaml.TextAlignment.Center ||
-                Math.Abs(editorPosition.Y + Composer.ActualHeight / 2 - _root.ActualHeight / 2) > 1 ||
+                centerError > layoutTolerance ||
                 !ReferenceEquals(_destinationContent.Content, section.View) ||
-                section.ProjectSelector.ActualWidth is <= 0 or > 220 || directory.ActualHeight <= 0 ||
-                directoryPosition.Y + directory.ActualHeight > _destinationContent.Margin.Top + _destinationContent.ActualHeight ||
-                _destinationContent.Margin.Top + _destinationContent.ActualHeight > editorPosition.Y - 16 ||
+                section.ProjectSelector.MaxWidth != 220 || selectorWidth <= 0 || selectorWidth > 220 + layoutTolerance ||
+                directory.ActualHeight <= 0 || directoryBottom > projectBottom + layoutTolerance ||
+                projectBottom > editorTop - 16 + layoutTolerance ||
                 section.SelectedProject != project || !section.PathText.Contains(folder.Path) ||
                 SendButton.Content.ToString() != "Run in VS Code")
-                throw new InvalidOperationException("VS Code must show its compact project selector and directory above the centered editor before the first send.");
+                throw new InvalidOperationException(
+                    $"VS Code must show its project selector and directory above the centered editor before the first send. " +
+                    $"Root={_root.ActualWidth}x{_root.ActualHeight}, selector={selectorWidth}, directory bottom={directoryBottom}, " +
+                    $"project bottom={projectBottom}, editor top={editorTop}, center error={centerError}, " +
+                    $"selected={section.SelectedProject == project}, has results={section.HasContent}.");
             var otherFolder = new VSCodeFolder("Other project", Path.Combine(_services.Paths.LocalDirectory, "other-vscode-project"));
             var otherProject = project with { Folder = otherFolder };
             projects = [project, otherProject];
