@@ -106,7 +106,7 @@ public sealed partial class MainPage : Page
         ApplyInterfaceLanguage();
         _timer = DispatcherQueue.CreateTimer();
         _timer.Interval = TimeSpan.FromMilliseconds(250);
-        _timer.Tick += Timer_Tick;
+        _timer.Tick += (_, _) => TickPage(DateTimeOffset.UtcNow);
 #if !HABITAT_UI_CHECKS
         Loaded += MainPage_Loaded;
 #endif
@@ -393,22 +393,22 @@ public sealed partial class MainPage : Page
         _ = LaunchDestinationAsync(_destination, Composer.Text, openExternally);
     }
 
-    private void Timer_Tick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+    private void TickPage(DateTimeOffset now)
     {
         TickUpdates();
         TickGmail();
         TickDriveContacts();
-        TickTasks(DateTimeOffset.UtcNow);
+        TickTasks(now);
         TickMarkets();
-        TickCodexSchedules(DateTimeOffset.UtcNow);
-        if (!_weatherRefreshing && !HasAppearanceOverlay && DateTimeOffset.UtcNow >= _nextWeatherRefresh)
+        TickCodexSchedules(now);
+        if (!_weatherRefreshing && !HasAppearanceOverlay && now >= _nextWeatherRefresh)
         {
             _ = RefreshWeatherAsync();
         }
-        if (_preferences.Theme == "hybrid" && !HasAppearanceOverlay && DateTimeOffset.UtcNow >= _nextHybridProbe)
+        if (_preferences.Theme == "hybrid" && !HasAppearanceOverlay && now >= _nextHybridProbe)
         {
             RefreshHybridAppearance();
-            _nextHybridProbe = DateTimeOffset.UtcNow.AddMilliseconds(750);
+            _nextHybridProbe = now.AddMilliseconds(750);
         }
 
         if (_bridge is null)

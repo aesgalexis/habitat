@@ -1,11 +1,19 @@
 name: Verify HABITAT
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      skip_production_build:
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
-  verify:
+  logic:
+    name: Logic and distribution contracts
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,15 +23,28 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Verify logic, native UI, releases and production build
+      - name: Build once and run isolated suites
         shell: powershell
-        run: ./scripts/verify.ps1
+        env:
+          HABITAT_SKIP_PRODUCTION_BUILD: ${{ inputs.skip_production_build }}
+        run: ./scripts/verify.ps1 -SkipUi -SkipBuild:($env:HABITAT_SKIP_PRODUCTION_BUILD -eq 'true')
+  native-ui:
+    name: Native WinUI
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Check the native app and window
+        shell: powershell
+        run: ./scripts/check-tasks-ui.ps1 -TimeoutSeconds 600
       - name: Preserve native UI failure details
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: habitat-ui-diagnostics
           path: |
-            artifacts/verification/**/tasks-ui-checks.log
-            artifacts/verification/**/window-menu-checks.log
+            artifacts/ui-checks/**/tasks-ui-checks.log
+            artifacts/ui-checks/**/window-menu-checks.log
           if-no-files-found: ignore

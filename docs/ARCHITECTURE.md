@@ -170,7 +170,7 @@ La programación de Codex usa `CodexScheduleQueue` para guardar la cola antes de
 
 El estado de entrega se prueba con `TimeProvider`. IDs ajenos, respuestas huérfanas, completados duplicados y eventos tardíos se ignoran. Las versiones existentes de la extensión siguen funcionando. El contrato completo está en [BRIDGE_PROTOCOL.md](BRIDGE_PROTOCOL.md).
 
-`scripts/verify.ps1` ejecuta las diez suites .NET, las pruebas de scripts y distribución, la suite WinUI y la compilación Release. Es el mismo punto de entrada para `pre-push` y GitHub Actions. [Comprobaciones](CHECKS.md).
+`scripts/verify.ps1` compila las diez suites .NET una sola vez y ejecuta las pruebas de scripts, distribución y WinUI. GitHub distribuye la verificación en dos jobs independientes. La publicación genera y prueba los paquetes en paralelo con las comprobaciones del commit. [Comprobaciones](CHECKS.md).
 
 `scripts/check-tasks-ui.ps1` también admite ejecuciones por área. La suite nativa comprueba controles, foco, temas, posiciones, borradores, conflictos, destinos y cierre con proveedores sintéticos y almacenamiento aislado.
 

@@ -4,8 +4,15 @@ set -eu
 repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root"
 
-echo "HABITAT: validando antes de subir..."
-# Git can inherit PowerShell 7 module paths that Windows PowerShell cannot load.
-# Let powershell.exe initialize its own compatible module search path.
-unset PSModulePath
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1
+while read -r local_ref local_oid remote_ref remote_oid; do
+  [ "$local_ref" = "(delete)" ] && continue
+  case "$remote_ref" in
+    refs/heads/*)
+      if git cat-file -e "$remote_oid^{commit}" 2>/dev/null; then
+        git --no-pager diff --check "$remote_oid" "$local_oid"
+      else
+        git --no-pager show --check --format= "$local_oid"
+      fi
+      ;;
+  esac
+done

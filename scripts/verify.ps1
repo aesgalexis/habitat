@@ -5,6 +5,8 @@ $env:DOTNET_CLI_HOME = Join-Path $verifyRoot '.dotnet-local'
 $env:NUGET_PACKAGES = Join-Path $verifyRoot '.nuget\packages'
 $verifyArtifacts = Join-Path $verifyRoot 'artifacts'
 $verifyOutput = Join-Path $verifyArtifacts ('verification/run-' + [guid]::NewGuid().ToString('N'))
+$verifyWatch = [Diagnostics.Stopwatch]::StartNew()
+$previousVerifier = $env:HABITAT_RELEASE_VERIFIER
 Import-Module (Join-Path $PSScriptRoot 'Habitat.Storage.psm1') -Force
 [IO.Directory]::CreateDirectory($verifyArtifacts) | Out-Null
 $verificationOperation = [Habitat.Storage.GeneratedStorage]::BeginOperation($verifyArtifacts, @($verifyOutput))
@@ -14,10 +16,6 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Documentation checker regression cases failed.' }
     node scripts/check-docs.cjs
     if ($LASTEXITCODE -ne 0) { throw 'Documentation links failed.' }
-    if (-not $NoRestore) {
-        dotnet restore Habitat.sln -p:Platform=x64
-        if ($LASTEXITCODE -ne 0) { throw 'Dependency restore failed.' }
-    }
     & (Join-Path $verifyRoot 'tests/build.checks.ps1') -TestDirectory (Join-Path $verifyOutput 'build-regression')
     foreach ($script in Get-ChildItem -LiteralPath (Join-Path $verifyRoot 'extension') -Filter '*.js') {
         node --check $script.FullName
@@ -49,12 +47,63 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Automatic browser contact checks failed.' }
     node tests/extension-facebook-messaging.checks.cjs
     if ($LASTEXITCODE -ne 0) { throw 'Facebook messaging checks failed.' }
-    foreach ($suite in 'Appearance', 'Bridge', 'Core', 'Destination', 'Gmail', 'Contacts', 'Tasks', 'Weather', 'Hotkey', 'Window') {
-        dotnet run --project "tests/Habitat.$suite.Checks" --configuration Release --no-restore `
-            "-p:BaseOutputPath=$verifyOutput/$suite/"
-        if ($LASTEXITCODE -ne 0) { throw "$suite checks failed." }
+    $checksSolution = 'tests/Habitat.Checks.slnf'
+    $solution = if ($SkipBuild) { $checksSolution } else { 'Habitat.sln' }
+    $buildArgs = @($solution, '--configuration', 'Release', '-p:Platform=x64', '-p:HabitatUiChecks=false',
+        "-p:BaseOutputPath=$verifyOutput/build/")
+    if ($NoRestore) { $buildArgs += '--no-restore' }
+    $phaseWatch = [Diagnostics.Stopwatch]::StartNew()
+    dotnet build @buildArgs
+    if ($LASTEXITCODE -ne 0) { throw 'Release build failed.' }
+    Write-Host ('.NET build completed in {0:N1}s.' -f $phaseWatch.Elapsed.TotalSeconds)
+
+    $releaseBin = Join-Path $verifyOutput 'build/Release'
+    $dotnetLogs = (New-Item -ItemType Directory -Path (Join-Path $verifyOutput 'dotnet-logs')).FullName
+    $projects = (Get-Content -LiteralPath $checksSolution -Raw | ConvertFrom-Json).solution.projects
+    $checkProcesses = @()
+    $failedChecks = @()
+    $phaseWatch.Restart()
+    try {
+        foreach ($project in $projects) {
+            $name = [IO.Path]::GetFileNameWithoutExtension($project)
+            if (-not $name.EndsWith('.Checks')) { continue }
+            $executable = @(Get-ChildItem -LiteralPath $releaseBin -Filter "$name.exe" -File -Recurse)
+            if ($executable.Count -ne 1) { throw "Expected one compiled executable for $name." }
+            $startInfo = [Diagnostics.ProcessStartInfo]::new($executable[0].FullName)
+            $startInfo.WorkingDirectory = $verifyRoot
+            $startInfo.UseShellExecute = $false
+            $startInfo.CreateNoWindow = $true
+            $startInfo.RedirectStandardOutput = $true
+            $startInfo.RedirectStandardError = $true
+            $process = [Diagnostics.Process]::Start($startInfo)
+            $checkProcesses += [PSCustomObject]@{
+                Name = $name
+                Process = $process
+                Output = $process.StandardOutput.ReadToEndAsync()
+                Error = $process.StandardError.ReadToEndAsync()
+            }
+        }
+        foreach ($check in $checkProcesses) {
+            $check.Process.WaitForExit()
+            $stdout = $check.Output.GetAwaiter().GetResult()
+            $stderr = $check.Error.GetAwaiter().GetResult()
+            [IO.File]::WriteAllText((Join-Path $dotnetLogs ($check.Name + '.log')), $stdout + $stderr)
+            Write-Host $check.Name
+            if ($stdout) { Write-Host $stdout.TrimEnd() }
+            if ($stderr) { Write-Host $stderr.TrimEnd() }
+            if ($check.Process.ExitCode -ne 0) { $failedChecks += $check.Name }
+        }
+    } finally {
+        foreach ($check in $checkProcesses) {
+            if (-not $check.Process.HasExited) { $check.Process.Kill() }
+            $check.Process.Dispose()
+        }
     }
-    & (Join-Path $verifyRoot 'tests/payload.checks.ps1') -ChecksAssembly (Join-Path $verifyOutput 'Core/Release/net10.0/Habitat.Core.Checks.dll') `
+    if ($failedChecks) { throw ('.NET checks failed: ' + ($failedChecks -join ', ')) }
+    Write-Host ('.NET checks completed in {0:N1}s.' -f $phaseWatch.Elapsed.TotalSeconds)
+
+    $env:HABITAT_RELEASE_VERIFIER = Join-Path $releaseBin 'net10.0/Habitat.Release.Verify.dll'
+    & (Join-Path $verifyRoot 'tests/payload.checks.ps1') -ChecksAssembly (Join-Path $releaseBin 'net10.0/Habitat.Core.Checks.dll') `
         -TestDirectory (Join-Path $verifyOutput 'payload')
     & (Join-Path $verifyRoot 'tests\release.checks.ps1')
     & (Join-Path $verifyRoot 'tests\storage.checks.ps1')
@@ -69,16 +118,16 @@ try {
     if (-not $SkipUi) {
         & (Join-Path $verifyRoot 'scripts/check-tasks-ui.ps1') -OutputDirectory (Join-Path $verifyOutput 'ui') -TimeoutSeconds 600
     }
-    if (-not $SkipBuild) {
-        dotnet build Habitat.sln --configuration Release --no-restore -p:Platform=x64 -p:HabitatUiChecks=false `
-            "-p:BaseOutputPath=$verifyOutput/build/"
-        if ($LASTEXITCODE -ne 0) { throw 'Release build failed.' }
-    }
     git diff --check
     if ($LASTEXITCODE -ne 0) { throw 'Whitespace checks failed.' }
     if ($SkipUi) { Write-Host 'Non-UI checks passed. Native UI verification was explicitly skipped.' }
     else { Write-Host 'All HABITAT checks passed, including native UI. Production binaries and user data were not used.' }
     Complete-HabitatGeneratedOutput $verifyArtifacts $verifyOutput 'test'
-} finally { $verificationOperation.Dispose(); Pop-Location }
+    Write-Host ('Verification completed in {0:N1}s.' -f $verifyWatch.Elapsed.TotalSeconds)
+} finally {
+    $env:HABITAT_RELEASE_VERIFIER = $previousVerifier
+    $verificationOperation.Dispose()
+    Pop-Location
+}
 try { $null = Invoke-HabitatStorageMaintenance -ArtifactsRoot $verifyArtifacts -Clean -Automatic }
 catch { Write-Warning 'Generated storage maintenance could not finish. Verification output was retained.' }

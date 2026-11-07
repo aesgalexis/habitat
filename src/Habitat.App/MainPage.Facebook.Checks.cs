@@ -58,15 +58,14 @@ public sealed partial class MainPage
                 AutomationProperties.GetName(FacebookButton) != "Hide contacts" || _destination != destination || Composer.Text != expectedDraft)
                 throw new InvalidOperationException("Clicking Contacts must open an independent contacts sidebar while preserving the destination and draft.");
             var originalCards = FacebookAvatars.Children.ToArray();
-            _timer.Start();
-            try
-            {
-                // Cross the former 30-second presence refresh with the real app timer.
-                await Task.Delay(TimeSpan.FromSeconds(31));
-                if (fake.Reads != 1 || !FacebookAvatars.Children.SequenceEqual(originalCards))
-                    throw new InvalidOperationException("An idle contacts panel must retain its snapshot without periodic reads or rebuilding cards.");
-            }
-            finally { _timer.Stop(); }
+            // Advance the same timer callback past the former presence refresh.
+            var now = DateTimeOffset.UtcNow;
+            TickPage(now.AddSeconds(-31));
+            await Task.Yield();
+            TickPage(now);
+            await Task.Yield();
+            if (fake.Reads != 1 || !FacebookAvatars.Children.SequenceEqual(originalCards))
+                throw new InvalidOperationException("An idle contacts panel must retain its snapshot without periodic reads or rebuilding cards.");
             foreach (var (query, expected) in new[] { ("miGA", 1), (" 雪 ", 2), ("JOSE", 1), ("no matching contact", 0), ("   ", 3), ("", 3) })
             {
                 FacebookContactSearch.Text = query;
@@ -210,7 +209,7 @@ public sealed partial class MainPage
             catch (InvalidOperationException exception) when (exception.Message.Contains("Enable Facebook contacts", StringComparison.Ordinal)) { }
             SetFacebookOpen(false);
             await CheckFacebookMessagingUiAsync(log);
-            File.AppendAllText(log, "PASS: unified Contacts and English accessibility labels; saved agenda preserved beyond 30 seconds with the app timer running; local search; explicit source imports; persistent card sizes and scroll; source provenance in both themes; preserved draft, source cancellation and saved data on provider failure; no browser, network or user contacts\n");
+            File.AppendAllText(log, "PASS: unified Contacts and English accessibility labels; saved agenda preserved across a simulated 31-second timer interval; local search; explicit source imports; persistent card sizes and scroll; source provenance in both themes; preserved draft, source cancellation and saved data on provider failure; no browser, network or user contacts\n");
         }
         finally
         {

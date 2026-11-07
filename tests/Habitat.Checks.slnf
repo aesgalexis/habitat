@@ -1,0 +1,18 @@
+{
+  "solution": {
+    "path": "../Habitat.sln",
+    "projects": [
+      "tests/Habitat.Appearance.Checks/Habitat.Appearance.Checks.csproj",
+      "tests/Habitat.Bridge.Checks/Habitat.Bridge.Checks.csproj",
+      "tests/Habitat.Core.Checks/Habitat.Core.Checks.csproj",
+      "tests/Habitat.Destination.Checks/Habitat.Destination.Checks.csproj",
+      "tests/Habitat.Gmail.Checks/Habitat.Gmail.Checks.csproj",
+      "tests/Habitat.Contacts.Checks/Habitat.Contacts.Checks.csproj",
+      "tests/Habitat.Tasks.Checks/Habitat.Tasks.Checks.csproj",
+      "tests/Habitat.Weather.Checks/Habitat.Weather.Checks.csproj",
+      "tests/Habitat.Hotkey.Checks/Habitat.Hotkey.Checks.csproj",
+      "tests/Habitat.Window.Checks/Habitat.Window.Checks.csproj",
+      "tools/Habitat.Release.Verify/Habitat.Release.Verify.csproj"
+    ]
+  }
+}

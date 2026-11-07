@@ -89,14 +89,11 @@ La [política de almacenamiento](STORAGE.md) retira outputs generados verificado
 
 El flujo de **Update**, sus plazos y la recuperación de cada formato se describen en [Actualizaciones desde HABITAT](UPDATES.md).
 
-1. Trabaja en una rama y revisa todos los cambios, incluidos archivos nuevos. No incluyas credenciales, datos de usuario ni salidas de `artifacts` en Git.
-2. Actualiza `VERSION`, `CHANGELOG.md`, las instrucciones de instalación del README y, si corresponde, las versiones de las extensiones.
-3. Ejecuta `scripts\verify.ps1` con Node.js y el SDK .NET 10. Incluye la suite nativa WinUI con servicios sintéticos y almacenamiento aislado.
-4. Publica y lleva el commit verificado a `main`. Las etiquetas de publicación deben salir de esa rama; `codex/autosave` sigue siendo la rama de checkpoints.
-5. En un árbol limpio, ejecuta `scripts\package-release.ps1`. Publica WinUI y el residente, comprueba las versiones de los ensamblados, empaqueta ambas extensiones y genera el ZIP y su SHA-256 en `artifacts\packages`.
-6. Verifica el paquete real con `tests\package.checks.ps1 -PackagePath artifacts\packages\HABITAT-<version>-win-x64.zip`. Comprueba integridad, metadatos, binarios, extensiones e instalación aislada sin arranque.
-7. Para comprobar también el EXE localmente, instala Inno Setup 6.7.1 y ejecuta `scripts\build-installer.ps1`; lee la versión de `VERSION` y exige un árbol limpio. Verifica su ciclo silencioso con `scripts\test-installer.ps1 -InstallerPath artifacts\distribution\<version>\HABITAT-<version>-x64-setup.exe` en una cuenta sin instalación EXE previa.
-8. Crea la etiqueta anotada `v<version>` en ese commit y súbela. `.github/workflows/release.yml` vuelve a verificar, empaqueta ambos formatos, comprueba sus instalaciones y adjunta el ZIP, el EXE y sus hashes a una GitHub Release.
+1. Revisa los cambios y actualiza `VERSION`, `CHANGELOG.md`, las instrucciones de instalación del README y las versiones de las extensiones que cambien. Guarda en Git el código y las pruebas sintéticas.
+2. Integra el commit en `main` y crea la etiqueta anotada `v<version>` sobre ese commit. Si ambos están pendientes de subir, usa `git push --atomic origin main refs/tags/v<version>`. Si el commit ya está en GitHub, sube solo la etiqueta.
+3. Sigue la ejecución **Publish HABITAT** hasta que GitHub adjunte el EXE, el ZIP y sus SHA-256. Mientras genera y prueba los paquetes, el workflow busca la verificación del mismo commit en `main`. Reutiliza la ejecución si pasa. Si no encuentra una ejecución utilizable, verifica la etiqueta. Un resultado fallido bloquea la publicación.
+
+Puedes usar `scripts\verify.ps1` para ejecutar la verificación local completa durante el desarrollo. Para diagnosticar la distribución en una cuenta de pruebas sin instalación EXE previa, `scripts\build-release-assets.ps1 -DriveClientPath <archivo>` construye ambos formatos y prueba sus instalaciones.
 
 Los binarios se guardan como **assets de GitHub Releases del repositorio**, no en el historial de Git. El código del instalador, la receta de compilación y el criterio de versiones sí están versionados. El código fuente de cada versión queda fijado por su etiqueta. `release.json` identifica el commit fuente y las versiones de las extensiones; `build-manifest.json` verifica tamaño y SHA-256 de todos los archivos de la aplicación antes de activar una publicación.
 
