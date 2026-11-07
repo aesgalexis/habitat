@@ -13,6 +13,7 @@ if (-not $taskOutput.StartsWith($taskArtifacts + [IO.Path]::DirectorySeparatorCh
     throw 'UI check output must stay inside this project artifacts directory.'
 }
 Import-Module (Join-Path $PSScriptRoot 'Habitat.Storage.psm1') -Force
+[IO.Directory]::CreateDirectory($taskArtifacts) | Out-Null
 $uiOperation = [Habitat.Storage.GeneratedStorage]::BeginOperation($taskArtifacts, @($taskOutput))
 try {
 $buildWatch = [Diagnostics.Stopwatch]::StartNew()
