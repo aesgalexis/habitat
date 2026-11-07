@@ -39,6 +39,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Habitat.Window.Checks", "te
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Habitat.Contacts.Checks", "tests\Habitat.Contacts.Checks\Habitat.Contacts.Checks.csproj", "{5E42E8E4-B0B6-4D2F-93EC-E6327F8A91C1}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Habitat.Release.Verify", "tools\Habitat.Release.Verify\Habitat.Release.Verify.csproj", "{339C2D99-3740-4049-831B-3CC35EAD54C3}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -229,6 +231,18 @@ Global
 		{5E42E8E4-B0B6-4D2F-93EC-E6327F8A91C1}.Release|x64.Build.0 = Release|Any CPU
 		{5E42E8E4-B0B6-4D2F-93EC-E6327F8A91C1}.Release|x86.ActiveCfg = Release|Any CPU
 		{5E42E8E4-B0B6-4D2F-93EC-E6327F8A91C1}.Release|x86.Build.0 = Release|Any CPU
+		{339C2D99-3740-4049-831B-3CC35EAD54C3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{339C2D99-3740-4049-831B-3CC35EAD54C3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{339C2D99-3740-4049-831B-3CC35EAD54C3}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{339C2D99-3740-4049-831B-3CC35EAD54C3}.Debug|x64.Build.0 = Debug|Any CPU
+		{339C2D99-3740-4049-831B-3CC35EAD54C3}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{339C2D99-3740-4049-831B-3CC35EAD54C3}.Debug|x86.Build.0 = Debug|Any CPU
+		{339C2D99-3740-4049-831B-3CC35EAD54C3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{339C2D99-3740-4049-831B-3CC35EAD54C3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{339C2D99-3740-4049-831B-3CC35EAD54C3}.Release|x64.ActiveCfg = Release|Any CPU
+		{339C2D99-3740-4049-831B-3CC35EAD54C3}.Release|x64.Build.0 = Release|Any CPU
+		{339C2D99-3740-4049-831B-3CC35EAD54C3}.Release|x86.ActiveCfg = Release|Any CPU
+		{339C2D99-3740-4049-831B-3CC35EAD54C3}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -249,5 +263,6 @@ Global
 		{CB57B378-164E-439A-8779-47D1837222C9} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{5A7919EC-2011-4CE4-AA9B-7D5A9ED52834} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{5E42E8E4-B0B6-4D2F-93EC-E6327F8A91C1} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{339C2D99-3740-4049-831B-3CC35EAD54C3} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
 	EndGlobalSection
 EndGlobal

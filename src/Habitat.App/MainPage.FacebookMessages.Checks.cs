@@ -127,9 +127,7 @@ public sealed partial class MainPage
             _services.Facebook = contacts;
             SelectDestination(destination);
             foreach (var id in _facebookRecipients.Keys.ToArray())
-                if (_destinationSections.Remove(id, out var section)) { await section.StopAsync(); section.Dispose(); }
-            _facebookRecipients.Clear();
-            _facebookSendRecipients.Clear();
+                await _contactDestinationViews.RetireAsync(id);
             FacebookAvatars.Children.Clear();
             RebuildDestinationRail(); UpdateDestinationPresentation();
         }

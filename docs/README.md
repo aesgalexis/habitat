@@ -10,8 +10,9 @@ Entrada para usuarios y colaboradores. La documentación combina inglés y espa�
 | Usar los destinos y widgets presentes | [USER_GUIDE.md](USER_GUIDE.md) |
 | Resolver un problema o preparar una incidencia | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) |
 | Actualizar y conocer qué se conserva | [UPDATES.md](UPDATES.md) |
+| Analizar espacio y limpiar archivos generados | [STORAGE.md](STORAGE.md) |
 | Autorizar Gmail | [GMAIL_SETUP.md](GMAIL_SETUP.md) |
-| Agenda unificada, fuentes opcionales y fusiones | [CONTACTS.md](CONTACTS.md) |
+| Contactos manuales, canales y sincronización con Drive | [CONTACTS.md](CONTACTS.md) |
 | Sincronizar Tasks y organizar la carpeta HABITAT en Drive | [TASKS_DRIVE_SYNC.md](TASKS_DRIVE_SYNC.md) |
 | Captura de selección con Ctrl+H | [GLOBAL_SHORTCUT.md](GLOBAL_SHORTCUT.md) |
 | Contactos de Facebook, integración en desarrollo en esta copia | [FACEBOOK.md](FACEBOOK.md) |
@@ -25,6 +26,7 @@ Entrada para usuarios y colaboradores. La documentación combina inglés y espa�
 | Ejecutar comprobaciones sin datos reales | [CHECKS.md](CHECKS.md) |
 | Ver qué está respaldado por esta copia | [PROJECT_STATUS.md](PROJECT_STATUS.md) |
 | Entender los módulos | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| Revisión general y deuda técnica del 6 de noviembre | [ARCHITECTURE_AUDIT_2026-11-06.md](ARCHITECTURE_AUDIT_2026-11-06.md) |
 | Contrato del puente local | [BRIDGE_PROTOCOL.md](BRIDGE_PROTOCOL.md) |
 | Política de idioma | [LOCALIZATION.md](LOCALIZATION.md) |
 | Decisiones y sus límites | [DECISIONS.md](DECISIONS.md) |

@@ -16,6 +16,7 @@ public sealed partial class MainPage
                 throw new InvalidOperationException("UI checks did not receive isolated services.");
             File.AppendAllText(path, "PASS: isolated services, empty in-memory Gmail credentials and explicit data paths\n");
             await _initialTaskLoad;
+            await CheckContactSectionLifetimeAsync(path);
             if (Environment.GetCommandLineArgs().Contains("--contact-channels-ui-only"))
             {
                 await CheckContactChannelsUiAsync(path);
@@ -185,6 +186,11 @@ public sealed partial class MainPage
                 throw new InvalidOperationException("The sidebar must start collapsed with an accessible expansion action.");
             CheckWeatherSidebar();
             File.AppendAllText(path, "PASS: sidebar starts collapsed with Gmail, Tasks and compact weather\n");
+            if (Environment.GetCommandLineArgs().Contains("--all-ui-checks"))
+            {
+                await CheckGmailDraftUiAsync(path);
+                await CheckVSCodeUiAsync(path);
+            }
             if (Environment.GetCommandLineArgs().Contains("--vscode-ui-only"))
             {
                 await CheckVSCodeUiAsync(path);

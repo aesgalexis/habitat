@@ -1,11 +1,14 @@
 # Changelog
 
-## 0.20.0 — 2026-11-06
+## 0.20.0 — 2026-11-07
 
 - Tasks incorpora sincronización opcional con Google Drive: altas, completar y reabrir, combinación por ID y campo, revisión por tarea y conservación de cambios locales durante la red. Empieza desactivada y comparte la autorización de Contacts.
 - La nueva sección **Preferences → Google Drive** permite activar cada módulo, sincronizar, abrir la carpeta y desconectar. Ambos usan una carpeta **HABITAT** en la raíz de Mi unidad; el CSV existente se mueve sin cambiar su identidad ni su historial.
 - Los reintentos conservan IDs pendientes y revisiones confirmadas. Se detectan carpetas duplicadas, cuenta distinta y archivos alterados. La recuperación local de tareas exige revisión persistente antes de subir posibles estados anteriores.
 - Comprobaciones sintéticas con dos equipos, fallos de red y módulos independientes; controles WinUI probados en ambos temas con datos aislados. [Guía y límites](docs/TASKS_DRIVE_SYNC.md).
+- **Preferences → Storage** analiza el espacio y retira archivos generados verificados con más de siete días. La limpieza protege la versión activa y la anterior, las operaciones en curso y las cachés de compilación.
+- La caché de destinos de contacto protege los borradores, las operaciones activas y los envíos inciertos de Phone Link. Los contactos y las programaciones de Codex tienen componentes propios que gestionan su ciclo de vida.
+- La compilación aislada excluye salidas antiguas de `bin` y `obj`. El ZIP y el EXE comparten binarios y comprueban el cliente integrado de Drive. La verificación incorpora la suite nativa WinUI.
 
 ## 0.19.0 — 2026-11-06
 

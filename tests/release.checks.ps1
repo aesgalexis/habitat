@@ -1,7 +1,10 @@
 $ErrorActionPreference = 'Stop'
 $releaseRepo = Split-Path -Parent $PSScriptRoot
 Import-Module (Join-Path $releaseRepo 'scripts\Habitat.Release.psm1') -Force
-$releaseChecks = Join-Path $releaseRepo ('artifacts\release-checks\' + [guid]::NewGuid().ToString('N'))
+$releaseArtifacts = Join-Path $releaseRepo 'artifacts'
+$releaseChecks = Join-Path $releaseArtifacts ('verification/run-' + [guid]::NewGuid().ToString('N'))
+$checksOperation = [Habitat.Storage.GeneratedStorage]::BeginOperation($releaseArtifacts, @($releaseChecks))
+try {
 $stage = Join-Path $releaseChecks 'stage'
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 foreach ($name in 'HABITAT.exe', 'HABITAT.dll', 'Habitat.Core.dll', 'resource.txt') {
@@ -50,3 +53,5 @@ try {
     }
 } finally { $portableArchive.Dispose() }
 Write-Host 'Production ZIP names are canonical under Windows PowerShell.'
+[Habitat.Storage.GeneratedStorage]::Complete($releaseArtifacts, $releaseChecks, 'test')
+} finally { $checksOperation.Dispose() }

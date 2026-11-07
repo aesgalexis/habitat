@@ -140,6 +140,7 @@ await VSCodeChecks.RunAsync(Check);
 await ExternalDestinationChecks.RunAsync(Check);
 ComposerDraftChecks.Run(Check);
 await ComposerCoordinatorChecks.RunAsync(Check);
+await CodexScheduleControllerChecks.RunAsync(Check);
 RunChecks.Run(Check);
 Check(destinations.Select((destination, index) => ComposerDestinations.Cycle(destination, 1) ==
     destinations[(index + 1) % destinations.Count]).All(result => result),

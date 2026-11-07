@@ -3,5 +3,7 @@
     <Version>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)VERSION').Trim())</Version>
     <Product>HABITAT</Product>
     <Company>aesgalexis</Company>
+    <!-- Output overrides must never turn a previous build into source input. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);**/bin/**;**/obj/**</DefaultItemExcludes>
   </PropertyGroup>
 </Project>

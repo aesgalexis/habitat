@@ -5,7 +5,6 @@ using Habitat.Models;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
-using System.Text.Json;
 
 namespace Habitat;
 
@@ -14,11 +13,7 @@ public sealed partial class MainPage
     private readonly Button ContactsSettings = new() { Content = "Manage contacts", HorizontalAlignment = HorizontalAlignment.Stretch };
     private readonly Button ContactsAdd = new() { Content = "Add contact", HorizontalAlignment = HorizontalAlignment.Stretch };
     private bool _newContact;
-    private readonly Button ContactsDuplicates = new() { Content = "Possible duplicates", Visibility = Visibility.Collapsed,
-        HorizontalAlignment = HorizontalAlignment.Stretch };
     private readonly Button ContactsLoadMore = new() { Content = "Load more contacts", Visibility = Visibility.Collapsed,
-        HorizontalAlignment = HorizontalAlignment.Stretch };
-    private readonly Button ContactsEnableGoogle = new() { Content = "Connect Google Contacts", Visibility = Visibility.Collapsed,
         HorizontalAlignment = HorizontalAlignment.Stretch };
     private int _contactVisibleLimit = 100;
     private ContactBook? _renderedContactBook;
@@ -26,7 +21,6 @@ public sealed partial class MainPage
     private int _renderedContactLimit;
     private readonly Flyout ContactProfile = new();
     private string? _contactToManage;
-    private bool _reviewContactDuplicates;
     private ContactsPreferencesView? _contactsPreferences;
 
     private ContactsPreferencesView CreateContactsPreferences() => new(_services.Contacts,
@@ -34,7 +28,7 @@ public sealed partial class MainPage
 
     private async Task<GmailClientConfiguration?> PickDriveClientAsync()
     {
-        var file = await _services.PickContactsFileAsync(_windowHost?.Handle ?? 0, client: true);
+        var file = await _services.PickGoogleClientAsync(_windowHost?.Handle ?? 0);
         if (file is null) return null;
         if (new FileInfo(file).Length > 65536) throw new InvalidDataException("Choose a Google Desktop OAuth client JSON smaller than 64 KB.");
         return GmailClientConfiguration.FromJson(await File.ReadAllTextAsync(file, _operations.Token));
@@ -58,97 +52,6 @@ public sealed partial class MainPage
         });
     }
 
-    private bool SetBrowserContactSource(string provider, bool enabled)
-    {
-        // Legacy preferences must never re-enable automatic destination creation.
-        if (enabled) return false;
-        var settings = new BrowserContactSettings(false, false);
-        var updated = _preferences with { BrowserContacts = settings };
-        if (!updated.Save(_services.Paths.PreferencesPath, ex => _services.ReportError("Save automatic contacts", ex))) return false;
-        _preferences = updated;
-        _services.Bridge.BrowserContacts.Configure(settings);
-        return true;
-    }
-
-    private async Task EnableBrowserContactAccessAsync(string provider)
-    {
-        if (_services.Bridge.BrowserContacts.Supported) _services.Bridge.BrowserContacts.RequestSetup(provider);
-        else if (!await _launchBrowser(new Uri("chrome://extensions/")))
-            throw new InvalidOperationException("Open Chrome extensions and reload HABITAT Browser Bridge 0.10.8 or later.");
-    }
-
-    private void TickBrowserContacts()
-    {
-        _services.Bridge.BrowserContacts.Configure(new(false, false));
-    }
-
-    private async Task<ContactImport?> ConnectGoogleContactsAsync(CancellationToken token)
-    {
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, _operations.Token);
-        using var auth = _services.CreateContactsAuth();
-        var client = _gmailAuth?.Client;
-        if (client is null && _services.Contacts.Book.Sources.FirstOrDefault(s => s.Kind == "google") is { } existing)
-        {
-            using var savedAuth = _services.CreateContactsAuth(_services.ContactsCredentials(existing.Id));
-            client = savedAuth.Client;
-        }
-        if (client is null)
-        {
-            var file = await _services.PickContactsFileAsync(_windowHost?.Handle ?? 0, client: true);
-            if (file is null) return null;
-            if (new FileInfo(file).Length > 65536) throw new InvalidDataException("Choose a Google Desktop OAuth client JSON smaller than 64 KB.");
-            client = GmailClientConfiguration.FromJson(await File.ReadAllTextAsync(file, linked.Token));
-        }
-        auth.Configure(client);
-        await auth.SignInAsync(linked.Token);
-        var email = auth.Email ?? throw new InvalidDataException("Google returned no account email.");
-        var source = _services.Contacts.Book.Sources.FirstOrDefault(s => s.Kind == "google" && s.Account.Equals(email, StringComparison.OrdinalIgnoreCase));
-        source = source is null ? new(ContactBook.NewId(), "google", "Google · " + email, email, true) : source with { Connected = true };
-        _services.ContactsCredentials(source.Id).Save(auth.Account);
-        using var google = _services.CreateGoogleContacts(auth);
-        // A connection is distinct from permission to import its contact records.
-        if (!await _services.Contacts.ChangeAsync(b => b.WithSource(source), linked.Token)) return null;
-        return new(source, await google.ReadAsync(linked.Token), true);
-    }
-
-    private async Task<ContactCandidate[]> ReloadGoogleContactsAsync(ContactSource source, CancellationToken token)
-    {
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, _operations.Token);
-        using var auth = _services.CreateContactsAuth(_services.ContactsCredentials(source.Id));
-        if (!auth.IsSignedIn) throw new InvalidOperationException("Reconnect this Google account before reloading contacts.");
-        if (!string.Equals(auth.Email, source.Account, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("The Google authorization does not match this contact source. Reconnect the account.");
-        using var google = _services.CreateGoogleContacts(auth);
-        return await google.ReadAsync(linked.Token);
-    }
-
-    private async Task DisconnectContactSourceAsync(ContactSource source, CancellationToken token)
-    {
-        using var auth = _services.CreateContactsAuth(_services.ContactsCredentials(source.Id));
-        await auth.DisconnectAsync(token);
-    }
-
-    private async Task<(string Name, ContactCandidate[] Candidates)?> PickVCardContactsAsync(CancellationToken token)
-    {
-        var file = await _services.PickContactsFileAsync(_windowHost?.Handle ?? 0);
-        return file is null ? null : (Path.GetFileNameWithoutExtension(file), await VCardContacts.ReadAsync(file, token));
-    }
-
-    private async Task<ContactCandidate[]> ReadFacebookCandidatesAsync(CancellationToken token)
-    {
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, _operations.Token);
-        var contacts = await _services.Facebook.ReadAsync(linked.Token);
-        return contacts.Select(contact =>
-        {
-            var fields = new List<ContactValue> { new("name", contact.Name) };
-            if (!string.IsNullOrWhiteSpace(contact.PhotoUrl)) fields.Add(new("photo", contact.PhotoUrl));
-            if (contact.Link is not null && FacebookContactsService.SafeLink(contact.Link))
-            { fields.Add(new("profile", contact.Link)); fields.Add(new("messenger", contact.Link)); }
-            return new ContactCandidate(contact.Link ?? "snapshot:" + ContactBook.Hash(contact.Name + "\n" + contact.PhotoUrl),
-                fields.ToArray(), JsonSerializer.Serialize(contact));
-        }).DistinctBy(c => c.RemoteId).ToArray();
-    }
-
     private void ContactsChanged()
     {
         if (_operations.IsStopping) return;
@@ -158,7 +61,6 @@ public sealed partial class MainPage
 
     private void RenderUnifiedContacts()
     {
-        RefreshContactSourceAction();
         var book = _services.Contacts.Book;
         var query = FacebookContactSearch.Text.Trim();
         var error = _services.Contacts.Error;
@@ -174,7 +76,6 @@ public sealed partial class MainPage
         if (_facebookError is null)
             foreach (var person in matches.Take(_contactVisibleLimit)) AddUnifiedContact(book, person);
         ContactsLoadMore.Visibility = matches.Length > _contactVisibleLimit ? Visibility.Visible : Visibility.Collapsed;
-        ContactsDuplicates.Visibility = Visibility.Collapsed;
         AutomationProperties.SetItemStatus(FacebookButton, $"{book.ListedPeople.Count()} contacts");
         AutomationProperties.SetHelpText(FacebookButton, _facebookError ?? "Open your contacts");
         ApplyFacebookContactFilter(); PaintFacebook();
@@ -204,7 +105,6 @@ public sealed partial class MainPage
         SizeFacebookContact(card); FacebookAvatars.Children.Add(card);
     }
 
-    private void RefreshContactSourceAction() => ContactsEnableGoogle.Visibility = Visibility.Collapsed;
 
     private string[] ContactEmailSenders() => _services.Contacts.Book.Sources
         .Where(s => s.Kind is "google" or "google-browser" && s.Connected && ContactChannels.IsEmail(s.Account)).Select(s => s.Account)
@@ -216,20 +116,30 @@ public sealed partial class MainPage
         var book = _services.Contacts.Book;
         var person = book.People.FirstOrDefault(p => p.Id == personId);
         if (person is null) return;
-        var channels = ContactChannels.For(book, person);
-        var senders = ContactEmailSenders();
-        if (channels.Length == 0) { SelectUnavailableContact(book, person); return; }
-        _preferredContactChannels.TryGetValue(personId, out var preferred);
-        var channel = channels.FirstOrDefault(c => c.Kind == preferred?.Kind && SameContactAddress(c.Kind, c.Address, preferred.Address)) ??
-            channels.OrderBy(c => c.Kind == "phone" ? 0 : c.Kind == "email" ? 1 : 2).First();
-        var sender = preferred?.Sender is { } previous && senders.Contains(previous, StringComparer.OrdinalIgnoreCase) ? previous :
-            book.Sources.FirstOrDefault(s => s.Id == channel.SourceId && ContactChannels.IsEmail(s.Account))?.Account ??
-            _gmailAuth?.Email ?? senders.FirstOrDefault();
-        await OpenContactChannelAsync(book, person, channel, sender);
+        var selected = _contactDestinations.Choose(book, person, ContactEmailSenders(), _gmailAuth?.Email);
+        if (selected is null) { SelectUnavailableContact(book, person); return; }
+        await OpenContactChannelAsync(book, person, selected.Value.Channel, selected.Value.Sender);
     }
 
-    private Task OpenContactChannelAsync(ContactBook book, ContactPerson person, ContactChannel channel, string? sender = null)
+    private async Task OpenContactChannelAsync(ContactBook book, ContactPerson person, ContactChannel channel, string? sender = null)
     {
+        var id = channel.Kind == "phone" ? ContactDestinationSession.PhoneId(person.Id, channel.Address) :
+            channel.Kind == "email" ? ContactDestinationSession.EmailId(person.Id, channel.Address, sender) :
+            ContactDestinationSession.MessengerId(new(book.Name(person), "", channel.Address), person.Id);
+        var previousDestination = _destination;
+        await _contactDestinationViews.WaitForRetirementAsync(id);
+        if (_operations.IsStopping || HasAppearanceOverlay || _updateDialogOpen || _updateHandoff || _destination != previousDestination) return;
+        if (!ReferenceEquals(book, _services.Contacts.Book))
+        {
+            book = _services.Contacts.Book;
+            var currentPerson = book.People.FirstOrDefault(item => item.Id == person.Id);
+            if (currentPerson is null) return;
+            var currentChannel = ContactChannels.For(book, currentPerson).FirstOrDefault(item =>
+                item.Kind == channel.Kind && ContactDestinationSession.SameAddress(item.Kind, item.Address, channel.Address));
+            if (currentChannel is null) return;
+            person = currentPerson;
+            channel = currentChannel;
+        }
         if (channel.Kind == "messenger")
         {
             var record = book.For(person).First(r => r.SourceId == channel.SourceId &&
@@ -249,7 +159,6 @@ public sealed partial class MainPage
             ContactProfile.Hide();
             SelectEmailContact(book, person, channel.Address, sender);
         }
-        return Task.CompletedTask;
     }
 
     private void ShowContactProfile(string personId, FrameworkElement anchor)

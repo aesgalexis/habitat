@@ -18,6 +18,8 @@ Las versiones antiguas que todavía no incluyen el actualizador necesitan instal
 
 ## Integridad, ejecución y diagnóstico
 
+La instalación y el arranque incorporan [retención de archivos generados](STORAGE.md). Se conserva la versión activa, la anterior y las operaciones en curso, con un margen de siete días. **Preferences… → Storage** permite analizar y limpiar con la misma política. El rollback restaura ambos punteros de releases.
+
 Se aceptan exclusivamente assets con el nombre y ruta esperados de este repositorio, a través de HTTPS. Los redireccionamientos se limitan a los hosts de descarga de GitHub. Antes de la instalación se vuelve a consultar la publicación, se verifica tamaño y SHA-256 y, para ZIP, también versión, runtime y el manifiesto completo. La extracción rechaza rutas que salgan del directorio, duplicados y enlaces. Un SHA-256 detecta corrupción; no equivale a una firma de editor. La firma de código continúa aplazada según [SIGNING.md](SIGNING.md).
 
 El ayudante local comprueba otra vez el hash y la identidad del proceso original. Confirma que está preparado antes de que HABITAT se cierre, espera su salida y detiene únicamente el residente del atajo de esa instalación. Todo se ejecuta en la sesión normal de Windows. Una descarga fallida deja HABITAT abierto; un error posterior intenta reabrir la versión anterior y permite reintentar desde **Update**.

@@ -82,8 +82,7 @@ public sealed partial class MainPage
             await _services.Contacts.ChangeAsync(_ => original);
             foreach (var id in _emailRecipients.Keys.Where(id => !previousIds.Contains(id)).ToArray())
             {
-                if (_destinationSections.Remove(id, out var section)) { await section.StopAsync(); section.Dispose(); }
-                _emailRecipients.Remove(id);
+                await _contactDestinationViews.RetireAsync(id);
             }
         }
     }

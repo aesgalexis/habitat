@@ -8,15 +8,13 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace Habitat;
 
 public sealed partial class MainPage
 {
-    private readonly Dictionary<string, FacebookContact> _facebookRecipients = new();
-    private readonly Dictionary<string, FacebookContact> _facebookSendRecipients = new();
+    private IReadOnlyDictionary<string, FacebookContact> _facebookRecipients => _contactDestinations.Messenger;
+    private IReadOnlyDictionary<string, FacebookContact> _facebookSendRecipients => _contactDestinations.MessengerRecipients;
     private FacebookContact? _displayedContact;
     private readonly Grid ContactMessageHeader = new()
     {
@@ -29,16 +27,13 @@ public sealed partial class MainPage
         FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, MaxLines = 1,
         TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center
     };
-    private bool IsFacebookDestination(string id) => _facebookRecipients.ContainsKey(id);
-    private static string FacebookRecipientId(FacebookContact contact) => "facebook-contact:" +
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(contact.Link ?? contact.Name + "\n" + contact.PhotoUrl)));
-
+    private bool IsFacebookDestination(string id) => _contactDestinations.Contains(id) && _facebookRecipients.ContainsKey(id);
+    private static string FacebookRecipientId(FacebookContact contact) => ContactDestinationSession.MessengerId(contact, null);
     private void SelectFacebookContact(FacebookContact contact, string? displayName = null, string? personId = null)
     {
         if (HasAppearanceOverlay || _updateHandoff || _operations.IsStopping) return;
-        var id = personId is null ? FacebookRecipientId(contact) : "facebook-contact:" + ContactBook.Hash(personId + "\n" + contact.Link);
-        _facebookRecipients[id] = displayName is null ? contact : contact with { Name = displayName };
-        _facebookSendRecipients[id] = contact;
+        if (_contactDestinationViews.IsRetiring(ContactDestinationSession.MessengerId(contact, personId))) return;
+        var id = _contactDestinations.RegisterMessenger(contact, displayName, personId);
         _composerDrafts.Isolate(id);
         if (!_destinationSections.ContainsKey(id))
         {
@@ -57,8 +52,6 @@ public sealed partial class MainPage
             _composer.Register(id, false, SubmitFacebookMessageAsync,
                 _ => section.IsBusy || _facebookSendRecipients[id].Link is null || !_services.FacebookMessaging.IsAvailable, exclusive: true);
         }
-        if (personId is not null) AssociateContactChannel(id, personId, "messenger", contact.Link!);
-        else _contactChannelSelections.Remove(id);
         SelectDestination(id);
         SetFacebookOpen(false);
         FocusComposer();

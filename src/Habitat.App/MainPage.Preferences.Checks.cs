@@ -18,7 +18,7 @@ public sealed partial class MainPage
             if (_activeDialog?.Content is not PreferencesView view || !_appearanceDialogOpen)
                 throw new InvalidOperationException("Preferences did not open the categorized view.");
             var names = view.Categories.Items.Cast<ListViewItem>().Select(item => item.Tag as string).ToArray();
-            if (!names.SequenceEqual(new[] { "Appearance", "Location", "ChatGPT", "Shortcuts", "Destinations", "Markets", "Sidebar", "Contacts" }))
+            if (!names.SequenceEqual(new[] { "Appearance", "Location", "ChatGPT", "Shortcuts", "Destinations", "Markets", "Sidebar", "Contacts", "Storage" }))
                 throw new InvalidOperationException("Preference categories changed or mixed UI languages.");
             foreach (var index in new[] { 1, 2, 3, 4, 0 })
             {
@@ -26,6 +26,24 @@ public sealed partial class MainPage
                 await Task.Delay(30);
                 if (view.Category != names[index]) throw new InvalidOperationException("Sidebar selection did not change categories.");
             }
+            view.SelectCategory("Storage");
+            if (view.Storage.Analyze.Content as string != "Analyze storage" || view.Storage.Clean.IsEnabled)
+                throw new InvalidOperationException("Storage must begin with an English analysis action and disabled cleanup.");
+            var storageResult = new TaskCompletionSource<Habitat.Storage.StorageReport>();
+            var storage = new StorageView((_, _) => storageResult.Task);
+            var analyzing = storage.RunAsync(false);
+            if (storage.Analyze.IsEnabled || storage.Status.Text != "Analyzing generated files…")
+                throw new InvalidOperationException("Storage analysis must be asynchronous and prevent duplicate requests.");
+            storageResult.SetResult(new Habitat.Storage.StorageReport { RecoverableBytes = 3L * 1024 * 1024 * 1024, Candidates = 2 });
+            await analyzing;
+            if (!storage.Clean.IsEnabled || !storage.Status.Text.Contains("3 GiB"))
+                throw new InvalidOperationException("Storage analysis must show recoverable bytes before enabling cleanup.");
+            await storage.StopAsync();
+            var cleanedStorage = new StorageView((_, _) => Task.FromResult(new Habitat.Storage.StorageReport { FreedBytes = 1024 * 1024 }));
+            await cleanedStorage.RunAsync(true);
+            if (cleanedStorage.Status.Text != "Freed 1 MiB. Analyze again to check remaining space." || cleanedStorage.Clean.IsEnabled)
+                throw new InvalidOperationException("Storage cleanup must report actual freed bytes and require fresh analysis.");
+            await cleanedStorage.StopAsync();
             view.WeatherCity.Text = "Ciudad de prueba";
             view.UseDeviceLocation.IsOn = false;
             view.Theme.SelectedIndex = 1;

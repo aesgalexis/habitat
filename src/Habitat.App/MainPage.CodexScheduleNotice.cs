@@ -10,7 +10,7 @@ namespace Habitat;
 
 public sealed partial class MainPage
 {
-    private IReadOnlyList<CodexScheduledMessage> _codexScheduleSnapshot = [];
+    private IReadOnlyList<CodexScheduledMessage> _codexScheduleSnapshot { get => _scheduleController.Snapshot; set => _scheduleController.Snapshot = value; }
     private readonly TextBlock _codexScheduleCount = new() { FontSize = 9, FontWeight = Microsoft.UI.Text.FontWeights.Bold,
         TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
     private readonly Border _codexScheduleBadge = new() { MinWidth = 14, Height = 14, Padding = new Thickness(3, 0, 3, 0),

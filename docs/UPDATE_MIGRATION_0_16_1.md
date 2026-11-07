@@ -19,8 +19,8 @@ los bytes del binario afectado. Las pruebas fijan el cliente y los tres auxiliar
 históricos de `e5a2ecc`, que implementan el flujo descrito. Sin hashes o una copia
 de las DLL del PC afectado sigue pendiente demostrar igualdad binaria exacta.
 
-`AppUpdateInstall.CreateHelperStartInfo` es la factoría de lanzamiento compartida
-en el código actual. El antiguo `AppUpdateInstall.Prepare` y su `UpdateHelper.ps1`
+`UpdateHelperLauncher.CreateStartInfo` es la factoría de lanzamiento compartida
+en el código actual. El antiguo `AppUpdateInstall.Prepare` y su `UpdateHelper.ps1`, ahora fixtures de pruebas,
 embebido corresponden al otro mecanismo: no son el auxiliar que copia el
 `DesktopUpdateService` informado.
 

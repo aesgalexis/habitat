@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$InstallerPath)
+param([Parameter(Mandatory)][string]$InstallerPath, [string]$ReferenceDirectory, [switch]$RequireDrive)
 $ErrorActionPreference = 'Stop'
 $smokeRepo = Split-Path -Parent $PSScriptRoot
 $metadata = Get-Content -LiteralPath (Join-Path $smokeRepo 'packaging/metadata.json') -Raw | ConvertFrom-Json
@@ -13,6 +13,9 @@ function Invoke-SilentInstaller([string]$Executable, [string[]]$InstallerArgumen
     if ($process.ExitCode -ne 0) { throw "Installer exited with $($process.ExitCode). Logs: $smokeRoot" }
 }
 function Test-InstalledPayload {
+    if ($ReferenceDirectory -or $RequireDrive) {
+        & (Join-Path $smokeRepo 'scripts/check-release-payload.ps1') -PayloadDirectory $installation -ReferenceDirectory $ReferenceDirectory -RequireDrive:$RequireDrive
+    }
     $release = Get-Content -LiteralPath (Join-Path $installation 'release.json') -Raw | ConvertFrom-Json
     $expectedVersion = (Get-Content -LiteralPath (Join-Path $smokeRepo 'VERSION') -Raw).Trim()
     $expectedCommit = git -C $smokeRepo rev-parse HEAD

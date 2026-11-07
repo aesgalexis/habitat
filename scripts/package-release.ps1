@@ -1,4 +1,4 @@
-param([string]$StageDirectory)
+param([string]$StageDirectory, [switch]$RequireDrive)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $changes = git -C $repo status --porcelain
@@ -15,6 +15,11 @@ if (-not $StageDirectory) {
 $stage = (Resolve-Path -LiteralPath $StageDirectory).Path
 if (-not $stage.StartsWith($artifactsRoot + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Stage must stay inside artifacts.' }
 Import-Module (Join-Path $PSScriptRoot 'Habitat.Release.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'Habitat.Storage.psm1') -Force
+$output = Join-Path $artifactsRoot 'packages'
+$bundle = Join-Path $output ('bundle-' + [guid]::NewGuid().ToString('N'))
+$packageOperation = [Habitat.Storage.GeneratedStorage]::BeginOperation($artifactsRoot, @($stage, $bundle))
+try {
 Test-HabitatBuildManifest $stage
 foreach ($assembly in 'HABITAT.dll', 'HABITAT.Hotkey.dll', 'Habitat.Core.dll', 'Habitat.Activation.dll') {
     $info = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $stage $assembly))
@@ -23,8 +28,6 @@ foreach ($assembly in 'HABITAT.dll', 'HABITAT.Hotkey.dll', 'Habitat.Core.dll', '
 & (Join-Path $PSScriptRoot 'build-vscode-extension.ps1')
 $bridge = Get-Content -LiteralPath (Join-Path $repo 'extension\manifest.json') -Raw | ConvertFrom-Json
 $vscode = Get-Content -LiteralPath (Join-Path $repo 'vscode-extension\package.json') -Raw | ConvertFrom-Json
-$output = Join-Path $artifactsRoot 'packages'
-$bundle = Join-Path $output ('bundle-' + [guid]::NewGuid().ToString('N'))
 $payload = Join-Path $bundle 'artifacts\staged\app'
 New-Item -ItemType Directory -Path $payload -Force | Out-Null
 Get-ChildItem -LiteralPath $stage -Force | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $payload -Recurse -Force }
@@ -35,7 +38,7 @@ Import-Module (Join-Path $PSScriptRoot 'Habitat.Extension.psm1') -Force
 Copy-HabitatChromeExtension -Source (Join-Path $repo 'extension') -Destination (Join-Path $bundle 'extension')
 Copy-Item -LiteralPath (Join-Path $repo 'packaging/GETTING_STARTED.txt') -Destination $bundle
 New-Item -ItemType Directory -Path (Join-Path $bundle 'scripts'), (Join-Path $bundle 'vscode-extension') -Force | Out-Null
-foreach ($name in 'Habitat.Release.psm1', 'apply-staged-update.ps1') {
+foreach ($name in 'Habitat.Release.psm1', 'Habitat.Storage.psm1', 'Habitat.GeneratedStorage.cs', 'apply-staged-update.ps1') {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $bundle 'scripts')
 }
 $vsixName = "habitat-terminal-$($vscode.version).vsix"
@@ -46,6 +49,7 @@ $metadata = [ordered]@{
 }
 [IO.File]::WriteAllText((Join-Path $bundle 'release.json'), ($metadata | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
 Test-HabitatBuildManifest $payload
+& (Join-Path $PSScriptRoot 'check-release-payload.ps1') -PayloadDirectory $payload -ReferenceDirectory $stage -RequireDrive:$RequireDrive
 $finalCommit = git -C $repo rev-parse HEAD
 if ($LASTEXITCODE -ne 0 -or $finalCommit -ne $commit) { throw 'Source commit changed while preparing the package.' }
 $changes = git -C $repo status --porcelain
@@ -58,3 +62,8 @@ $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant
 [IO.File]::WriteAllText(($zip + '.sha256'), ($hash + ' *' + [IO.Path]::GetFileName($zip) + "`n"), [Text.UTF8Encoding]::new($false))
 Write-Host "Release package: $zip"
 Write-Host "SHA-256: $hash"
+Complete-HabitatGeneratedOutput $artifactsRoot $bundle 'package'
+Complete-HabitatGeneratedOutput $artifactsRoot $stage 'consumed'
+} finally { $packageOperation.Dispose() }
+try { $null = Invoke-HabitatStorageMaintenance -ArtifactsRoot $artifactsRoot -Clean -Automatic }
+catch { Write-Warning 'Generated storage maintenance could not finish. Release package was retained.' }

@@ -49,3 +49,7 @@ Desde 0.20.0 el mismo CSV se traslada a **HABITAT**, una carpeta creada en la ra
 Los cambios de fichas distintas se combinan. Si se modifica la misma ficha en ambos PC, **Keep local conflicting contacts** o **Keep Drive conflicting contacts** permite elegir qué versión conservar para las fichas en conflicto. Si dos fichas distintas tienen el mismo teléfono, correo o perfil, revisa los duplicados antes de reintentar. **Disconnect Google Drive** pausa la sincronización en ese PC y conserva la agenda local y el vínculo con esa cuenta para poder reanudarlo.
 
 El CSV es legible y se guarda sin cifrado de extremo a extremo. Google Drive también conserva revisiones privadas con valores anteriores, igual que HABITAT conserva copias de recuperación locales. La app se comunica directamente con Google Drive mediante permisos limitados a sus archivos y a su espacio privado. [Permisos de Google Drive](https://developers.google.com/workspace/drive/api/guides/api-specific-auth)
+
+## Estado de destinos durante una sesión
+
+El canal y remitente seleccionados se conservan independientemente de los controles. Editar el nombre actualiza sus destinos. Retirar una dirección deshabilita su ruta y espera al proveedor antes de liberar la vista. La caché conserva el destino actual y hasta 32 vistas inactivas. Los borradores, las operaciones activas y los envíos inciertos de Phone Link se protegen aunque se supere ese presupuesto. Las huellas de los envíos inciertos se conservan en memoria durante la sesión, incluso después de pulsar **Clear** o recrear la vista.

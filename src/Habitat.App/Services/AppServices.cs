@@ -30,13 +30,10 @@ internal sealed class AppServices : IAsyncDisposable
     internal TaskDriveSync? TaskDrive { get; }
     internal GoogleDriveSync? DriveSync { get; }
     private readonly HttpClient? _contactDriveHttp;
-    private readonly Dictionary<string, IGmailCredentialStore> _contactsTestCredentials = new();
     public WeatherService Weather { get; }
     internal MarketsService Markets { get; set; }
     internal IAppUpdateService Updates { get; set; }
-    internal AppUpdateDownload UpdateDownload { get; set; }
-    internal Func<UpdateInstallation?> FindUpdateInstallation { get; set; }
-    internal Func<System.Diagnostics.ProcessStartInfo, bool> StartUpdateHelper { get; set; }
+    internal GeneratedStorageService Storage { get; }
     public Func<Uri, Task<bool>> LaunchBrowser { get; }
     internal bool OpenSetupFolder(string? path) => !Paths.IsIsolated && path is not null && Directory.Exists(path) &&
         StartSetupProcess(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
@@ -106,10 +103,11 @@ internal sealed class AppServices : IAsyncDisposable
         }
         catch (Exception exception) { ReportError("Copy translation", exception); return false; }
     }
-    public Task StartAsync()
+    public async Task StartAsync()
     {
         if (Paths.IsIsolated) throw new InvalidOperationException("The desktop bridge is disabled in isolated checks.");
-        return _bridgeStart = Bridge.StartAsync();
+        await (_bridgeStart = Bridge.StartAsync());
+        if (Bridge.IsStarted) Storage.StartAfterBridgeReady();
     }
 
     public void ReportError(string operation, Exception exception)
@@ -126,7 +124,7 @@ internal sealed class AppServices : IAsyncDisposable
 
     private GmailClientConfiguration? ReadBundledDriveClient()
     {
-        using var stream = typeof(AppServices).Assembly.GetManifestResourceStream("Habitat.GoogleDriveOAuthClient.json");
+        using var stream = typeof(AppServices).Assembly.GetManifestResourceStream(ReleasePayload.DriveResourceName);
         if (stream is null) return null;
         try
         {
@@ -150,7 +148,7 @@ internal sealed class AppServices : IAsyncDisposable
         Wallpapers = new WallpaperService(paths);
         GlobalHotkey = new GlobalHotkeyService(paths);
         Bridge = new BridgeService(paths.IsIsolated ? 0 : 8765, facebookTracePath: paths.FacebookMessageTracePath);
-        Bridge.BrowserContacts.Configure(new(false, false));
+        Bridge.BrowserContacts.DisableSources();
         Tasks = paths.IsIsolated ? new TaskStore(paths.TasksPath) : new TaskStore();
         TaskSession = new TaskSession(Tasks);
         Contacts = new(new Habitat.Features.Contacts.ContactStore(paths.ContactsPath));
@@ -170,14 +168,8 @@ internal sealed class AppServices : IAsyncDisposable
         }
         Weather = new WeatherService(_isolatedHttp);
         Markets = new MarketsService(_isolatedHttp);
-        Updates = new DesktopUpdateService(paths);
-        UpdateDownload = new AppUpdateDownload(_isolatedHttp);
-        FindUpdateInstallation = paths.IsIsolated ? () => null : () => UpdateInstallation.Find(AppContext.BaseDirectory);
-        StartUpdateHelper = paths.IsIsolated ? _ => false : info =>
-        {
-            using var process = System.Diagnostics.Process.Start(info);
-            return process is not null;
-        };
+        Storage = new GeneratedStorageService(paths);
+        Updates = new DesktopUpdateService(paths, Storage);
         Translation = Bridge.Translation;
         Search = Bridge.Search;
         YouTubeSearch = Bridge.YouTubeSearch;
@@ -232,27 +224,11 @@ internal sealed class AppServices : IAsyncDisposable
             if (!await LaunchBrowser(new Uri(url))) throw new InvalidOperationException(UiText.Get("CouldNotOpenChromeCheckThatGoogleChromeMessage"));
         });
     public GmailService CreateGmail(GmailAuthService auth) => new(auth, _isolatedHttp);
-    internal IGmailCredentialStore ContactsCredentials(string sourceId)
-    {
-        if (!Guid.TryParseExact(sourceId, "N", out _)) throw new ArgumentException("Invalid contact source identifier.");
-        if (!Paths.IsIsolated) return new GmailCredentialStore(
-            Path.Combine(Paths.DesktopDirectory, "Contacts", sourceId + ".bin"), "HABITAT/Contacts/Google/" + sourceId);
-        if (!_contactsTestCredentials.TryGetValue(sourceId, out var credentials))
-            _contactsTestCredentials[sourceId] = credentials = new MemoryCredentials();
-        return credentials;
-    }
-    internal GmailAuthService CreateContactsAuth(IGmailCredentialStore? credentials = null) =>
-        new(credentials ?? new MemoryCredentials(), _isolatedHttp, async url =>
-        {
-            if (Paths.IsIsolated) throw new InvalidOperationException("Google sign-in is disabled in checks.");
-            if (!await LaunchBrowser(new Uri(url))) throw new InvalidOperationException("Could not open Google sign-in in Chrome.");
-        }, contactsOnly: true);
-    internal Habitat.Features.Contacts.GoogleContactsService CreateGoogleContacts(GmailAuthService auth) => new(auth, _isolatedHttp);
-    internal async Task<string?> PickContactsFileAsync(nint owner, bool client = false)
+    internal async Task<string?> PickGoogleClientAsync(nint owner)
     {
         if (Paths.IsIsolated || owner == 0) return null;
-        var picker = new Windows.Storage.Pickers.FileOpenPicker { CommitButtonText = client ? "Select Google client" : "Select contacts" };
-        picker.FileTypeFilter.Add(client ? ".json" : ".vcf");
+        var picker = new Windows.Storage.Pickers.FileOpenPicker { CommitButtonText = "Select Google client" };
+        picker.FileTypeFilter.Add(".json");
         WinRT.Interop.InitializeWithWindow.Initialize(picker, owner);
         return (await picker.PickSingleFileAsync())?.Path;
     }
@@ -271,7 +247,7 @@ internal sealed class AppServices : IAsyncDisposable
             try { await _bridgeStart; }
             finally { await Bridge.DisposeAsync(); }
         }
-        finally { Updates.Dispose(); UpdateDownload.Dispose(); Weather.Dispose(); Markets.Dispose(); VSCode.Dispose();
+        finally { await Storage.DisposeAsync(); Updates.Dispose(); Weather.Dispose(); Markets.Dispose(); VSCode.Dispose();
             ContactDrive?.Dispose(); DriveConnection?.Dispose(); _contactDriveHttp?.Dispose(); _isolatedHttp?.Dispose(); await Codex.DisposeAsync(); }
     }
 

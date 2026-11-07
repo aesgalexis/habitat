@@ -55,6 +55,7 @@ public sealed partial class BridgeService : IAsyncDisposable
 
     public event EventHandler<BridgeEvent>? EventReceived;
     public event EventHandler<string>? StartFailed;
+    public bool IsStarted => _server is not null;
 
     public async Task StartAsync()
     {

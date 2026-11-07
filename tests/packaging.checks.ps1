@@ -1,6 +1,10 @@
 $ErrorActionPreference = 'Stop'
 $packagingRepo = Split-Path -Parent $PSScriptRoot
-$checksRoot = Join-Path $packagingRepo ('artifacts/packaging-checks/' + [guid]::NewGuid().ToString('N'))
+Import-Module (Join-Path $packagingRepo 'scripts/Habitat.Storage.psm1') -Force
+$packagingArtifacts = Join-Path $packagingRepo 'artifacts'
+$checksRoot = Join-Path $packagingArtifacts ('verification/run-' + [guid]::NewGuid().ToString('N'))
+$checksOperation = [Habitat.Storage.GeneratedStorage]::BeginOperation($packagingArtifacts, @($checksRoot))
+try {
 New-Item -ItemType Directory -Path $checksRoot -Force | Out-Null
 $fixture = Join-Path $checksRoot 'HABITAT-0.1.0-x64-setup.exe'
 [IO.File]::WriteAllBytes($fixture, [byte[]](1, 2, 3, 4))
@@ -42,3 +46,5 @@ if ($changed.Contains(($installerManifest -split 'InstallerSha256: ')[1].Split("
     throw 'Regenerated manifests must reflect changed installer bytes.'
 }
 Write-Host 'Packaging checks passed: SHA256, versioned HTTPS URLs, rejected inputs and overwrite protection. Synthetic files only.'
+[Habitat.Storage.GeneratedStorage]::Complete($packagingArtifacts, $checksRoot, 'test')
+} finally { $checksOperation.Dispose() }

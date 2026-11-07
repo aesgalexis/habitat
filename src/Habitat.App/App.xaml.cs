@@ -20,7 +20,11 @@ public partial class App : Application
     public App()
     {
         _ = SetCurrentProcessExplicitAppUserModelID(AppUserModelId);
+#if HABITAT_UI_CHECKS
+        _singleInstance = new Mutex(true, "Local\\HABITAT.WinUI.Checks." + Environment.ProcessId, out _ownsInstance);
+#else
         _singleInstance = new Mutex(true, "Local\\HABITAT.WinUI", out _ownsInstance);
+#endif
         UnhandledException += LogUnhandledException;
         InitializeComponent();
     }

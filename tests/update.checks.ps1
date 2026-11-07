@@ -2,7 +2,10 @@ $ErrorActionPreference = 'Stop'
 $updateRepo = Split-Path -Parent $PSScriptRoot
 Import-Module (Join-Path $updateRepo 'scripts/Habitat.Release.psm1') -Force
 Import-Module (Join-Path $updateRepo 'scripts/Habitat.Update.psm1') -Force
-$testRoot = Join-Path $updateRepo ('artifacts/update-checks/' + [guid]::NewGuid().ToString('N'))
+$updateArtifacts = Join-Path $updateRepo 'artifacts'
+$testRoot = Join-Path $updateArtifacts ('verification/run-' + [guid]::NewGuid().ToString('N'))
+$checksOperation = [Habitat.Storage.GeneratedStorage]::BeginOperation($updateArtifacts, @($testRoot))
+try {
 $package = Join-Path $testRoot 'synthetic package'
 $installed = Join-Path $testRoot 'installation with spaces'
 $payload = Join-Path $package 'artifacts/staged/app'
@@ -60,3 +63,7 @@ foreach ($file in 'scripts/install-release-update.ps1', 'scripts/Habitat.Update.
     if ($errors.Count) { throw "Updater syntax is invalid: $file" }
 }
 Write-Host 'Update installation checks passed: isolated ZIP activation, matching integrations, preserved source, failed-start rollback, metadata, path boundaries and silent EXE arguments. No real app or user data used.'
+# Remove only the junction created by this fixture, without following it.
+[IO.Directory]::Delete($junctionPath)
+[Habitat.Storage.GeneratedStorage]::Complete($updateArtifacts, $testRoot, 'test')
+} finally { $checksOperation.Dispose() }

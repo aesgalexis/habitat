@@ -18,9 +18,9 @@ Requiere Windows, SDK .NET 10 y Node.js; CI utiliza Node.js 24.
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify.ps1
 ```
 
-El [script](../scripts/verify.ps1) ejecuta comprobaciones JavaScript, las suites .NET Appearance, Bridge, Core, Destination, Gmail, Contacts, Tasks, Weather, Hotkey y Window, pruebas de paquetes, actualizaciones y preparación de firma, y una compilación Release. Se comparte con [pre-push](../.githooks/pre-push) y [GitHub Actions](../.github/workflows/verify.yml).
+La verificación ejecuta comprobaciones JavaScript, las diez suites .NET, pruebas de compilación, paquetes, almacenamiento, actualizaciones y preparación de firma, la suite nativa WinUI y una compilación Release. El mismo script se usa en el hook pre-push y en CI. [Verificación](../scripts/verify.ps1) · [Hook pre-push](../.githooks/pre-push) · [GitHub Actions](../.github/workflows/verify.yml).
 
-`-NoRestore` reutiliza dependencias restauradas. `-SkipBuild` omite únicamente la compilación final, no las compilaciones necesarias para ejecutar las suites. Las salidas y los datos de tareas quedan bajo `artifacts/verification`; nunca se utiliza la lista real del usuario. Puente y OAuth sintético pueden necesitar sockets de bucle local; un bloqueo del sandbox debe distinguirse de un fallo del producto.
+`-NoRestore` omite la restauración inicial de la solución. La fixture mínima de compilación restaura sus referencias del SDK. `-SkipBuild` omite la compilación Release final. `-SkipUi` permite ejecutar solo las comprobaciones no visuales de consola en una sesión sin escritorio. El resultado registra la omisión de WinUI. CI y las publicaciones ejecutan la suite completa. Las salidas y los datos de tareas de ensayo quedan bajo `artifacts/verification`. Las pruebas del puente y de OAuth sintético usan sockets de bucle local.
 
 Para un área concreta, conserva una ruta de salida explícita dentro de `artifacts`. Por ejemplo:
 
@@ -34,15 +34,21 @@ La suite de tareas utiliza archivos sintéticos junto a su binario de pruebas. L
 
 ## Controles WinUI
 
+La [suite de almacenamiento](../tests/storage.checks.ps1) verifica la limpieza destructiva exclusivamente sobre instalaciones sintéticas y acepta `-TestDirectory` para una base temporal aislada. El [procedimiento de simulación](STORAGE.md) permite analizar una instalación real sin borrar sus archivos. Durante el desarrollo de la limpieza se usa `HABITAT_STORAGE_DRY_RUN=1` al compilar/instalar y al iniciar la aplicación real.
+
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check-tasks-ui.ps1
 ```
 
-El [script WinUI](../scripts/check-tasks-ui.ps1) compila con `HabitatUiChecks=true` y ejecuta comprobaciones nativas con servicios y almacenamiento aislados. `-ContactDestinationsOnly` verifica agenda vacía, bloqueo de fuentes antiguas, alta/edición/eliminación manual, rechazo de duplicados sin perder el formulario y selección del contacto como destino. `-ContactSourcesOnly` se conserva como alias de esta comprobación. `-ContactChannelsOnly` comprueba el clic directo de una persona con varios canales, los iconos bajo la acción, la selección de dirección/remitente, la ficha mínima y los flujos de correo y Phone Link interceptados. Consulta sus parámetros vigentes antes de utilizar otros selectores. Abre un proceso de pruebas; no instala una release para el usuario. No lo ejecutes para cambios exclusivamente documentales.
+La verificación común da hasta 600 segundos a cada proceso de WinUI. Compila con `HabitatUiChecks=true` y utiliza servicios y almacenamiento aislados para probar también Gmail, VS Code y el drenaje de secciones. `-ContactDestinationsOnly` cubre la agenda manual, las fuentes antiguas, el rechazo de duplicados y la selección de un contacto. Su alias es `-ContactSourcesOnly`. `-ContactChannelsOnly` cubre la selección de canal, dirección y remitente, la ficha mínima y los flujos interceptados de Gmail, Messenger y Phone Link. [Parámetros del script](../scripts/check-tasks-ui.ps1).
+
+La ejecución completa reutiliza el binario de prueba en un segundo proceso para comprobar el menú y el ciclo de activación de `MainWindow`. CI conserva `tasks-ui-checks.log` y `window-menu-checks.log` cuando falla la verificación.
 
 Prioriza comprobaciones no visuales. El control visual requiere una necesidad real o una solicitud expresa, conforme a [AGENTS.md](../AGENTS.md).
 
 Desde 0.18.2, los casos de Contacts abren Preferences con Drive desconectado y con un vínculo guardado, prueban ambos temas y verifican el desplegable avanzado tras refrescar. Los casos de programación de Codex añaden dos ventanas nativas sintéticas: verifican selección por chat, transferencia y confirmación en la ventana fijada, invocación del botón Send desde segundo plano y conservación del otro borrador. El proveedor puede activar la ventana verificada; no se inyecta Enter en ese caso. Los servicios y credenciales están aislados y no se abre ni se envía nada al Codex real.
+
+`-PreferencesOnly` comprueba las categorías de Preferences, la conservación de cambios y las acciones de Storage con resultados simulados. `-TimeoutSeconds` ajusta el máximo de cada proceso. Su valor por defecto es 180 segundos. Una ejecución directa crea una carpeta registrada para retención bajo `artifacts/ui-checks/run-<id>`.
 
 ## Pruebas con aplicaciones y servicios reales
 
@@ -51,3 +57,9 @@ Desde 0.20.0, Contacts incluye pruebas del protocolo compartido de Drive y de Ta
 Los modos `--live` y los smoke tests de navegador, Notepad o Codex son optativos y tienen efectos reales: pueden abrir aplicaciones, consultar proveedores o enviar mensajes sintéticos. No forman parte de una revisión de documentación ni de la verificación sintética ordinaria. Antes de ejecutarlos, consulta las condiciones del área en [arquitectura](ARCHITECTURE.md), [Gmail](GMAIL_SETUP.md) o [atajo global](GLOBAL_SHORTCUT.md).
 
 La instalación de paquetes se comprueba por separado con directorios sintéticos y `-NoLaunch -NoShortcuts`; los procedimientos están en [RELEASING.md](RELEASING.md). No mezcles una prueba de instalación con la instalación de uso diario.
+
+## Compilación y capacidades de paquetes
+
+[build.checks.ps1](../tests/build.checks.ps1) conserva fuentes deliberadamente inválidas bajo salidas antiguas `bin` y `obj` y comprueba que tanto una compilación normal como una con `BaseOutputPath` distinto las ignoran. No necesita borrar salidas del desarrollador.
+
+El verificador lee metadatos PE. `-RequireDrive` exige configuración integrada y `-ReferenceDirectory` compara los seis binarios propios con un directorio de referencia. La suite Core comprueba el recurso con configuración sintética y un perfil nuevo sin red. La prueba del payload comprueba también la extracción de un ZIP y el rechazo de binarios alterados. [Verificador](../scripts/check-release-payload.ps1) · [Prueba del payload](../tests/payload.checks.ps1).

@@ -37,6 +37,11 @@ internal sealed class ComposerCoordinator(ComposerDrafts drafts, Action draftCha
     }
 
     public void Stop() { IsStopping = true; StateChanged?.Invoke(); }
+    public void Unregister(string destination)
+    {
+        _routes.Remove((destination, false));
+        _routes.Remove((destination, true));
+    }
 
     public static string OpenAIText(string text, bool textOnly) => textOnly
         ? text.Trim() + "\n\n[HABITAT: Reply in plain text unless asked otherwise.]" : text.Trim();

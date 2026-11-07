@@ -32,34 +32,47 @@ jobs:
       - name: Verify logic, contracts and production build
         shell: powershell
         run: ./scripts/verify.ps1
-      - name: Configure Google Drive desktop client
+      - name: Build shared release payload and ZIP
+        id: payload
         shell: powershell
         env:
           HABITAT_DRIVE_OAUTH_CLIENT_JSON: ${{ secrets.HABITAT_DRIVE_OAUTH_CLIENT_JSON }}
         run: |
           $clientJson = $env:HABITAT_DRIVE_OAUTH_CLIENT_JSON
           Remove-Item Env:HABITAT_DRIVE_OAUTH_CLIENT_JSON -ErrorAction SilentlyContinue
-          if (-not $clientJson) { throw 'Google Drive desktop client is required for the official release.' }
-          try {
-            $client = ConvertFrom-Json -InputObject $clientJson -ErrorAction Stop
-            if ($clientJson.Length -gt 65536 -or $client.installed.client_id -notmatch '^[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$' -or
-                [string]::IsNullOrWhiteSpace($client.installed.client_secret)) { throw 'Invalid client.' }
-          } catch { throw 'Configure a Google Desktop OAuth client for Drive release builds.' }
-          $clientPath = Join-Path $env:RUNNER_TEMP ('habitat-drive-' + [guid]::NewGuid().ToString('N') + '.json')
-          $configuration = @{ installed = @{
-            client_id = $client.installed.client_id
-            client_secret = $client.installed.client_secret
-          }} | ConvertTo-Json -Compress
-          [IO.File]::WriteAllText($clientPath, $configuration, [Text.UTF8Encoding]::new($false))
-          "HabitatDriveOAuthClientFile=$clientPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Build self-contained package
-        shell: powershell
-        run: ./scripts/package-release.ps1
+          if (-not $clientJson) {
+            throw 'Google Drive desktop client is required for the official release.'
+          } else {
+            try {
+              $client = ConvertFrom-Json -InputObject $clientJson -ErrorAction Stop
+              if ($clientJson.Length -gt 65536 -or $client.installed.client_id -notmatch '^[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$' -or
+                  [string]::IsNullOrWhiteSpace($client.installed.client_secret)) { throw 'Invalid client.' }
+            } catch { throw 'Configure a Google Desktop OAuth client for Drive release builds.' }
+            $clientPath = Join-Path $env:RUNNER_TEMP ('habitat-drive-' + [guid]::NewGuid().ToString('N') + '.json')
+            try {
+              $env:HabitatDriveOAuthClientFile = $clientPath
+              $configuration = @{ installed = @{
+                client_id = $client.installed.client_id
+                client_secret = $client.installed.client_secret
+              }} | ConvertTo-Json -Compress
+              [IO.File]::WriteAllText($clientPath, $configuration, [Text.UTF8Encoding]::new($false))
+              $releaseStage = Join-Path (Get-Location) ('artifacts/staged/release-' + [guid]::NewGuid().ToString('N'))
+              ./scripts/build-winui.ps1 -OutputDirectory $releaseStage
+              ./scripts/check-release-payload.ps1 -PayloadDirectory $releaseStage -RequireDrive -ExpectedDriveClientPath $clientPath
+              ./scripts/package-release.ps1 -StageDirectory $releaseStage -RequireDrive
+              [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "stage=$releaseStage`n", [Text.UTF8Encoding]::new($false))
+            } finally {
+              Remove-Item -LiteralPath $clientPath -ErrorAction SilentlyContinue
+              Remove-Item Env:HabitatDriveOAuthClientFile -ErrorAction SilentlyContinue
+            }
+          }
       - name: Verify real package and isolated installation
         shell: powershell
+        env:
+          HABITAT_STAGE: ${{ steps.payload.outputs.stage }}
         run: |
           $version = (Get-Content VERSION -Raw).Trim()
-          ./tests/package.checks.ps1 -PackagePath "artifacts/packages/HABITAT-$version-win-x64.zip"
+          ./tests/package.checks.ps1 -PackagePath "artifacts/packages/HABITAT-$version-win-x64.zip" -ReferenceDirectory $env:HABITAT_STAGE -RequireDrive
       - name: Install EXE compiler
         shell: powershell
         run: |
@@ -67,15 +80,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed.' }
       - name: Build and verify EXE installer
         shell: powershell
+        env:
+          HABITAT_STAGE: ${{ steps.payload.outputs.stage }}
         run: |
           $version = (Get-Content VERSION -Raw).Trim()
-          ./scripts/build-installer.ps1 -Version $version
-          ./scripts/test-installer.ps1 -InstallerPath "artifacts/distribution/$version/HABITAT-$version-x64-setup.exe"
-      - name: Verify Google Drive sign-in in both packages
-        shell: powershell
-        run: |
-          $version = (Get-Content VERSION -Raw).Trim()
-          ./scripts/check-drive-release.ps1 -PackagePath "artifacts/packages/HABITAT-$version-win-x64.zip" -InstallerPayloadRoot artifacts/packaging -ExpectedClientPath $env:HabitatDriveOAuthClientFile
+          ./scripts/build-installer.ps1 -Version $version -StageDirectory $env:HABITAT_STAGE -RequireDrive
+          ./scripts/test-installer.ps1 -InstallerPath "artifacts/distribution/$version/HABITAT-$version-x64-setup.exe" -ReferenceDirectory $env:HABITAT_STAGE -RequireDrive
       - name: Publish release assets
         shell: pwsh
         env:
@@ -91,10 +101,3 @@ jobs:
           $section | Set-Content $notes -Encoding utf8
           gh release create "v$version" $zip "$zip.sha256" $installer "$installer.sha256" --verify-tag --title "HABITAT $version" --notes-file $notes
           if ($LASTEXITCODE -ne 0) { throw 'Release publication failed.' }
-      - name: Remove temporary Google Drive client
-        if: always()
-        shell: powershell
-        run: |
-          if ($env:HabitatDriveOAuthClientFile) {
-            Remove-Item -LiteralPath $env:HabitatDriveOAuthClientFile -ErrorAction SilentlyContinue
-          }

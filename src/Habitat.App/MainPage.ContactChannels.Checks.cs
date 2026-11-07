@@ -131,10 +131,8 @@ public sealed partial class MainPage
             SelectDestination(destination); Composer.Text = draft;
             foreach (var id in _destinationSections.Keys.Where(id => !previousSections.Contains(id)).ToArray())
             {
-                var section = _destinationSections[id]; await section.StopAsync(); section.Dispose(); _destinationSections.Remove(id);
                 _composerDrafts.Edit(id, "");
-                _emailRecipients.Remove(id); _phoneRecipients.Remove(id); _facebookRecipients.Remove(id); _facebookSendRecipients.Remove(id);
-                _contactChannelSelections.Remove(id);
+                await _contactDestinationViews.RetireAsync(id);
             }
         }
 

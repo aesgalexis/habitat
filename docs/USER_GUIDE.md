@@ -4,6 +4,8 @@ This guide describes the source copy inspected on 24 October 2026, with local im
 
 ## Write and choose a destination
 
+To recover space from old generated files, open **Preferences… → Storage**, select **Analyze storage**, then **Clean up**. HABITAT keeps its active version, a verified recovery version and files in use. See the [retention policy](STORAGE.md) for the seven-day safety margin and folders that are preserved.
+
 Select a destination on the right, write in the editor and run its action. **Enter** submits; **Shift+Enter** adds a line break. The mouse wheel over the selector moves through destinations; **Ctrl + mouse wheel** also works elsewhere while HABITAT has focus.
 
 Each destination begins with a prompt above the centered editor and an action button underneath. Results and their actions appear after execution. Clearing returns to the initial editor and restores focus.

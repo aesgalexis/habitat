@@ -23,13 +23,15 @@ internal sealed class PreferencesView : Grid
     internal SidebarPreferencesView Sidebar { get; }
     internal ContactsPreferencesView? Contacts { get; }
     internal GoogleDrivePreferencesView? GoogleDrive { get; }
+    internal StorageView Storage { get; }
     internal string Category => ((ListViewItem)Categories.SelectedItem).Tag as string ?? "Appearance";
     private readonly ScrollViewer _scroll = ScrollEdgeFade.Enable(new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
 
     public PreferencesView(Habitat.Preferences saved, Func<Task<IReadOnlyList<WindowsAppDestination>>>? discoverApps = null,
         Func<Task<string?>>? browseApp = null, WallpaperService? wallpapers = null,
         Func<Task<IReadOnlyList<string>>>? pickWallpapers = null, ContactsPreferencesView? contacts = null,
-        GoogleDrivePreferencesView? googleDrive = null)
+        GoogleDrivePreferencesView? googleDrive = null,
+        Func<bool, CancellationToken, Task<Habitat.Storage.StorageReport>>? storage = null)
     {
         ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(148) });
         ColumnDefinitions.Add(new ColumnDefinition());
@@ -92,6 +94,8 @@ internal sealed class PreferencesView : Grid
             contacts is null ? new TextBlock { Text = "Contacts are unavailable in this view." } : contacts);
         GoogleDrive = googleDrive;
         if (googleDrive is not null) AddCategory("GoogleDrive", "\uE753", "Choose which HABITAT data to sync between your PCs.", googleDrive);
+        Storage = new(storage ?? ((_, _) => Task.FromResult(new Habitat.Storage.StorageReport { Unavailable = true })));
+        AddCategory("Storage", "\uEDA2", "Recover space used by old generated files from this installation.", Card(Storage));
         Categories.SelectionChanged += (_, _) =>
         {
             _scroll.Content = ((ListViewItem)Categories.SelectedItem).Content is StackPanel label ? label.Tag : null;

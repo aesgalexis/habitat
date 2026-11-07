@@ -31,7 +31,7 @@ internal sealed class PhoneLinkSection : IDestinationSection
     private bool _following;
     private bool _showingLoadStatus;
     private bool _disposed;
-    private readonly HashSet<string> _unconfirmedMessages = new();
+    private readonly HashSet<string> _unconfirmedMessages;
     private string? _reviewMessage;
     public string Destination { get; }
     public FrameworkElement View => _view;
@@ -42,14 +42,17 @@ internal sealed class PhoneLinkSection : IDestinationSection
     internal string StatusText => _status.Text;
     internal bool WasSubmitted { get; private set; }
     internal bool RequiresReview => _reviewMessage is not null && _unconfirmedMessages.Contains(_reviewMessage);
+    internal bool HasUnconfirmedMessages => _unconfirmedMessages.Count > 0;
+    internal string[] CopyUnconfirmedMessages() => _unconfirmedMessages.ToArray();
     private static string MessageKey(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
         text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n'))));
 
     internal PhoneLinkSection(string destination, Func<string, CancellationToken, Task<PhoneLinkMessageResult>> send,
         Func<bool, CancellationToken, Task<IReadOnlyList<PhoneLinkConversationMessage>?>> read,
-        Func<CancellationToken, Task<bool>> openReview, Action<Exception> reportError)
+        Func<CancellationToken, Task<bool>> openReview, Action<Exception> reportError, string[]? unconfirmedMessages = null)
     {
         Destination = destination; _send = send; _read = read; _openReview = openReview; _reportError = reportError;
+        _unconfirmedMessages = unconfirmedMessages is null ? [] : new(unconfirmedMessages);
         _refreshTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
         _refreshTimer.Interval = TimeSpan.FromSeconds(10);
         _refreshTimer.Tick += async (_, _) => await RefreshConversationAsync();
@@ -103,7 +106,13 @@ internal sealed class PhoneLinkSection : IDestinationSection
         try
         {
             var result = await _send(text, _operations.Token);
-            if (_disposed) return;
+            if (_disposed)
+            {
+                // The result cannot update a retired view or consume its draft.
+                // Keep the fingerprint if delivery may have happened.
+                if (result.Status is "sent" or "submitted" or "uncertain") _unconfirmedMessages.Add(key);
+                return;
+            }
             WasSubmitted = result.Status is "submitted" or "sent";
             if (result.Status == "uncertain") { _unconfirmedMessages.Add(key); _reviewMessage = key; }
             _review.Visibility = _checked.Visibility = RequiresReview ? Visibility.Visible : Visibility.Collapsed;
@@ -136,9 +145,10 @@ internal sealed class PhoneLinkSection : IDestinationSection
         catch (Exception exception)
         {
             _reportError(exception);
+            if (exception is not InvalidDataException) _unconfirmedMessages.Add(key);
             if (!_disposed)
             {
-                if (exception is not InvalidDataException) { _unconfirmedMessages.Add(key); _reviewMessage = key; }
+                if (exception is not InvalidDataException) _reviewMessage = key;
                 _review.Visibility = _checked.Visibility = RequiresReview ? Visibility.Visible : Visibility.Collapsed;
                 _status.Text = exception is InvalidDataException ? exception.Message
                     : "The send result could not be confirmed. Check Phone Link before trying again. Your draft was kept.";
@@ -295,6 +305,7 @@ internal sealed class PhoneLinkSection : IDestinationSection
     {
         if (_disposed) return;
         _disposed = true;
+        IsBusy = false;
         _refreshTimer.Stop();
         StateChanged = null;
         ClearRequested = null;

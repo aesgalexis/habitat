@@ -85,11 +85,13 @@ Configura el JSON del cliente de escritorio destinado a distribución como secre
 
 ## Preparar y publicar
 
-La aplicación consulta la última release pública de GitHub al arrancar y cada seis horas mientras permanece abierta. Solo avisa si su versión estable es superior a la instalada y tiene un EXE o ZIP de Windows ya subido. Al pulsar el icono **Actualizar HABITAT**, se refrescan los metadatos y se descarga el formato correspondiente con su SHA-256. Tras verificarlo, espera las acciones en curso y se cierra para instalar y reabrirse. Las copias de desarrollo ofrecen la página oficial como alternativa. No descarga paquetes sin pulsar el icono. Los fallos de red o de metadatos se registran sin interrumpir y se reintentan tras una hora; un aviso ya encontrado se conserva durante esos fallos.
+La [política de almacenamiento](STORAGE.md) retira outputs generados verificados después de siete días. Los scripts registran sus operaciones y carpetas de trabajo; los ZIP/EXE finales y las cachés para compilación offline se conservan. No borres manualmente releases o stages durante una operación.
+
+El flujo de **Update**, sus plazos y la recuperación de cada formato se describen en [Actualizaciones desde HABITAT](UPDATES.md).
 
 1. Trabaja en una rama y revisa todos los cambios, incluidos archivos nuevos. No incluyas credenciales, datos de usuario ni salidas de `artifacts` en Git.
 2. Actualiza `VERSION`, `CHANGELOG.md`, las instrucciones de instalación del README y, si corresponde, las versiones de las extensiones.
-3. Ejecuta `scripts\verify.ps1` (Node.js y SDK .NET 10). Si has cambiado controles, ejecuta también `scripts\check-tasks-ui.ps1`; usa servicios sintéticos y almacenamiento aislado.
+3. Ejecuta `scripts\verify.ps1` con Node.js y el SDK .NET 10. Incluye la suite nativa WinUI con servicios sintéticos y almacenamiento aislado.
 4. Publica y lleva el commit verificado a `main`. Las etiquetas de publicación deben salir de esa rama; `codex/autosave` sigue siendo la rama de checkpoints.
 5. En un árbol limpio, ejecuta `scripts\package-release.ps1`. Publica WinUI y el residente, comprueba las versiones de los ensamblados, empaqueta ambas extensiones y genera el ZIP y su SHA-256 en `artifacts\packages`.
 6. Verifica el paquete real con `tests\package.checks.ps1 -PackagePath artifacts\packages\HABITAT-<version>-win-x64.zip`. Comprueba integridad, metadatos, binarios, extensiones e instalación aislada sin arranque.
@@ -99,3 +101,9 @@ La aplicación consulta la última release pública de GitHub al arrancar y cada
 Los binarios se guardan como **assets de GitHub Releases del repositorio**, no en el historial de Git. El código del instalador, la receta de compilación y el criterio de versiones sí están versionados. El código fuente de cada versión queda fijado por su etiqueta. `release.json` identifica el commit fuente y las versiones de las extensiones; `build-manifest.json` verifica tamaño y SHA-256 de todos los archivos de la aplicación antes de activar una publicación.
 
 Los checks de CI validan lógica y distribución con datos sintéticos. Las pruebas reales de proveedores web, portapapeles o envío de mensajes son optativas y no forman parte de la publicación automatizada.
+
+## Payload común para ZIP y EXE
+
+El workflow oficial genera una sola compilación con `HabitatDriveOAuthClientFile`. Verifica el recurso de Drive y pasa el mismo directorio a los dos empaquetadores mediante `-StageDirectory -RequireDrive`. Los builds personalizados pueden omitir el cliente integrado y usar **Advanced setup**. [Script del ZIP](../scripts/package-release.ps1) · [Script del EXE](../scripts/build-installer.ps1).
+
+Las comprobaciones del ZIP extraído y del EXE instalado usan `-ReferenceDirectory` para comparar los SHA-256 de los binarios y `-RequireDrive` para exigir el recurso de OAuth. El verificador lee los metadatos del ensamblado sin iniciarlo. [Script de verificación](../scripts/check-release-payload.ps1).

@@ -31,7 +31,7 @@ internal static class UpdateDiagnosticsChecks
         var script = Path.Combine(native, "Fail-Preparation.ps1");
         await File.WriteAllTextAsync(script, "[Console]::Out.WriteLine('helper stdout phase'); [Console]::Error.WriteLine('Get-FileHash token=TOP_SECRET C:\\Users\\SyntheticPrivate\\private.txt'); exit 7");
         var log = new UpdateDiagnosticLog(Path.Combine(native, "diagnostic.jsonl"));
-        var start = AppUpdateInstall.CreateHelperStartInfo(script, "-Unused", "synthetic");
+        var start = UpdateHelperLauncher.CreateStartInfo(script, "-Unused", "synthetic");
         var preparationFailed = false;
         try { await UpdateHelperHandoff.StartAsync(start, Path.Combine(native, "ready"), log, default); }
         catch (IOException) { preparationFailed = true; }
@@ -43,7 +43,7 @@ internal static class UpdateDiagnosticsChecks
             "Helper preparation failures retain redacted stdout/stderr, exit code, phase and exception before any application close.");
         await File.WriteAllTextAsync(script, "Start-Sleep -Seconds 30");
         var timedOut = false;
-        try { await UpdateHelperHandoff.StartAsync(AppUpdateInstall.CreateHelperStartInfo(script, "-Unused", "synthetic"),
+        try { await UpdateHelperHandoff.StartAsync(UpdateHelperLauncher.CreateStartInfo(script, "-Unused", "synthetic"),
             Path.Combine(native, "ready"), log, default, TimeSpan.FromMilliseconds(250)); }
         catch (OperationCanceledException) { timedOut = true; }
         check(timedOut && (await File.ReadAllTextAsync(log.Path)).Contains("TaskCanceledException"),

@@ -20,6 +20,7 @@ SidebarChecks.Run(root, Check);
 WallpaperChecks.Run(root, Check);
 BrowserChecks.Run(root, Check);
 InstallationChecks.Run(root, Check);
+ReleasePayloadChecks.Run(root, Check);
 await UpdateChecks.RunAsync(Check);
 await ReleaseUpdateChecks.RunAsync(root, Check);
 await UpdateMigrationChecks.RunAsync(root, Check, []);

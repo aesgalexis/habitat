@@ -2,6 +2,7 @@
 using Habitat.Features.Facebook;
 using Habitat.Features.Contacts;
 using Habitat.Features.Preferences;
+using System.Text.Json;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -160,8 +161,17 @@ public sealed partial class MainPage
                 FacebookRail.ScrollableWidth > 0)
                 throw new InvalidOperationException("Contact rows must scroll vertically within the second sidebar without horizontal scrolling.");
             var smallOffset = Math.Min(5 * 38, FacebookRail.ScrollableHeight);
-            var scrollAccepted = FacebookRail.ChangeView(null, smallOffset, null, true);
-            try { await WaitForUpdateUiAsync(() => Math.Abs(FacebookRail.VerticalOffset - smallOffset) <= 1); }
+            var scrollAccepted = false;
+            try
+            {
+                await WaitForUpdateUiAsync(() =>
+                {
+                    if (Math.Abs(FacebookRail.VerticalOffset - smallOffset) <= 1) return true;
+                    // The search reset can still be queued after the new rows are laid out.
+                    scrollAccepted |= FacebookRail.ChangeView(null, smallOffset, null, true);
+                    return false;
+                });
+            }
             catch (InvalidOperationException)
             { throw new InvalidOperationException($"Small contact scroll did not settle. Accepted={scrollAccepted}, actual={FacebookRail.VerticalOffset}, expected={smallOffset}, maximum={FacebookRail.ScrollableHeight}, extent={FacebookRail.ExtentHeight}, content={FacebookAvatars.ActualHeight}, viewport={FacebookRail.ViewportHeight}, large={FacebookCardsLarge}."); }
             var searchTop = FacebookContactSearch.TransformToVisual(this).TransformPoint(new()).Y;
@@ -287,5 +297,21 @@ public sealed partial class MainPage
                 index == 0 ? true : index == 1 ? false : null)).ToArray();
         }
     }
+    private async Task<ContactCandidate[]> ReadFacebookCandidatesAsync(CancellationToken token)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, _operations.Token);
+        var contacts = await _services.Facebook.ReadAsync(linked.Token);
+        return contacts.Select(contact =>
+        {
+            var fields = new List<ContactValue> { new("name", contact.Name) };
+            if (!string.IsNullOrWhiteSpace(contact.PhotoUrl)) fields.Add(new("photo", contact.PhotoUrl));
+            if (contact.Link is not null && FacebookContactsService.SafeLink(contact.Link))
+            { fields.Add(new("profile", contact.Link)); fields.Add(new("messenger", contact.Link)); }
+            return new ContactCandidate(contact.Link ?? "snapshot:" + ContactBook.Hash(contact.Name + "\n" + contact.PhotoUrl),
+                fields.ToArray(), JsonSerializer.Serialize(contact));
+        }).DistinctBy(c => c.RemoteId).ToArray();
+    }
+
+
 }
 #endif

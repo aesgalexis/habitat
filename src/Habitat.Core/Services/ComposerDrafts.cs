@@ -13,6 +13,13 @@ internal sealed class ComposerDrafts
 
     private Draft Get(string destination) => _local.GetValueOrDefault(destination, _isolated.Contains(destination) ? new("", 0) : _shared);
     internal void Isolate(string destination) => _isolated.Add(destination);
+    // Retiring controls must preserve unsent text for re-selection/restart.
+    internal void Retire(string destination)
+    {
+        if (Text(destination).Length > 0) { _isolated.Add(destination); return; }
+        _local.Remove(destination);
+        _isolated.Remove(destination);
+    }
     public string Text(string destination) => Get(destination).Text;
 
     internal Snapshot SaveForRestart() => new(_shared.Text, _local.ToDictionary(item => item.Key, item => item.Value.Text));

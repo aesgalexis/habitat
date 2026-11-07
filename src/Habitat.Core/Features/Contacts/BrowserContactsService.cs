@@ -25,6 +25,7 @@ internal sealed class BrowserContactsService(TimeProvider? time = null)
     private bool _supported;
     private DateTimeOffset _seen;
     private BrowserContactSettings _settings = new();
+    private bool _sourcesDisabled;
     private BrowserContactState[] _states = [];
     private BrowserContactSetup? _setup;
     internal BrowserContactSettings Settings { get { lock (_gate) return _settings; } }
@@ -35,9 +36,21 @@ internal sealed class BrowserContactsService(TimeProvider? time = null)
     {
         lock (_gate)
         {
-            _settings = settings;
+            _settings = settings = _sourcesDisabled ? new(false, false) : settings;
             var keep = _pending.Where(s => settings.Allows(s.Provider)).ToArray();
             _pending.Clear(); foreach (var item in keep) _pending.Enqueue(item);
+        }
+    }
+    // Desktop policy is fixed at composition, even if an old profile or late
+    // callback requests automatic sources. Legacy clients keep their protocol.
+    internal void DisableSources()
+    {
+        lock (_gate)
+        {
+            _sourcesDisabled = true;
+            _settings = new(false, false);
+            _setup = null;
+            _pending.Clear();
         }
     }
     internal void Attach(object owner, bool supported)
@@ -57,7 +70,7 @@ internal sealed class BrowserContactsService(TimeProvider? time = null)
     internal void RequestSetup(string provider)
     {
         if (provider is not ("facebook" or "google")) throw new ArgumentException("Unknown contact provider.");
-        lock (_gate) _setup = new(ContactBook.NewId(), provider);
+        lock (_gate) if (!_sourcesDisabled) _setup = new(ContactBook.NewId(), provider);
     }
     internal BrowserContactState StateFor(string provider)
     {

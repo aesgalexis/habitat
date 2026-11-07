@@ -1,4 +1,4 @@
-param([string]$PackagePath)
+param([string]$PackagePath, [string]$ReferenceDirectory, [switch]$RequireDrive)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $version = (Get-Content -LiteralPath (Join-Path $repo 'VERSION') -Raw).Trim()
@@ -11,7 +11,11 @@ foreach ($file in @((Join-Path $repo 'Install-HABITAT.ps1')) + @(Get-ChildItem -
     [Management.Automation.Language.Parser]::ParseFile($file, [ref]$tokens, [ref]$errors) | Out-Null
     if ($errors) { throw "PowerShell syntax errors in ${file}: $errors" }
 }
-$checks = Join-Path $repo ('artifacts\package-checks\' + [guid]::NewGuid().ToString('N'))
+Import-Module (Join-Path $repo 'scripts/Habitat.Storage.psm1') -Force
+$packageArtifacts = Join-Path $repo 'artifacts'
+$checks = Join-Path $packageArtifacts ('verification/run-' + [guid]::NewGuid().ToString('N'))
+$checksOperation = [Habitat.Storage.GeneratedStorage]::BeginOperation($packageArtifacts, @($checks))
+try {
 $package = Join-Path $checks 'package'
 $payload = Join-Path $package 'artifacts\staged\app'
 New-Item -ItemType Directory -Path $payload -Force | Out-Null
@@ -23,6 +27,9 @@ if ($PackagePath) {
     if ($hashLine -ne ($hash + ' *' + [IO.Path]::GetFileName($zip))) { throw 'Package SHA-256 does not match.' }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     [IO.Compression.ZipFile]::ExtractToDirectory($zip, $package)
+    if ($ReferenceDirectory -or $RequireDrive) {
+        & (Join-Path $repo 'scripts/check-release-payload.ps1') -PayloadDirectory $payload -ReferenceDirectory $ReferenceDirectory -RequireDrive:$RequireDrive
+    }
     $metadata = Get-Content -LiteralPath (Join-Path $package 'release.json') -Raw | ConvertFrom-Json
     $commit = git -C $repo rev-parse HEAD
     if ($metadata.version -ne $version -or $metadata.runtime -ne 'win-x64' -or $metadata.sourceCommit -ne $commit) {
@@ -67,7 +74,9 @@ if ($PackagePath) {
     foreach ($name in 'scripts', 'docs', 'extension', 'vscode-extension') {
         New-Item -ItemType Directory -Path (Join-Path $package $name) -Force | Out-Null
     }
-    Copy-Item -LiteralPath (Join-Path $repo 'scripts\Habitat.Release.psm1') -Destination (Join-Path $package 'scripts')
+    foreach ($module in 'Habitat.Release.psm1', 'Habitat.Storage.psm1', 'Habitat.GeneratedStorage.cs') {
+        Copy-Item -LiteralPath (Join-Path $repo ('scripts/' + $module)) -Destination (Join-Path $package 'scripts')
+    }
     [IO.File]::WriteAllText((Join-Path $package 'release.json'), (@{ version = $version; runtime = 'win-x64' } | ConvertTo-Json))
 }
 Test-HabitatBuildManifest $payload
@@ -104,3 +113,5 @@ $rejected = $false
 try { & $installer -InstallDirectory $package -NoLaunch -NoShortcuts } catch { $rejected = $true }
 if (-not $rejected) { throw 'Overlapping installation was accepted.' }
 Write-Host 'Package checks passed: versions, script syntax, installation with spaces, update with locked files, previous release retention, corruption and path boundaries. No app, shortcuts or user data were used.'
+[Habitat.Storage.GeneratedStorage]::Complete($packageArtifacts, $checks, 'test')
+} finally { $checksOperation.Dispose() }

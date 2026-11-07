@@ -120,6 +120,6 @@ internal sealed class GmailDraftSection : IDestinationSection
     }
     private void SetBusy(bool busy)
     { IsBusy = busy; _browser.IsEnabled = _clear.IsEnabled = _authorize.IsEnabled = !busy; StateChanged?.Invoke(); }
-    public void Dispose() { if (_disposed) return; _disposed = true; StateChanged = null; ClearRequested = null; _ = _operations.StopAsync(); }
+    public void Dispose() { if (_disposed) return; _disposed = true; IsBusy = false; StateChanged = null; ClearRequested = null; _ = _operations.StopAsync(); }
     public Task StopAsync() { Dispose(); return _operations.StopAsync(); }
 }

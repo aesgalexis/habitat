@@ -83,7 +83,9 @@ internal static class LegacyUpdateLifecycleChecks
             // DesktopUpdateService copies these files from the active old release,
             // not from the newly downloaded package.
             var oldUpdaters = Path.Combine(old, "updater"); Directory.CreateDirectory(oldUpdaters);
-            foreach (var name in new[] { "install-release-update.ps1", "Habitat.Update.psm1", "Habitat.Release.psm1" })
+            var helperFiles = new[] { "install-release-update.ps1", "Habitat.Update.psm1", "Habitat.Release.psm1" };
+            if (modern) helperFiles = [.. helperFiles, "Habitat.Storage.psm1", "Habitat.GeneratedStorage.cs"];
+            foreach (var name in helperFiles)
             {
                 File.Copy(Path.Combine(AppContext.BaseDirectory, modern ? "release-updater" : "legacy-updater", name), Path.Combine(oldUpdaters, name));
                 File.Copy(Path.Combine(oldUpdaters, name), Path.Combine(prepared.Directory, name));

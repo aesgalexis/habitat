@@ -51,6 +51,9 @@ foreach ($name in 'HABITAT.vbs', 'HABITAT-Hotkey.vbs', 'VERSION', 'release.json'
     Copy-Item -LiteralPath (Join-Path $packageRoot $name) -Destination $destination -Recurse -Force
 }
 $stage = Join-Path $destination ('artifacts\staged\install-' + [guid]::NewGuid().ToString('N'))
+[IO.Directory]::CreateDirectory((Join-Path $destination 'artifacts')) | Out-Null
+$installOperation = [Habitat.Storage.GeneratedStorage]::BeginOperation((Join-Path $destination 'artifacts'), @($stage))
+try {
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 Get-ChildItem -LiteralPath $payload -Force | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $stage -Recurse -Force }
 if ($NoLaunch) {
@@ -78,6 +81,7 @@ if (-not $NoShortcuts) {
     $shortcut.IconLocation = Join-Path $active 'HABITAT.exe'
     $shortcut.Save()
 }
+} finally { $installOperation.Dispose() }
 Write-Host "HABITAT $version installed in $destination"
 Write-Host 'Open Set up HABITAT from the app menu to connect Chrome and optional integrations.'
 Write-Host 'Chrome extension: https://chromewebstore.google.com/detail/ennnldolgdbbkgmpjjpkafeajihpimii'

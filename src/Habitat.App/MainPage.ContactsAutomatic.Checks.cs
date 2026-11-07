@@ -31,17 +31,15 @@ public sealed partial class MainPage
                         new BrowserContactRow(null, "Must never become a suggestion", "old.friend@example.com")]) }
             }, json));
             browser.Accept(owner, packet.RootElement, json);
-            TickBrowserContacts();
             await Task.Delay(60);
             if (_services.Contacts.Book.People.Length != 0 || _services.Contacts.Book.Sources.Length != 0 ||
                 _services.Contacts.Book.BrowserSuggestions.Length != 0 || browser.Settings.Allows("facebook") || browser.Settings.Allows("google") ||
-                browser.TryTake(out _) || SetBrowserContactSource("facebook", true))
+                browser.TryTake(out _))
                 throw new InvalidOperationException("Legacy enabled permissions, pending snapshots and old settings must never populate the manual address book.");
             browser.Accept(owner, packet.RootElement, json);
             if (browser.TryTake(out _)) throw new InvalidOperationException("Late observations must be rejected.");
             SetFacebookOpen(true); await WaitForUpdateUiAsync(() => !_facebookBusy);
-            if (FacebookAvatars.Children.Count != 0 || ContactsEnableGoogle.Visibility != Visibility.Collapsed ||
-                ContactsDuplicates.Visibility != Visibility.Collapsed || ContactsAdd.Parent is null ||
+            if (FacebookAvatars.Children.Count != 0 || ContactsAdd.Parent is null ||
                 !FacebookNoMatches.Text.Contains("Add contact"))
                 throw new InvalidOperationException("The empty sidebar must offer manual creation without source or duplicate actions.");
             showing = ShowPreferencesAsync("Contacts");

@@ -7,27 +7,23 @@ namespace Habitat;
 
 public sealed partial class MainPage
 {
-    private sealed record PhoneContactRecipient(string Name, string Address, FacebookContact Display);
-    private readonly Dictionary<string, PhoneContactRecipient> _phoneRecipients = new();
+    private IReadOnlyDictionary<string, PhoneContactRecipient> _phoneRecipients => _contactDestinations.Phones;
     private PhoneLinkSection? _activePhoneSection;
-    private bool IsPhoneContactDestination(string id) => _phoneRecipients.ContainsKey(id);
+    private bool IsPhoneContactDestination(string id) => _contactDestinations.Contains(id) && _phoneRecipients.ContainsKey(id);
 
     private void SelectPhoneContact(ContactBook book, ContactPerson person, string address)
     {
         if (HasAppearanceOverlay || _updateHandoff || _operations.IsStopping) return;
-        var phone = ContactBook.NormalizePhone(address);
-        if (phone.Length == 0) throw new InvalidOperationException("Choose a contact with a valid phone number without an extension.");
-        var id = "phone-contact:" + ContactBook.Hash(person.Id + "\n" + phone);
-        var name = book.Name(person);
-        var photo = book.For(person).SelectMany(r => r.Current.Values).FirstOrDefault(v => v.Kind == "photo" && FacebookContactsService.SafePhoto(v.Value))?.Value ?? "";
-        _phoneRecipients[id] = new(name, phone, new(name, photo));
+        if (_contactDestinationViews.IsRetiring(ContactDestinationSession.PhoneId(person.Id, address))) return;
+        var id = _contactDestinations.RegisterPhone(book, person, address);
+        var phone = _phoneRecipients[id].Address;
         _composerDrafts.Isolate(id);
         if (!_destinationSections.ContainsKey(id))
         {
             var section = new PhoneLinkSection(id, (text, token) => _services.SendPhoneLink(phone, text, token),
                 (openIfNeeded, token) => _services.ReadPhoneLinkConversation(phone, openIfNeeded, token),
                 token => _services.ReviewPhoneLink(phone, token),
-                exception => _services.ReportError("Phone Link conversation", exception));
+                exception => _services.ReportError("Phone Link conversation", exception), _contactDestinationViews.TakePhoneReview(id));
             section.StateChanged += () => { PresentDestinationSection(); UpdateWritingLayout(); UpdateSendState(); };
             section.ClearRequested += () =>
             {
@@ -38,7 +34,6 @@ public sealed partial class MainPage
             foreach (var external in new[] { false, true })
                 _composer.Register(id, external, SubmitPhoneMessageAsync, _ => section.IsBusy, exclusive: true);
         }
-        AssociateContactChannel(id, person.Id, "phone", phone);
         SelectDestination(id);
         SetFacebookOpen(false);
         FocusComposer();
@@ -49,11 +44,14 @@ public sealed partial class MainPage
         if (!ContactChannelsEnabled || HasAppearanceOverlay || _updateDialogOpen || _updateHandoff) return;
         var book = _services.Contacts.Book;
         var person = book.People.FirstOrDefault(person => person.Id == personId);
-        if (person is null || !ContactChannels.For(book, person).Any(channel =>
-            channel.Kind == "phone" && SameContactAddress("phone", channel.Address, address))) return;
-        ContactProfile.Hide();
-        SelectPhoneContact(book, person, address);
-        if (_activePhoneSection is not { } section) return;
+        if (person is null) return;
+        var channel = ContactChannels.For(book, person).FirstOrDefault(channel =>
+            channel.Kind == "phone" && SameContactAddress("phone", channel.Address, address));
+        if (channel is null) return;
+        await OpenContactChannelAsync(book, person, channel);
+        var id = ContactDestinationSession.PhoneId(personId, channel.Address);
+        if (_destination != id || _activePhoneSection is not { } section || section.Destination != id ||
+            !ContactChannelsEnabled || _updateDialogOpen || _updateHandoff) return;
         using var focus = _services.KeepPhoneLinkBackground(_windowHost?.Handle ?? 0);
         await section.OpenConversationAsync();
         if (_destination == section.Destination) FocusComposer();

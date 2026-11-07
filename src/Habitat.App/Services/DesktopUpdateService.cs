@@ -9,10 +9,12 @@ internal sealed class DesktopUpdateService : IAppUpdateService
     private readonly ReleaseUpdateInstallation? _installation;
     private readonly ReleaseUpdateClient? _client;
     private readonly bool _enabled;
+    private readonly GeneratedStorageService? _storage;
     public string? FailedVersion { get; }
 
-    internal DesktopUpdateService(AppDataPaths paths)
+    internal DesktopUpdateService(AppDataPaths paths, GeneratedStorageService? storage = null)
     {
+        _storage = storage;
         _enabled = !paths.IsIsolated && !AppDataPaths.HasPackageIdentity() &&
             !paths.LocalDirectory.Contains("\\sandbox.", StringComparison.OrdinalIgnoreCase);
         if (!_enabled) return;
@@ -32,8 +34,11 @@ internal sealed class DesktopUpdateService : IAppUpdateService
     }
 
     public Task<ReleaseAppUpdate?> CheckAsync(CancellationToken token) => _client?.CheckAsync(token) ?? Task.FromResult<ReleaseAppUpdate?>(null);
-    public Task<PreparedAppUpdate> PrepareAsync(ReleaseAppUpdate release, IProgress<int> progress, CancellationToken token) =>
-        _client?.PrepareAsync(release, progress, token) ?? throw new InvalidOperationException("Updates are unavailable for this installation.");
+    public async Task<PreparedAppUpdate> PrepareAsync(ReleaseAppUpdate release, IProgress<int> progress, CancellationToken token)
+    {
+        if (_storage is not null) await _storage.SuspendForUpdateAsync(token);
+        return await (_client?.PrepareAsync(release, progress, token) ?? throw new InvalidOperationException("Updates are unavailable for this installation."));
+    }
 
     public async Task LaunchInstallerAsync(PreparedAppUpdate prepared, CancellationToken token)
     {
@@ -44,7 +49,7 @@ internal sealed class DesktopUpdateService : IAppUpdateService
         try
         {
             diagnostics.Record("helper-files");
-            foreach (var name in new[] { "install-release-update.ps1", "Habitat.Update.psm1", "Habitat.Release.psm1" })
+            foreach (var name in new[] { "install-release-update.ps1", "Habitat.Update.psm1", "Habitat.Release.psm1", "Habitat.Storage.psm1", "Habitat.GeneratedStorage.cs" })
                 File.Copy(Path.Combine(AppContext.BaseDirectory, "updater", name), Path.Combine(prepared.Directory, name));
             using var current = Process.GetCurrentProcess();
             var request = new
@@ -58,7 +63,7 @@ internal sealed class DesktopUpdateService : IAppUpdateService
             phase = "helper-request";
             diagnostics.Record(phase);
             await File.WriteAllTextAsync(requestPath, JsonSerializer.Serialize(request), token);
-            var info = AppUpdateInstall.CreateHelperStartInfo(
+            var info = UpdateHelperLauncher.CreateStartInfo(
                 Path.Combine(prepared.Directory, "install-release-update.ps1"), "-RequestPath", requestPath);
             phase = "helper-start";
             await UpdateHelperHandoff.StartAsync(info, Path.Combine(prepared.Directory, "ready"), diagnostics, token);

@@ -8,10 +8,15 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Habitat.Core/Habitat.Core.csproj" />
     <Compile Include="../fixtures/legacy-updater/ReleaseUpdateClient.cs" Link="Legacy/ReleaseUpdateClient.cs" />
+    <Compile Include="../fixtures/retired-updater/*.cs" Link="Retired/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../fixtures/retired-updater/UpdateHelper.ps1" LogicalName="Habitat.UpdateHelper.ps1" />
+    <EmbeddedResource Include="../fixtures/drive-client.synthetic.json" LogicalName="Habitat.GoogleDriveOAuthClient.json" />
     <Content Include="../fixtures/legacy-updater/*.ps*1" Link="legacy-updater/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../fixtures/bridge-v1.json" Link="bridge-v1.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../../scripts/install-release-update.ps1" Link="release-updater/install-release-update.ps1" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../../scripts/Habitat.Update.psm1" Link="release-updater/Habitat.Update.psm1" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../../scripts/Habitat.Release.psm1" Link="release-updater/Habitat.Release.psm1" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../scripts/Habitat.Storage.psm1" Link="release-updater/Habitat.Storage.psm1" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../scripts/Habitat.GeneratedStorage.cs" Link="release-updater/Habitat.GeneratedStorage.cs" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

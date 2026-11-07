@@ -54,7 +54,7 @@ public sealed partial class MainPage
             try { cancellation?.Cancel(); }
             catch (Exception exception) { _services.ReportError("Cancel operation", exception); }
         }
-        try { await Task.WhenAll(sectionStops.Append(_operations.StopAsync())); }
+        try { await Task.WhenAll(sectionStops.Append(_contactDestinationViews.StopAsync()).Append(_scheduleController.StopAsync()).Append(_operations.StopAsync())); }
         finally
         {
             _gmailSession.Dispose();

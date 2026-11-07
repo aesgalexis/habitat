@@ -17,7 +17,7 @@ internal static class ReleaseUpdateHandoffChecks
             // Reproduce a desktop launched from PowerShell 7 (or another host)
             // with module paths Windows PowerShell 5.1 cannot use.
             Environment.SetEnvironmentVariable("PSModulePath", Path.Combine(fixture, "incompatible modules"));
-            var launch = AppUpdateInstall.CreateHelperStartInfo(
+            var launch = UpdateHelperLauncher.CreateStartInfo(
                 Path.Combine(fixture, "install-release-update.ps1"), "-RequestPath", Path.Combine(fixture, "request.json"));
             check(!launch.Environment.ContainsKey("PSModulePath") && !launch.UseShellExecute && launch.CreateNoWindow &&
                 launch.WindowStyle == ProcessWindowStyle.Hidden && launch.WorkingDirectory == fixture &&
@@ -52,7 +52,7 @@ internal static class ReleaseUpdateHandoffChecks
                 var parentExe = Path.Combine(installation, "HABITAT.exe");
                 File.Copy(executable, parentExe);
                 await File.WriteAllTextAsync(Path.Combine(installation, "unins000.exe"), "synthetic marker");
-                foreach (var name in new[] { "install-release-update.ps1", "Habitat.Update.psm1", "Habitat.Release.psm1" })
+                foreach (var name in new[] { "install-release-update.ps1", "Habitat.Update.psm1", "Habitat.Release.psm1", "Habitat.Storage.psm1", "Habitat.GeneratedStorage.cs" })
                     File.Copy(Path.Combine(helperSource, name), Path.Combine(work, name));
                 var package = Path.Combine(work, "HABITAT-0.16.3-x64-setup.exe");
                 var bytes = "Synthetic package, never executed by this readiness check."u8.ToArray();
@@ -70,7 +70,7 @@ internal static class ReleaseUpdateHandoffChecks
                         sha256 = validHash ? Convert.ToHexString(SHA256.HashData(bytes)) : new string('0', 64),
                         extractedDirectory = (string?)null
                     }));
-                    var helperStart = AppUpdateInstall.CreateHelperStartInfo(
+                    var helperStart = UpdateHelperLauncher.CreateStartInfo(
                         Path.Combine(work, "install-release-update.ps1"), "-RequestPath", request);
                     // Exercise the script's bootstrap too: older callers can
                     // still pass incompatible paths despite the fixed launcher.

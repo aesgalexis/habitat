@@ -9,6 +9,8 @@ Implementación posterior a las auditorías del 15 y 18 de octubre de 2026. Se c
 | Creación de servicios, producción frente a pruebas y lanzadores | `Habitat.App/Services/AppServices` |
 | Marco, activación y cierre de la ventana | `MainWindow`, a través de `IWindowHost` |
 | Controles, estilos, distribución y foco | `MainPage` y sus archivos parciales |
+| Identidad, selección y retención de destinatarios | `Core/Features/Contacts/ContactDestinationSession` para las reglas y `App/Features/Destinations/ContactDestinationViews` para el ciclo de vida de los controles |
+| Ejecución periódica de programaciones | `Core/Features/Codex/CodexScheduleController` |
 | Estado de conversación y entrega | `Habitat.Core/Features/Conversation` |
 | Admisión y rutas de envío, exclusión de lanzadores y propiedad del borrador | `Habitat.Core/Features/Composer/ComposerCoordinator` |
 | Controles y retención visible de conversación | `Habitat.App/Features/Conversation/ConversationView` |
@@ -33,7 +35,7 @@ Las pruebas y la herramienta de Gmail referencian la misma biblioteca que la apl
 
 La página recibe sus servicios y una interfaz de ventana explícitos; no busca `Application.Current.MainWindow`. El estado de conversación tampoco se infiere de la presencia de controles. Los parciales conservan la construcción y el estilo existentes para reducir el riesgo de regresión visual.
 
-La revisión del 18 de octubre y la resolución de la deuda priorizada se detallan en [ARCHITECTURE_AUDIT_2026-10-18.md](ARCHITECTURE_AUDIT_2026-10-18.md). `MainPage` conserva presentación y adaptadores de interfaz; los parciales no deben confundirse con módulos independientes. Las reglas de admisión y selección se comprueban ahora sin construir la página.
+`MainPage` conserva la presentación y los adaptadores de interfaz. Las reglas de admisión y selección se comprueban sin construir la página. El historial de las extracciones y sus comprobaciones está en las auditorías de [octubre](ARCHITECTURE_AUDIT_2026-10-18.md) y [noviembre](ARCHITECTURE_AUDIT_2026-11-06.md).
 
 ## Límites y ciclo de vida
 
@@ -131,7 +133,7 @@ En el ensayo sintético de 1.000 tareas y 200 revisiones, la verificación final
 
 ## Compilación y actualización
 
-`AppUpdateService` comprueba versiones en la API pública de GitHub al cargar la página y cada seis horas, integrado en el temporizador existente. Compara numéricamente la versión del ensamblado con etiquetas estables y exige un instalador Windows subido. No usa credenciales. El icono **Actualizar HABITAT** refresca los metadatos y descarga el paquete del formato instalado mediante `AppUpdateDownload`, con límites de tamaño, cancelación y comprobación SHA-256. `AppUpdateInstall` prepara un auxiliar oculto que espera el cierre y ejecuta el instalador verificado. Los borradores se guardan y recuperan mediante `UpdateRestartState`. El cierre ocurre después de terminar la operación registrada para evitar un drenaje circular. Los errores de detección conservan el aviso en memoria y programan un reintento tras una hora. La consulta tiene un límite de 15 segundos y evita solapamientos. Las pruebas usan instalaciones sintéticas aisladas. Consulta [el flujo y sus límites](AUTO_UPDATES.md).
+`DesktopUpdateService` implementa `IAppUpdateService` y delega detección, descarga y validación en `ReleaseUpdateClient`. La página comprueba publicaciones cada seis horas y reintenta fallos después de quince minutos. La consulta tiene un límite de 25 segundos. El diálogo **Update** prepara el formato instalado, conserva borradores mediante `UpdateRestartState` y entrega el trabajo a `install-release-update.ps1` usando `UpdateHelperLauncher`. La app solo se cierra tras confirmar la preparación y drenar sus operaciones. El actualizador anterior se conserva exclusivamente en fixtures de pruebas. Véase [UPDATES.md](UPDATES.md).
 
 1. `build-winui.ps1` publica en un directorio nuevo bajo `artifacts/staged`.
 2. Se genera y valida `build-manifest.json` con tamaño y SHA-256 de cada archivo.
@@ -140,7 +142,7 @@ En el ensayo sintético de 1.000 tareas y 200 revisiones, la verificación final
 5. Cambia `current-release.txt` mediante reemplazo atómico. El lanzador estable `HABITAT.vbs` resuelve ese archivo; no se sobrescribe el directorio de una versión activa.
 6. Arranca y comprueba que el nuevo proceso ofrece el contrato de diagnóstico esperado. Si falla, restaura el selector anterior y vuelve a abrir la versión previa. Las versiones permanecen disponibles para diagnóstico y recuperación.
 
-La instalación antigua en `artifacts/win-x64` sigue siendo una ruta de compatibilidad. `previous-release.txt` permite al lanzador recuperar la anterior si el selector actual no apunta a un ejecutable disponible. Las actualizaciones concurrentes se excluyen con un bloqueo de archivo; los directorios externos y enlaces del sistema de archivos se rechazan. No hay borrados recursivos de versiones.
+La instalación antigua en `artifacts/win-x64` sigue siendo una ruta de compatibilidad. `previous-release.txt` permite al lanzador recuperar la anterior si el selector actual no apunta a un ejecutable disponible. Las actualizaciones concurrentes se excluyen con un bloqueo de archivo; los directorios externos y enlaces del sistema de archivos se rechazan. La retención de [STORAGE.md](STORAGE.md) retira únicamente salidas verificadas fuera de las versiones protegidas, con un margen de siete días.
 
 La aplicación del usuario se inicia exclusivamente desde la sesión normal de Windows. El instalador rechaza identidades empaquetadas o perfiles temporales. Las pruebas de distribución solo usan archivos sintéticos dentro de artefactos.
 
@@ -168,12 +170,26 @@ La programación de Codex usa `CodexScheduleQueue` para guardar la cola antes de
 
 El estado de entrega se prueba con `TimeProvider`. IDs ajenos, respuestas huérfanas, completados duplicados y eventos tardíos se ignoran. Las versiones existentes de la extensión siguen funcionando. El contrato completo está en [BRIDGE_PROTOCOL.md](BRIDGE_PROTOCOL.md).
 
-`scripts/verify.ps1` ejecuta ocho suites de lógica y transporte, las pruebas de distribución y la compilación Release. Usa salidas aisladas, se comparte con el hook `pre-push` y está configurado en GitHub Actions. El workflow se ha añadido al repositorio; su ejecución remota requiere subir estos cambios.
+`scripts/verify.ps1` ejecuta las diez suites .NET, las pruebas de scripts y distribución, la suite WinUI y la compilación Release. Es el mismo punto de entrada para `pre-push` y GitHub Actions. [Comprobaciones](CHECKS.md).
 
-Las comprobaciones WinUI se ejecutan aparte con `scripts/check-tasks-ui.ps1`. Verifican controles reales, foco, temas, posiciones, borradores, almacenamiento aislado, conflictos, destinos y cierre. No requieren inspección visual ni una conversación o cuenta real.
+`scripts/check-tasks-ui.ps1` también admite ejecuciones por área. La suite nativa comprueba controles, foco, temas, posiciones, borradores, conflictos, destinos y cierre con proveedores sintéticos y almacenamiento aislado.
+
+### Validación de octubre de 2026
 
 La auditoría original queda como registro histórico. Se han abordado A1–A8 mediante aislamiento, composición, coordinadores, cierre controlado, persistencia atómica, índice, protocolo comprobable y distribución con rollback. La UI programática y el historial completo se mantienen intencionadamente; no se ha convertido la aplicación entera a MVVM ni se ha cambiado su diseño.
 
 Validación local final: ocho suites correctas, incluidos 34 casos de núcleo, 15 de puente, 104 de Gmail y 44 de extensión; pruebas sintéticas de instalación y rollback correctas; comprobaciones WinUI correctas; solución Release con cero errores y cero advertencias. La comparación estática con el estado inicial no detectó etiquetas visibles añadidas o eliminadas en la pantalla.
 
 La versión publicada se activó desde Windows el 15 de octubre de 2026. Se verificaron el proceso de la publicación, el protocolo de diagnóstico y la conexión con la extensión, sin enviar mensajes de prueba a ChatGPT. Se actualizó el acceso directo de este proyecto al lanzador estable, guardando previamente una copia. Los resultados reproducibles están en `artifacts/architecture-refactor/final-verification.log`, `final-winui.log` y `activation-result.json`.
+
+## Consolidación del 7 de noviembre de 2026
+
+`ContactDestinationSession` decide identidades estables, canal y remitente preferidos, reconciliación tras editar o borrar y candidatos de expulsión. `ContactDestinationViews` deshabilita la ruta inmediatamente y espera al proveedor antes de liberar la sección. Conserva el destino actual y hasta 32 vistas inactivas. Los borradores, las operaciones y los envíos inciertos de Phone Link quedan protegidos aunque se supere el presupuesto, incluso tras cerrar el aviso con **Clear**.
+
+`CodexScheduleController` gestiona el intervalo de sondeo, la exclusión de ejecuciones simultáneas, las instantáneas de la cola, los fallos de almacenamiento y la parada. La vista presenta el estado e informa de su disponibilidad. El controlador vuelve a comprobarla antes de cada entrega. La cola persistente gestiona la reanudación y los resultados inciertos.
+
+El escritorio bloquea las fuentes automáticas una sola vez en la composición mediante `BrowserContactsService.DisableSources`. Preferencias y observaciones tardías no pueden reactivarlas. Los controles y métodos de importación retirados ya no se construyen. Se mantienen los formatos y pruebas de compatibilidad del dominio.
+
+La compilación excluye `bin` y `obj` con independencia de la salida solicitada. La verificación común conserva fuentes de prueba en ambos directorios y comprueba que una compilación con otra salida las excluye.
+
+La publicación oficial construye una sola vez con el cliente de Drive integrado. ZIP y EXE reutilizan esa compilación. El verificador lee el recurso en los metadatos y compara los seis binarios propios con el directorio de referencia. [Lector de recursos](../src/Habitat.Core/Services/Updates/ReleasePayload.cs) · [Verificador](../scripts/check-release-payload.ps1).

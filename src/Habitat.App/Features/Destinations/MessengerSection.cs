@@ -1,4 +1,5 @@
 using Habitat.Features.Facebook;
+using Habitat.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Automation;
@@ -10,9 +11,9 @@ internal sealed class MessengerSection : IDestinationSection
     private readonly StackPanel _view = new() { Spacing = 12 };
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, Opacity = 0.8 };
     private readonly StackPanel _submitted = new() { Spacing = 12 };
-    private readonly CancellationTokenSource _stop = new();
+    private readonly AsyncOperationScope _operations = new();
+    private bool _disposed;
     private readonly Func<string, CancellationToken, Task<FacebookMessageResult>> _send;
-    private Task _pending = Task.CompletedTask;
     public string Destination { get; }
     public FrameworkElement View => _view;
     public bool HasContent { get; private set; }
@@ -28,7 +29,7 @@ internal sealed class MessengerSection : IDestinationSection
         AutomationProperties.SetName(clear, "Clear messages");
         clear.Click += (_, _) =>
         {
-            if (IsBusy) return;
+            if (_disposed || IsBusy) return;
             HasContent = false; _submitted.Children.Clear(); _status.Text = "";
             ClearRequested?.Invoke(); StateChanged?.Invoke();
         };
@@ -36,16 +37,16 @@ internal sealed class MessengerSection : IDestinationSection
         _view.Children.Add(clear); _view.Children.Add(_status); _view.Children.Add(_submitted);
     }
 
-    public Task SubmitAsync(string text) => _pending = SubmitCoreAsync(text);
+    public Task SubmitAsync(string text) => _operations.RunAsync(() => SubmitCoreAsync(text));
     private async Task SubmitCoreAsync(string text)
     {
-        if (_stop.IsCancellationRequested || IsBusy || string.IsNullOrWhiteSpace(text)) return;
+        if (_operations.IsStopping || IsBusy || string.IsNullOrWhiteSpace(text)) return;
         IsBusy = true; HasContent = true; WasSubmitted = false;
         _status.Text = "Sending to Messenger…"; StateChanged?.Invoke();
         try
         {
-            var result = await _send(text, _stop.Token);
-            if (_stop.IsCancellationRequested) return;
+            var result = await _send(text, _operations.Token);
+            if (_operations.IsStopping) return;
             WasSubmitted = result.Status == "submitted";
             _status.Text = result.Status switch
             {
@@ -68,10 +69,17 @@ internal sealed class MessengerSection : IDestinationSection
                 _submitted.Children.Add(new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true });
             }
         }
-        catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
-        catch (Exception exception) { if (!_stop.IsCancellationRequested) _status.Text = exception is InvalidOperationException ? exception.Message : "Could not submit to Messenger. Your draft has been kept."; }
+        catch (OperationCanceledException) when (_operations.IsStopping) { }
+        catch (Exception exception) { if (!_operations.IsStopping) _status.Text = exception is InvalidOperationException ? exception.Message : "Could not submit to Messenger. Your draft has been kept."; }
         finally { IsBusy = false; StateChanged?.Invoke(); }
     }
-    public async Task StopAsync() { _stop.Cancel(); await _pending; }
-    public void Dispose() { _stop.Cancel(); }
+    public Task StopAsync() { Dispose(); return _operations.StopAsync(); }
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        StateChanged = null;
+        ClearRequested = null;
+        _ = _operations.StopAsync();
+    }
 }

@@ -10,3 +10,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("Habitat.Weather.Checks")]
 [assembly: InternalsVisibleTo("Habitat.Core.Checks")]
 [assembly: InternalsVisibleTo("Habitat.Gmail.Setup")]
+[assembly: InternalsVisibleTo("Habitat.Release.Verify")]

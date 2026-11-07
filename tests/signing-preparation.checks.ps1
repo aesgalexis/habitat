@@ -35,7 +35,11 @@ foreach ($workflow in Get-ChildItem -LiteralPath (Join-Path $signingRepo '.githu
         throw 'A signing submission integration was added before the owner resumed it.'
     }
 }
-$checkRoot = Join-Path $signingRepo ('artifacts/signing-preparation-checks/' + [guid]::NewGuid().ToString('N'))
+Import-Module (Join-Path $signingRepo 'scripts/Habitat.Storage.psm1') -Force
+$signingArtifacts = Join-Path $signingRepo 'artifacts'
+$checkRoot = Join-Path $signingArtifacts ('verification/run-' + [guid]::NewGuid().ToString('N'))
+$checksOperation = [Habitat.Storage.GeneratedStorage]::BeginOperation($signingArtifacts, @($checkRoot))
+try {
 $payload = Join-Path $checkRoot 'payload with spaces'
 New-Item -ItemType Directory -Path $payload -Force | Out-Null
 foreach ($name in $expected + @('Microsoft.ThirdParty.dll','Habitat.Unreviewed.dll')) {
@@ -82,3 +86,5 @@ $corruptOutput = Join-Path $checkRoot 'corrupt-report'
 Expect-SigningRejection { & $generator -PayloadDirectory $payload -OutputDirectory $corruptOutput }
 if (Test-Path -LiteralPath $corruptOutput) { throw 'A corrupt payload created a report.' }
 Write-Host 'Signing preparation checks passed: deferred state, exact own-binary scope, XML metadata, offline diagnostics, unchanged inputs, corruption and path boundaries. Synthetic artifacts only.'
+[Habitat.Storage.GeneratedStorage]::Complete($signingArtifacts, $checkRoot, 'test')
+} finally { $checksOperation.Dispose() }

@@ -10,10 +10,10 @@ namespace Habitat;
 
 public sealed partial class MainPage
 {
-    private sealed record ContactChannelSelection(string PersonId, string Kind, string Address, string? Sender = null);
-    private readonly Dictionary<string, ContactChannelSelection> _contactChannelSelections = new();
-    private readonly Dictionary<string, ContactChannelSelection> _preferredContactChannels = new();
-    private readonly Dictionary<string, FacebookContact> _unavailableContacts = new();
+    private readonly ContactDestinationSession _contactDestinations = new();
+    private readonly Features.Destinations.ContactDestinationViews _contactDestinationViews;
+    private IReadOnlyDictionary<string, ContactChannelSelection> _contactChannelSelections => _contactDestinations.Channels;
+    private IReadOnlyDictionary<string, FacebookContact> _unavailableContacts => _contactDestinations.Unavailable;
     private readonly StackPanel ContactChannelPicker = new() { Spacing = 6, HorizontalAlignment = HorizontalAlignment.Center,
         VerticalAlignment = VerticalAlignment.Top, Visibility = Visibility.Collapsed };
     private readonly StackPanel ContactChannelButtons = new() { Orientation = Orientation.Horizontal, Spacing = 6,
@@ -36,59 +36,20 @@ public sealed partial class MainPage
             control.IsEnabled = ContactChannelsEnabled && control.Tag as string != "sms";
     }
 
-    private static bool SameContactAddress(string kind, string left, string right) => kind == "phone"
-        ? ContactBook.NormalizePhone(left) == ContactBook.NormalizePhone(right) : kind == "messenger"
-        ? (ContactBook.FacebookProfileIdentity(left) ?? left) == (ContactBook.FacebookProfileIdentity(right) ?? right)
-        : ContactBook.NormalizeEmail(left) == ContactBook.NormalizeEmail(right);
+    private static bool SameContactAddress(string kind, string left, string right) => ContactDestinationSession.SameAddress(kind, left, right);
 
     private void RefreshSavedContactDestinations()
     {
-        var book = _services.Contacts.Book;
-        var removedCurrent = false;
-        foreach (var (id, selection) in _contactChannelSelections.ToArray())
-        {
-            var person = book.People.FirstOrDefault(p => p.Id == selection.PersonId);
-            if (person is null || !ContactChannels.For(book, person).Any(c => c.Kind == selection.Kind && SameContactAddress(c.Kind, c.Address, selection.Address)))
-            {
-                removedCurrent |= _destination == id;
-                _contactChannelSelections.Remove(id); _preferredContactChannels.Remove(selection.PersonId);
-                _emailRecipients.Remove(id); _phoneRecipients.Remove(id);
-                _facebookRecipients.Remove(id); _facebookSendRecipients.Remove(id);
-                continue;
-            }
-            var name = book.Name(person);
-            if (_emailRecipients.TryGetValue(id, out var email)) _emailRecipients[id] = email with { Name = name, Display = email.Display with { Name = name } };
-            if (_phoneRecipients.TryGetValue(id, out var phone)) _phoneRecipients[id] = phone with { Name = name, Display = phone.Display with { Name = name } };
-            if (_facebookRecipients.TryGetValue(id, out var facebook))
-            {
-                _facebookRecipients[id] = facebook with { Name = name };
-                // Manual contact names are the user-provided Messenger identity.
-                if (book.For(person).All(r => book.Source(r).Kind == "local"))
-                    _facebookSendRecipients[id] = _facebookSendRecipients[id] with { Name = name };
-            }
-        }
-        foreach (var id in _unavailableContacts.Keys.ToArray())
-        {
-            var person = book.People.FirstOrDefault(p => "contact-person:" + p.Id == id);
-            if (person is null || ContactChannels.For(book, person).Length > 0)
-            { removedCurrent |= _destination == id; _unavailableContacts.Remove(id); }
-            else _unavailableContacts[id] = _unavailableContacts[id] with { Name = book.Name(person) };
-        }
-        if (removedCurrent) SelectDestination(_preferences.Destination);
-        else if (IsContactDestination(_destination)) UpdateDestinationPresentation();
-    }
-
-    private void AssociateContactChannel(string destination, string personId, string kind, string address, string? sender = null)
-    {
-        var selection = new ContactChannelSelection(personId, kind, address, sender);
-        _contactChannelSelections[destination] = selection;
-        _preferredContactChannels[personId] = selection;
+        var removed = _contactDestinations.Reconcile(_services.Contacts.Book);
+        if (removed.Contains(_destination)) SelectDestination(_preferences.Destination);
+        foreach (var id in removed) _ = _contactDestinationViews.RetireAsync(id);
+        if (IsContactDestination(_destination)) UpdateDestinationPresentation();
+        _contactDestinationViews.Trim(_destination);
     }
 
     private void SelectUnavailableContact(ContactBook book, ContactPerson person)
     {
-        var id = "contact-person:" + person.Id;
-        _unavailableContacts[id] = new(book.Name(person), "");
+        var id = _contactDestinations.RegisterUnavailable(book, person);
         _composerDrafts.Isolate(id);
         ContactProfile.Hide();
         SelectDestination(id); SetFacebookOpen(false); FocusComposer();
@@ -101,7 +62,6 @@ public sealed partial class MainPage
         if (!IsContactDestination(_destination)) return;
         var book = _services.Contacts.Book;
         var selection = _contactChannelSelections.GetValueOrDefault(_destination);
-        if (selection is not null) _preferredContactChannels[selection.PersonId] = selection;
         var person = selection is null ? null : book.People.FirstOrDefault(p => p.Id == selection.PersonId);
         var channels = person is not null ? ContactChannels.For(book, person) :
             _emailRecipients.TryGetValue(_destination, out var email) ? [new ContactChannel("email", email.Address, "Email", "")] :

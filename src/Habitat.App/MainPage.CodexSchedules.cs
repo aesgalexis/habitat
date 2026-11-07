@@ -20,8 +20,8 @@ public sealed partial class MainPage
         MinWidth = 0, MinHeight = 0, Padding = new Thickness(0), BorderThickness = new Thickness(0),
         Visibility = Visibility.Collapsed
     };
-    private bool _checkingCodexSchedules, _codexSchedulesFailed;
-    private DateTimeOffset _nextCodexScheduleTick;
+    private readonly CodexScheduleController _scheduleController;
+    private bool _codexSchedulesFailed { get => _scheduleController.HasFailed; set => _scheduleController.HasFailed = value; }
 
     private void BuildCodexScheduling()
     {
@@ -42,45 +42,14 @@ public sealed partial class MainPage
             new Thickness((SendButton.ActualWidth > 0 ? SendButton.ActualWidth : 128) + 52, SendButton.Margin.Top, 0, 0);
     }
 
+    private bool CanDeliverScheduledMessage() => !_operations.IsStopping && _codexSendCancellation is null &&
+        !_composer.IsExclusiveBusy && !CodexChat.IsSubmitting && !HasAppearanceOverlay && _activeDialog is null && !_openingUpdate;
+
     private void TickCodexSchedules(DateTimeOffset now)
     {
         TickCodexScheduleConfirmation(now);
-        if (_services.Paths.IsIsolated || _operations.IsStopping || _checkingCodexSchedules || _codexSchedulesFailed ||
-            HasAppearanceOverlay || _activeDialog is not null || _openingUpdate || now < _nextCodexScheduleTick ||
-            _codexSendCancellation is not null || _composer.IsExclusiveBusy || CodexChat.IsSubmitting) return;
-        _nextCodexScheduleTick = now.AddSeconds(2);
-        _checkingCodexSchedules = true;
-        _ = RunOperationAsync(async () =>
-        {
-            try
-            {
-                _codexScheduleSnapshot = await Task.Run(() => _services.CodexSchedules.Messages, _operations.Token);
-                RenderCodexScheduleNotice();
-                var due = _codexScheduleSnapshot.Any(item => item.State == CodexScheduleState.Pending && (item.RetryAt ?? item.SendAt) <= now);
-                if (!due || _operations.IsStopping) return;
-                await _services.CodexSchedules.RunDueAsync(now, async (message, token) =>
-                {
-                    UpdateSendState();
-                    _codexScheduleSnapshot = await Task.Run(() => _services.CodexSchedules.Messages, token);
-                    RenderCodexScheduleNotice();
-                    if (_codexSendCancellation is not null || _composer.IsExclusiveBusy || CodexChat.IsSubmitting ||
-                        HasAppearanceOverlay || _activeDialog is not null || _openingUpdate)
-                        return new(CodexDeliveryResult.NotSent, DateTimeOffset.UtcNow.AddSeconds(30));
-                    return await _services.Codex.SendScheduledAsync(message.Target, message.Text, token,
-                        message.InterruptedTurnId, message.TargetSelected);
-                }, _operations.Token);
-                _codexScheduleSnapshot = await Task.Run(() => _services.CodexSchedules.Messages, _operations.Token);
-                RenderCodexScheduleNotice();
-                if (!_operations.IsStopping && _destination == ComposerDestination.Codex) await CodexChat.RefreshAsync();
-            }
-            catch (Exception exception)
-            {
-                _codexSchedulesFailed = true;
-                _services.ReportError("Codex scheduled outbox", exception);
-                RenderCodexScheduleNotice();
-            }
-            finally { _checkingCodexSchedules = false; UpdateSendState(); }
-        });
+        if (_services.Paths.IsIsolated || _operations.IsStopping) return;
+        _ = RunOperationAsync(() => _scheduleController.TickAsync(now, CanDeliverScheduledMessage()));
     }
 
     private async Task ShowCodexScheduleAsync()

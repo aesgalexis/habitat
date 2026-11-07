@@ -1,7 +1,9 @@
 param(
     [string]$Version,
     [string]$InnoCompilerPath,
-    [string]$OutputDirectory
+    [string]$OutputDirectory,
+    [string]$StageDirectory,
+    [switch]$RequireDrive
 )
 $ErrorActionPreference = 'Stop'
 $installerRepo = Split-Path -Parent $PSScriptRoot
@@ -32,14 +34,33 @@ $installer = Join-Path $OutputDirectory "HABITAT-$Version-x64-setup.exe"
 if (Test-Path -LiteralPath $installer) { throw "Installer already exists: $installer. Use a fresh output directory." }
 $work = Join-Path $installerRepo ('artifacts/packaging/' + [guid]::NewGuid().ToString('N'))
 $payload = Join-Path $work 'payload'
+Import-Module (Join-Path $PSScriptRoot 'Habitat.Storage.psm1') -Force
+$installerArtifacts = Join-Path $installerRepo 'artifacts'
+if ($StageDirectory) {
+    $StageDirectory = (Resolve-Path -LiteralPath $StageDirectory).Path
+    if (-not $StageDirectory.StartsWith($installerArtifacts + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Stage must stay inside artifacts.' }
+}
+$installerOperation = [Habitat.Storage.GeneratedStorage]::BeginOperation($installerArtifacts, @($work) + @($StageDirectory | Where-Object { $_ }))
+try {
 New-Item -ItemType Directory -Path $payload, $OutputDirectory -Force | Out-Null
 $env:DOTNET_CLI_HOME = Join-Path $installerRepo '.dotnet-local'
 $env:NUGET_PACKAGES = Join-Path $installerRepo '.nuget/packages'
+if ($StageDirectory) {
+    Import-Module (Join-Path $PSScriptRoot 'Habitat.Release.psm1') -Force
+    Test-HabitatBuildManifest $StageDirectory
+    foreach ($assembly in 'HABITAT.dll', 'HABITAT.Hotkey.dll', 'Habitat.Core.dll', 'Habitat.Activation.dll') {
+        if ([Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $StageDirectory $assembly)).FileVersion -ne "$Version.0") {
+            throw 'Shared payload version differs from VERSION. Rebuild the release.'
+        }
+    }
+    Get-ChildItem -LiteralPath $StageDirectory -Force | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $payload -Recurse -Force }
+} else {
 dotnet publish (Join-Path $installerRepo 'src/Habitat.App/Habitat.App.csproj') `
     --configuration Release --runtime win-x64 --self-contained true `
     -p:Platform=x64 -p:HabitatUiChecks=false "-p:Version=$Version" "-p:FileVersion=$Version.0" `
     --output $payload
 if ($LASTEXITCODE -ne 0) { throw 'HABITAT publish failed.' }
+}
 # PublishHotkeyCompanion runs in the app's Publish target. Never package a build
 # without the companion or either self-contained runtime.
 foreach ($file in 'HABITAT.exe', 'HABITAT.dll', 'HABITAT.Hotkey.exe', 'HABITAT.Hotkey.dll',
@@ -62,6 +83,9 @@ $release = [ordered]@{ version = $Version; runtime = 'win-x64'; sourceCommit = $
 Import-Module (Join-Path $PSScriptRoot 'Habitat.Release.psm1') -Force
 New-HabitatBuildManifest $payload
 Test-HabitatBuildManifest $payload
+$payloadCheck = @{ PayloadDirectory = $payload; RequireDrive = $RequireDrive }
+if ($StageDirectory) { $payloadCheck.ReferenceDirectory = $StageDirectory }
+& (Join-Path $PSScriptRoot 'check-release-payload.ps1') @payloadCheck
 $changes = git -C $installerRepo status --porcelain
 $finalCommit = git -C $installerRepo rev-parse HEAD
 if ($LASTEXITCODE -ne 0 -or $changes -or $finalCommit -ne $commit) { throw 'Source files changed while building the installer.' }
@@ -75,3 +99,7 @@ $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash
 Write-Host "Installer: $installer"
 Write-Host "SHA256: $hash"
 Write-Host "Verified payload: $payload"
+Complete-HabitatGeneratedOutput $installerArtifacts $work 'package'
+} finally { $installerOperation.Dispose() }
+try { $null = Invoke-HabitatStorageMaintenance -ArtifactsRoot $installerArtifacts -Clean -Automatic }
+catch { Write-Warning 'Generated storage maintenance could not finish. Installer was retained.' }

@@ -109,7 +109,7 @@ internal sealed partial class ContactsPreferencesView
         if (!_drive.Connected)
         {
             Action(panel, _drive.HasLink ? "Reconnect Google Drive" : "Connect Google Drive",
-                () => _drive.ConnectAsync(_stop.Token), _drive.CanConnect && !_drive.Busy);
+                () => _drive.ConnectAsync(_operations.Token), _drive.CanConnect && !_drive.Busy);
             if (!_drive.CanConnect)
                 panel.Children.Add(Text("This build needs a Google Drive sign-in configuration."));
 
@@ -118,7 +118,7 @@ internal sealed partial class ContactsPreferencesView
                 var advanced = new StackPanel { Spacing = 8,
                     Visibility = _driveAdvancedSetup ? Visibility.Visible : Visibility.Collapsed };
                 advanced.Children.Add(Text("Use the same custom Google OAuth client if you already sync contacts with one."));
-                Action(advanced, "Choose custom OAuth client…", () => _drive.ConnectAsync(_stop.Token, pickClient), !_drive.Busy);
+                Action(advanced, "Choose custom OAuth client…", () => _drive.ConnectAsync(_operations.Token, pickClient), !_drive.Busy);
                 // Expander's default template crashes in the bundled WinUI runtime.
                 // Keep this section on the same basic-control pattern as Tasks.
                 var toggle = new Button { Content = _driveAdvancedSetup ? "Hide advanced setup" : "Advanced setup" };
@@ -135,13 +135,13 @@ internal sealed partial class ContactsPreferencesView
         }
         else
         {
-            Action(panel, "Sync now", () => _drive.SyncAsync(_stop.Token), !_drive.Busy);
+            Action(panel, "Sync now", () => _drive.SyncAsync(_operations.Token), !_drive.Busy);
             if (_drive.HasConflict)
             {
-                Action(panel, "Keep local conflicting contacts", () => _drive.SyncAsync(_stop.Token, ContactDriveConflictChoice.Local), !_drive.Busy);
-                Action(panel, "Keep Drive conflicting contacts", () => _drive.SyncAsync(_stop.Token, ContactDriveConflictChoice.Drive), !_drive.Busy);
+                Action(panel, "Keep local conflicting contacts", () => _drive.SyncAsync(_operations.Token, ContactDriveConflictChoice.Local), !_drive.Busy);
+                Action(panel, "Keep Drive conflicting contacts", () => _drive.SyncAsync(_operations.Token, ContactDriveConflictChoice.Drive), !_drive.Busy);
             }
-            Action(panel, "Disconnect Google Drive", () => _drive.DisconnectAsync(_stop.Token), !_drive.Busy);
+            Action(panel, "Disconnect Google Drive", () => _drive.DisconnectAsync(_operations.Token), !_drive.Busy);
         }
         _body.Children.Add(Card(panel));
     }
@@ -192,7 +192,7 @@ internal sealed partial class ContactsPreferencesView
         Action(_body, "Add detail", () => { _contactEditValues.Add(new("note", "")); return Task.CompletedTask; });
         Action(_body, _editingContact is null ? "Add contact" : "Save contact", async () =>
         {
-            if (await _session.ChangeAsync(b => b.SaveContact(_contactEditValues, _editingContact), _stop.Token))
+            if (await _session.ChangeAsync(b => b.SaveContact(_contactEditValues, _editingContact), _operations.Token))
             { _contactEditorOpen = false; _status.Text = _editingContact is null ? "Contact added." : "Contact saved."; }
         });
         Action(_body, "Cancel", () => { _contactEditorOpen = false; _confirmContactRemoval = false; return Task.CompletedTask; });
@@ -204,7 +204,7 @@ internal sealed partial class ContactsPreferencesView
             _body.Children.Add(Text("Remove this contact from HABITAT?"));
             Action(_body, "Confirm remove", async () =>
             {
-                if (await _session.ChangeAsync(b => b.RemoveContact(_editingContact), _stop.Token))
+                if (await _session.ChangeAsync(b => b.RemoveContact(_editingContact), _operations.Token))
                 { _contactEditorOpen = false; _confirmContactRemoval = false; _status.Text = "Contact removed."; }
             });
             Action(_body, "Keep contact", () => { _confirmContactRemoval = false; return Task.CompletedTask; });

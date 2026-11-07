@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'Habitat.Storage.psm1')
 
 function Assert-HabitatNoLinks([string]$Path) {
     if (-not ('HabitatPackagingPath' -as [type])) {
@@ -142,15 +143,18 @@ function Install-HabitatRelease {
     $stage = Assert-HabitatChildPath $ArtifactsRoot $StageDirectory
     $pointer = Join-Path $ArtifactsRoot 'current-release.txt'
     $previousPointer = Join-Path $ArtifactsRoot 'previous-release.txt'
-    $lock = [IO.File]::Open((Join-Path $ArtifactsRoot 'update.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
+    $lock = [Habitat.Storage.GeneratedStorage]::AcquireLock($ArtifactsRoot)
     $activated = $false
     $activationPrepared = $false
+    $succeeded = $false
     try {
         Test-HabitatBuildManifest $stage
         $previous = Get-HabitatActiveDirectory $ArtifactsRoot
         if ($stage -eq $previous) { throw 'The stage must be separate from the active release.' }
         $hadPointer = Test-Path -LiteralPath $pointer
         $oldPointer = if ($hadPointer) { [IO.File]::ReadAllText($pointer) } else { 'win-x64' }
+        $hadPreviousPointer = Test-Path -LiteralPath $previousPointer
+        $oldPreviousPointer = if ($hadPreviousPointer) { [IO.File]::ReadAllText($previousPointer) } else { $null }
         $relative = 'releases\release-' + [guid]::NewGuid().ToString('N')
         $release = Assert-HabitatChildPath $ArtifactsRoot (Join-Path $ArtifactsRoot $relative)
         New-Item -ItemType Directory -Path $release -Force | Out-Null
@@ -164,6 +168,7 @@ function Install-HabitatRelease {
         Write-HabitatAtomicText $pointer $relative
         $activated = $true
         & $AfterActivate $release
+        $succeeded = $true
         return $release
     } catch {
         $failure = $_
@@ -172,13 +177,26 @@ function Install-HabitatRelease {
             finally {
                 if ($hadPointer) { Write-HabitatAtomicText $pointer $oldPointer }
                 else { [IO.File]::Delete($pointer) }
+                if ($hadPreviousPointer) { Write-HabitatAtomicText $previousPointer $oldPreviousPointer }
+                else { [IO.File]::Delete($previousPointer) }
             }
             & $AfterRollback $previous
         } elseif ($activationPrepared) {
             & $AfterRollback $previous
         }
         throw $failure
-    } finally { $lock.Dispose() }
+    } finally {
+        $lock.Dispose()
+        if ($succeeded) {
+            try {
+                if ([IO.Path]::GetFullPath($stage).StartsWith([IO.Path]::GetFullPath((Join-Path $ArtifactsRoot 'staged')) + '\', [StringComparison]::OrdinalIgnoreCase)) {
+                    [Habitat.Storage.GeneratedStorage]::Complete($ArtifactsRoot, $stage, 'consumed')
+                }
+            } catch { Write-Warning 'The installed stage could not be registered for later cleanup.' }
+            try { $null = Invoke-HabitatStorageMaintenance -ArtifactsRoot $ArtifactsRoot -Clean -Automatic }
+            catch { Write-Warning 'Generated storage maintenance could not finish. Installation succeeded.' }
+        }
+    }
 }
 
 function New-HabitatReleaseArchive([string]$Directory, [string]$ArchivePath) {

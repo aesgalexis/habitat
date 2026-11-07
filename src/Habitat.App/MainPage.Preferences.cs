@@ -18,12 +18,11 @@ public sealed partial class MainPage
         await contacts.InitializeAsync();
         if (_newContact) { contacts.NewContact(); _newContact = false; }
         if (_contactToManage is { } personId) { contacts.SelectPerson(personId); _contactToManage = null; }
-        if (_reviewContactDuplicates) { contacts.SelectDuplicates(); _reviewContactDuplicates = false; }
         var drive = _services.DriveSync is { } sync ? new GoogleDrivePreferencesView(sync, PickDriveClientAsync, _services.LaunchBrowser) : null;
         if (drive is not null) drive.Changed += RefreshDriveTasks;
         var view = new PreferencesView(_preferences, _services.DiscoverWindowsAppsAsync,
             () => _services.PickWindowsAppAsync(_windowHost?.Handle ?? 0), _services.Wallpapers,
-            () => _services.PickWallpapersAsync(_windowHost?.Handle ?? 0), contacts, drive)
+            () => _services.PickWallpapersAsync(_windowHost?.Handle ?? 0), contacts, drive, _services.Storage.RunAsync)
         {
             Width = Math.Max(280, Math.Min(740, XamlRoot.Size.Width - 96)),
             Height = Math.Max(180, Math.Min(480, XamlRoot.Size.Height - 180))
@@ -87,6 +86,7 @@ public sealed partial class MainPage
         }
         finally
         {
+            await view.Storage.StopAsync();
             _contactsPreferences = null;
             await contacts.StopAsync();
             if (drive is not null) { drive.Changed -= RefreshDriveTasks; await drive.StopAsync(); }

@@ -173,6 +173,7 @@ public sealed partial class MainPage
         SavePreferences();
         UpdateDestinationPresentation();
         if (_destinationButtons.TryGetValue(_destination, out var button)) button.StartBringIntoView();
+        _contactDestinationViews.Trim(_destination);
     }
 
     private void PaintDestinations()

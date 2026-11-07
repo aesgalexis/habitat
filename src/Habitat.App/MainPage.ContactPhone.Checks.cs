@@ -55,7 +55,8 @@ public sealed partial class MainPage
             var firstText = Composer.Text;
             SetFacebookOpen(true); await WaitForUpdateUiAsync(() => !_facebookBusy);
             await InvokeAsync((Button)FacebookAvatars.Children.Single(c => AutomationProperties.GetName(c) == "Second phone friend"));
-            if (Composer.Text != "" || _destination == first || !IsPhoneContactDestination(_destination))
+            var second = _destination;
+            if (Composer.Text != "" || second == first || !IsPhoneContactDestination(second))
                 throw new InvalidOperationException("Phone recipients must have independent drafts.");
             Composer.Text = "Second recipient's private draft";
             SelectDestination(first);
@@ -125,7 +126,8 @@ public sealed partial class MainPage
             var uncertainText = Composer.Text;
             await InvokeAsync(clear);
             CheckInitial();
-            if (calls != callsBeforeRetry) throw new InvalidOperationException("Clearing an uncertain result must never send or retry anything.");
+            if (calls != callsBeforeRetry || section.RequiresReview || !section.HasUnconfirmedMessages)
+                throw new InvalidOperationException("Clear must hide the review and retain its duplicate guard for cache eviction.");
             Composer.Text = uncertainText.Replace("\n", "\r\n", StringComparison.Ordinal);
             await LaunchDestinationAsync(first, Composer.Text);
             if (!section.RequiresReview || !section.HasContent || calls != callsBeforeRetry || SendButton.IsEnabled ||
@@ -149,6 +151,35 @@ public sealed partial class MainPage
             if (!section.RequiresReview || calls != callsBeforeRetry + 2)
                 throw new InvalidOperationException("A different message must not erase the duplicate guard for the earlier uncertain text.");
             section.RequestClear(); CheckInitial();
+
+            var readBeforeRetirement = explicitReads;
+            var lateRead = new TaskCompletionSource<IReadOnlyList<PhoneLinkConversationMessage>?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _services.ReadPhoneLinkConversation = (address, openIfNeeded, _) =>
+            {
+                if (!openIfNeeded) return Task.FromResult<IReadOnlyList<PhoneLinkConversationMessage>?>(null);
+                unexpectedRead |= address != "+34600111222";
+                return ++explicitReads == readBeforeRetirement + 1 ? lateRead.Task : Task.FromResult(messages);
+            };
+            var opening = section.OpenConversationAsync();
+            SelectDestination(second);
+            var retirement = _contactDestinationViews.RetireAsync(first);
+            var reopening = ViewPhoneConversationAsync(contact.Id, "+34 600 111 222");
+            try
+            {
+                if (retirement.IsCompleted || reopening.IsCompleted || _destination != second || unexpectedRead)
+                    throw new InvalidOperationException("Reopening a retiring phone view must wait without reading the currently selected recipient.");
+            }
+            finally { lateRead.TrySetResult(null); }
+            await Task.WhenAll(opening, retirement, reopening);
+            if (_destination != first || explicitReads != readBeforeRetirement + 2 || unexpectedRead)
+                throw new InvalidOperationException("Reopening must load only the requested contact after its previous view drains.");
+            var reopened = (PhoneLinkSection)_destinationSections[first];
+            Composer.Text = "First unconfirmed message";
+            await LaunchDestinationAsync(first, Composer.Text);
+            if (!reopened.RequiresReview || calls != callsBeforeRetry + 2)
+                throw new InvalidOperationException("A re-created phone destination must still block a previously unconfirmed send.");
+            reopened.ConfirmReviewed(); reopened.RequestClear();
+            File.AppendAllText(log, "PASS: reopening a phone contact waits for the retired view, reads the requested recipient and keeps the duplicate guard.\n");
             File.AppendAllText(log, "PASS: Phone Link exact recipient/text and one send, live and existing replies without duplicate messages, Clear restores the centered editor, and uncertain text remains guarded. All real reads and sends intercepted.\n");
 
             int CountMessage(string text) => Descendants(section.View).OfType<TextBlock>().Count(t => t.Text == text);
@@ -172,8 +203,7 @@ public sealed partial class MainPage
             await _services.Contacts.ChangeAsync(_ => original);
             foreach (var id in _phoneRecipients.Keys.Where(id => !previousIds.Contains(id)).ToArray())
             {
-                if (_destinationSections.Remove(id, out var section)) { await section.StopAsync(); section.Dispose(); }
-                _phoneRecipients.Remove(id);
+                await _contactDestinationViews.RetireAsync(id);
             }
         }
     }

@@ -15,6 +15,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Verify logic, contracts, releases and production build
+      - name: Verify logic, native UI, releases and production build
         shell: powershell
         run: ./scripts/verify.ps1
+      - name: Preserve native UI failure details
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: habitat-ui-diagnostics
+          path: |
+            artifacts/verification/**/tasks-ui-checks.log
+            artifacts/verification/**/window-menu-checks.log
+          if-no-files-found: ignore

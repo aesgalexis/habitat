@@ -62,7 +62,9 @@ internal static class UpdateInstallChecks
         var compiler = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe");
         if (!File.Exists(compiler)) compiler = compiler.Replace("Framework64", "Framework");
         if (!File.Exists(compiler)) throw new InvalidOperationException("The Windows fixture compiler is unavailable.");
-        var fixtureRoot = Path.Combine(root, "helper fixtures");
+        // Native .NET Framework fixtures do not support paths as long as the
+        // managed checks. Retained run directories add another component.
+        var fixtureRoot = Path.Combine(Path.GetTempPath(), "HabitatHelperChecks", "artifacts", Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(fixtureRoot);
         var source = Path.Combine(fixtureRoot, "Fixture.cs");
         var assembly = typeof(AppUpdateService).Assembly.Location.Replace("\"", "\"\"");

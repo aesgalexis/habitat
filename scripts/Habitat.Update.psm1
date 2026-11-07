@@ -24,6 +24,9 @@ function Install-HabitatZipUpdate {
     Test-HabitatBuildManifest $payload
     $artifacts = Join-Path $InstallRoot 'artifacts'
     $stage = Assert-HabitatUpdatePath $artifacts (Join-Path $artifacts ('staged/update-' + [guid]::NewGuid().ToString('N')))
+    [IO.Directory]::CreateDirectory($artifacts) | Out-Null
+    $operation = [Habitat.Storage.GeneratedStorage]::BeginOperation($artifacts, @($stage))
+    try {
     New-Item -ItemType Directory -Path $stage -Force | Out-Null
     Get-ChildItem -LiteralPath $payload -Force | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $stage -Recurse }
     # Keep the matching integrations with the active binaries. In a development
@@ -35,6 +38,7 @@ function Install-HabitatZipUpdate {
     New-HabitatBuildManifest $stage
     return Install-HabitatRelease -ArtifactsRoot $artifacts -StageDirectory $stage -BeforeActivate $BeforeActivate `
         -AfterActivate $StartRelease -BeforeRollback $StopRelease -AfterRollback $StartRelease
+    } finally { $operation.Dispose() }
 }
 
 Export-ModuleMember -Function Assert-HabitatUpdatePath, Get-HabitatInstallerArguments, Install-HabitatZipUpdate

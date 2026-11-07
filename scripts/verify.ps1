@@ -1,9 +1,13 @@
-param([switch]$SkipBuild, [switch]$NoRestore)
+param([switch]$SkipBuild, [switch]$NoRestore, [switch]$SkipUi)
 $ErrorActionPreference = 'Stop'
 $verifyRoot = Split-Path -Parent $PSScriptRoot
 $env:DOTNET_CLI_HOME = Join-Path $verifyRoot '.dotnet-local'
 $env:NUGET_PACKAGES = Join-Path $verifyRoot '.nuget\packages'
-$verifyOutput = Join-Path $verifyRoot 'artifacts\verification'
+$verifyArtifacts = Join-Path $verifyRoot 'artifacts'
+$verifyOutput = Join-Path $verifyArtifacts ('verification/run-' + [guid]::NewGuid().ToString('N'))
+Import-Module (Join-Path $PSScriptRoot 'Habitat.Storage.psm1') -Force
+[IO.Directory]::CreateDirectory($verifyArtifacts) | Out-Null
+$verificationOperation = [Habitat.Storage.GeneratedStorage]::BeginOperation($verifyArtifacts, @($verifyOutput))
 Push-Location $verifyRoot
 try {
     node tests/docs.checks.cjs
@@ -14,6 +18,7 @@ try {
         dotnet restore Habitat.sln -p:Platform=x64
         if ($LASTEXITCODE -ne 0) { throw 'Dependency restore failed.' }
     }
+    & (Join-Path $verifyRoot 'tests/build.checks.ps1') -TestDirectory (Join-Path $verifyOutput 'build-regression')
     foreach ($script in Get-ChildItem -LiteralPath (Join-Path $verifyRoot 'extension') -Filter '*.js') {
         node --check $script.FullName
         if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax check failed: $($script.Name)" }
@@ -49,7 +54,10 @@ try {
             "-p:BaseOutputPath=$verifyOutput/$suite/"
         if ($LASTEXITCODE -ne 0) { throw "$suite checks failed." }
     }
+    & (Join-Path $verifyRoot 'tests/payload.checks.ps1') -ChecksAssembly (Join-Path $verifyOutput 'Core/Release/net10.0/Habitat.Core.Checks.dll') `
+        -TestDirectory (Join-Path $verifyOutput 'payload')
     & (Join-Path $verifyRoot 'tests\release.checks.ps1')
+    & (Join-Path $verifyRoot 'tests\storage.checks.ps1')
     & (Join-Path $verifyRoot 'tests\update.checks.ps1')
     & (Join-Path $verifyRoot 'tests\packaging.checks.ps1')
     & (Join-Path $verifyRoot 'tests\signing-preparation.checks.ps1')
@@ -58,6 +66,9 @@ try {
     $chromeZip = Get-ChildItem -LiteralPath $chromeOutput -Filter '*.zip' | Select-Object -First 1
     & (Join-Path $verifyRoot 'tests\chrome-package.checks.ps1') -PackagePath $chromeZip.FullName
     & (Join-Path $verifyRoot 'tests\package.checks.ps1')
+    if (-not $SkipUi) {
+        & (Join-Path $verifyRoot 'scripts/check-tasks-ui.ps1') -OutputDirectory (Join-Path $verifyOutput 'ui') -TimeoutSeconds 600
+    }
     if (-not $SkipBuild) {
         dotnet build Habitat.sln --configuration Release --no-restore -p:Platform=x64 -p:HabitatUiChecks=false `
             "-p:BaseOutputPath=$verifyOutput/build/"
@@ -65,5 +76,9 @@ try {
     }
     git diff --check
     if ($LASTEXITCODE -ne 0) { throw 'Whitespace checks failed.' }
-    Write-Host 'All HABITAT checks passed. Production binaries and user data were not used.'
-} finally { Pop-Location }
+    if ($SkipUi) { Write-Host 'Non-UI checks passed. Native UI verification was explicitly skipped.' }
+    else { Write-Host 'All HABITAT checks passed, including native UI. Production binaries and user data were not used.' }
+    Complete-HabitatGeneratedOutput $verifyArtifacts $verifyOutput 'test'
+} finally { $verificationOperation.Dispose(); Pop-Location }
+try { $null = Invoke-HabitatStorageMaintenance -ArtifactsRoot $verifyArtifacts -Clean -Automatic }
+catch { Write-Warning 'Generated storage maintenance could not finish. Verification output was retained.' }

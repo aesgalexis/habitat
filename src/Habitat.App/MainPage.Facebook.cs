@@ -134,12 +134,6 @@ public sealed partial class MainPage
             _newContact = true;
             await RunOperationAsync(() => ShowPreferencesAsync("Contacts"));
         };
-        ContactsEnableGoogle.Click += async (_, _) => await RunOperationAsync(() => ShowPreferencesAsync("Contacts"));
-        ContactsDuplicates.Click += async (_, _) =>
-        {
-            _reviewContactDuplicates = true;
-            await RunOperationAsync(() => ShowPreferencesAsync("Contacts"));
-        };
         _services.Contacts.Changed += ContactsChanged;
         ContactsLoadMore.Click += (_, _) => { _contactVisibleLimit += 100; RenderUnifiedContacts(); };
         surface.Children.Add(FacebookSidebar);

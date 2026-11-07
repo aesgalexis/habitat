@@ -68,12 +68,19 @@ public sealed partial class MainPage : Page
         _wallpaperSurface = new Features.Preferences.WallpaperSurface(services.Wallpapers)
             { Margin = new Thickness(-12, 0, -30, 0) };
         _composer = new(_composerDrafts, RestoreComposerDraft);
+        _contactDestinationViews = new(_contactDestinations, _destinationSections, _composer, _composerDrafts,
+            exception => _services.ReportError("Retire contact destination", exception));
+        _scheduleController = new(services.CodexSchedules,
+            (message, token) => services.Codex.SendScheduledAsync(message.Target, message.Text, token,
+                message.InterruptedTurnId, message.TargetSelected),
+            CanDeliverScheduledMessage, exception => services.ReportError("Codex scheduled outbox", exception),
+            () => _destination == ComposerDestination.Codex && !_operations.IsStopping ? CodexChat.RefreshAsync() : Task.CompletedTask);
+        _scheduleController.Changed += () => { RenderCodexScheduleNotice(); UpdateSendState(); };
         _composer.StateChanged += UpdateSendState;
         _composer.IsEnabled = id => _destinationCatalog.Enabled.Contains(id) || IsContactDestination(id);
         _conversationView = new(_conversation, ToneBrush, TextBrush);
         _windowHost = windowHost;
         _preferences = Preferences.Load(services.Paths.PreferencesPath);
-        services.Bridge.BrowserContacts.Configure(new(false, false));
         UiText.SetLanguage(_preferences.InterfaceLanguage);
         _destinationCatalog = new(_preferences.EnabledDestinations, _preferences.WindowsApps);
         _taskStore = services.Tasks;
@@ -347,6 +354,7 @@ public sealed partial class MainPage : Page
         RestoreUpdateRestartState();
         FocusComposer();
         if (!_preferences.SetupGuideSeen) _ = RunOperationAsync(ShowSetupAsync);
+        _services.Storage.WindowReady();
     }
 
     private async void MainPage_Unloaded(object sender, RoutedEventArgs e)
@@ -389,7 +397,6 @@ public sealed partial class MainPage : Page
     {
         TickUpdates();
         TickGmail();
-        TickBrowserContacts();
         TickDriveContacts();
         TickTasks(DateTimeOffset.UtcNow);
         TickMarkets();
