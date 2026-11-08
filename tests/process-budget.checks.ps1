@@ -19,4 +19,22 @@ $childId = [int](Get-Content -LiteralPath $process.Output -Raw).Trim()
 if ($childId -le 0 -or (Get-Process -Id $childId -ErrorAction SilentlyContinue)) {
     throw 'The timed-out check did not preserve its partial output and stop its child.'
 }
-Write-Host 'Process budget checks passed: bounded wait, partial output, and descendant termination.'
+
+$watch = [Diagnostics.Stopwatch]::StartNew()
+$parallel = @()
+try {
+    $parallel += Start-HabitatProcess -Name 'early-exit' -FilePath 'node' -Arguments @('-e', 'console.log("early output")') -LogDirectory $TestDirectory
+    $parallel += Start-HabitatProcess -Name 'later-exit' -FilePath 'node' -Arguments @('-e', 'setTimeout(() => console.error("sibling output"), 3600)') -LogDirectory $TestDirectory
+    # Simulate a redirected pipe that stays open while another check runs.
+    $parallel[0].Copies = [Threading.Tasks.Task[]]($parallel[0].Copies + [Threading.Tasks.Task]::Delay(3200))
+} catch {
+    foreach ($check in $parallel) { Close-HabitatProcess $check }
+    throw
+}
+Wait-HabitatProcesses -Checks $parallel -Budget $watch -BudgetSeconds 12
+$earlyLog = Get-Content -LiteralPath $parallel[0].Output
+$siblingLog = Get-Content -LiteralPath $parallel[1].ErrorOutput
+if ($earlyLog -notcontains 'early output' -or $siblingLog -notcontains 'sibling output') {
+    throw 'Parallel checks did not preserve their output when a stream was slow to close.'
+}
+Write-Host 'Process budget checks passed: bounded wait, partial output, descendant termination, and delayed stream closure.'

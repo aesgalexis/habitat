@@ -46,8 +46,13 @@ function Start-HabitatProcess {
 function Close-HabitatProcess {
     param([Parameter(Mandatory)]$Check)
     try { Stop-HabitatProcess $Check }
+    catch { Write-Warning "Could not stop $($Check.Name): $_" }
     finally {
-        try { $null = [Threading.Tasks.Task]::WaitAll($Check.Copies, 2000) }
+        try {
+            if (-not [Threading.Tasks.Task]::WaitAll($Check.Copies, 2000)) {
+                Write-Warning "$($Check.Name) left an open output stream. Partial logs: $($Check.Output) and $($Check.ErrorOutput)"
+            }
+        }
         catch { Write-Warning "Could not capture all output for $($Check.Name)." }
         finally {
             foreach ($stream in $Check.Streams) { $stream.Dispose() }
@@ -81,13 +86,6 @@ function Wait-HabitatProcesses {
         while ($pending.Count) {
             foreach ($check in $pending.ToArray()) {
                 if ($check.Process.HasExited) {
-                    if (-not [Threading.Tasks.Task]::WaitAll($check.Copies, 2000)) {
-                        throw "$($check.Name) left an open output stream. Partial logs: $($check.Output) and $($check.ErrorOutput)"
-                    }
-                    foreach ($stream in $check.Streams) { $stream.Dispose() }
-                    foreach ($log in $check.Output, $check.ErrorOutput) {
-                        Get-Content -LiteralPath $log -Tail 200 | ForEach-Object { Write-Host $_ }
-                    }
                     if ($check.Process.ExitCode -ne 0) {
                         throw "$($check.Name) failed (exit $($check.Process.ExitCode)). Logs: $($check.Output) and $($check.ErrorOutput)"
                     }
@@ -103,8 +101,16 @@ function Wait-HabitatProcesses {
             if ($pending.Count) { Start-Sleep -Milliseconds 100 }
         }
     } finally {
+        # A sibling or descendant can still hold an inherited pipe after the root process exits.
+        foreach ($check in $pending) {
+            try { Stop-HabitatProcess $check }
+            catch { Write-Warning "Could not stop $($check.Name): $_" }
+        }
         foreach ($check in $Checks) {
             Close-HabitatProcess $check
+            foreach ($log in $check.Output, $check.ErrorOutput) {
+                Get-Content -LiteralPath $log -Tail 200 | ForEach-Object { Write-Host $_ }
+            }
         }
     }
 }

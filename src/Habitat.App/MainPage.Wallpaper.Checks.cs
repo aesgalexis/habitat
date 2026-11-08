@@ -145,23 +145,33 @@ public sealed partial class MainPage
                 throw new InvalidOperationException("Restore did not return to Hybrid 15% while retaining the library.");
             var preferencePath = _services.Paths.PreferencesPath;
             var savedBytes = File.ReadAllBytes(preferencePath);
-            File.Delete(preferencePath);
-            Directory.CreateDirectory(preferencePath);
             try
             {
                 showing = ShowPreferencesAsync();
-                await Task.Delay(100);
-                ((PreferencesView)_activeDialog!.Content).Wallpaper.Choices.SelectedIndex = 1;
-                _activeDialog.Hide();
+                for (var attempt = 0; _activeDialog is null && !showing.IsCompleted && attempt < 50; attempt++)
+                    await Task.Delay(20);
+                if (_activeDialog is not { Content: PreferencesView editing } editor)
+                    throw new InvalidOperationException("Preferences did not open before the simulated save failure.");
+                editing.Wallpaper.Choices.SelectedIndex = 1;
+                File.Delete(preferencePath);
+                Directory.CreateDirectory(preferencePath);
+                editor.Hide();
                 await showing;
                 showing = null;
                 if (_preferences.Wallpaper.SelectedId != "original" || _wallpaperSurface.HasWallpaper ||
                     !File.Exists(wallpapers.ImagePath(image.Id)))
                     throw new InvalidOperationException("Failed preference save did not roll back appearance and retain existing assets.");
+
+                showing = ShowPreferencesAsync();
+                if (_activeDialog is not { Content: TextBlock } recovery || recovery.PrimaryButtonText != UiText.Get("Retry"))
+                    throw new InvalidOperationException("Unreadable preferences did not offer retry before editing.");
+                recovery.Hide();
+                await showing;
+                showing = null;
             }
             finally
             {
-                Directory.Delete(preferencePath);
+                if (Directory.Exists(preferencePath)) Directory.Delete(preferencePath);
                 File.WriteAllBytes(preferencePath, savedBytes);
             }
             wallpapers.Delete([image], []);
