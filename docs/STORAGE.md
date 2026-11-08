@@ -32,11 +32,19 @@ Los scripts de compilación, instalación, empaquetado y verificación aplican r
 
 ## Cierre del trabajo local
 
-Al terminar una publicación, elimina sus worktrees de preparación una vez comprobados sus cambios locales, archivos ignorados y referencias en Git. Preserva aparte las configuraciones, los diagnósticos necesarios y cualquier cambio único. Desvincula las junctions de NuGet sin recorrer su destino antes de retirar una copia de trabajo.
+Tras comprobar la publicación, [el cierre de release](RELEASING.md#cerrar-una-publicación-local) retira los paquetes que coinciden con GitHub y puede retirar un worktree limpio. Comprueba los archivos ignorados y las referencias en Git. Conserva las configuraciones, los diagnósticos necesarios y los cambios únicos. Retira solo el enlace a la caché compartida cuando puede verificar su destino.
 
 Conserva una sola versión del SDK local tras verificar que permite compilar y ejecutar las comprobaciones. Las cachés de paquetes compartidas se reutilizan para evitar descargas y compilaciones repetidas. Las copias de código para pruebas deben cerrarse junto con la prueba, guardando únicamente los cambios únicos y su procedencia cuando hagan falta.
 
 Los respaldos importantes son los datos, las configuraciones y los cambios de fuente sin publicar. Los ejecutables de versiones antiguas y las copias completas de dependencias no sustituyen esos respaldos. La limpieza histórica requiere clasificar los archivos y verificar las copias preservadas antes de borrar. El motor automático no extiende su alcance a fuentes, SDK, datos personales o paquetes finales.
+
+## Respaldos y diagnósticos del perfil
+
+Las preferencias guardan una copia anterior que se pudo leer. Si la lectura falla, el guardado automático queda suspendido. En **Preferences…**, usa **Retry** para un bloqueo temporal o **Restore previous settings** cuando haya una copia válida. **Reset preferences** usa los valores iniciales si no existe esa copia. La recuperación conserva el archivo sustituido.
+
+Tareas y contactos dejan como JSON las ocho revisiones más recientes y compactan progresivamente las anteriores. Los archivos `history-*.zip` se guardan en la carpeta de historial, en lotes de hasta 128 revisiones y 64 MiB de entrada. Cada entrada conserva exactamente los bytes originales. Se confirma el SHA-256 antes de retirar las copias sueltas y una interrupción puede dejar ambos ejemplares. El índice de tareas usa tanto los JSON sueltos como los archivos comprimidos durante la recuperación.
+
+Los diagnósticos de operaciones, carga de tareas y Facebook rotan a 512 KiB con una copia anterior. Los errores repetidos se agrupan y los logs de actualización conservan hasta doce intentos recientes. Estas reglas se aplican a diagnósticos, con independencia de los respaldos de datos.
 
 El actualizador tiene su propio directorio de trabajo por intento bajo `%LOCALAPPDATA%\HABITAT\updates`. Lo retira al cancelar antes de la entrega al instalador o al confirmar el arranque de la versión nueva. Los diagnósticos se escriben aparte y se conservan junto a `last-result.json`. Un error de instalación posterior a la entrega conserva la carpeta de trabajo para investigar el fallo.
 

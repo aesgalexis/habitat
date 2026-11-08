@@ -28,6 +28,8 @@ El clic derecho también ofrece **Manage contact** en la ficha del contacto.
 
 La nueva agenda se guarda en `contact-destinations.json`, dentro del directorio persistente de datos de HABITAT. Sus copias de recuperación quedan en `contact-destinations.json.history`. Los contactos añadidos sobreviven a los reinicios: la lista vacía se aplica al estrenar el nuevo modelo, no se borra la agenda en cada arranque.
 
+Las revisiones más antiguas pueden estar dentro de un `history-*.zip` de esa carpeta. Cada entrada es el JSON original de la revisión. Para preparar una recuperación, extrae la revisión que quieras inspeccionar a una carpeta separada y guarda el archivo activo antes de sustituirlo. Consulta [respaldos del perfil](STORAGE.md#respaldos-y-diagnósticos-del-perfil).
+
 `contacts.json` y `contacts.json.history`, utilizados por el modelo anterior de fuentes, permanecen intactos. No se leen para poblar la nueva agenda ni se trasladan automáticamente sus registros. La aplicación fuerza las fuentes de navegador a desactivadas, incluso con permisos y preferencias antiguas; descarta observaciones pendientes y tardías. El código de importación anterior se conserva internamente por compatibilidad, sin controles de conexión o importación en la agenda actual.
 
 Las pruebas usan contactos sintéticos y almacenamiento explícito dentro de `artifacts`; no leen ni modifican la agenda real del usuario. Consulta [CHECKS.md](CHECKS.md).

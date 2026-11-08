@@ -11,15 +11,55 @@ on:
         default: false
 permissions:
   contents: read
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/main' }}
+env:
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
 jobs:
+  scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      profile: ${{ steps.select.outputs.profile }}
+    steps:
+      - uses: actions/checkout@v4
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 2
+      - id: select
+        shell: bash
+        run: |
+          profile=Full
+          if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            git diff --no-renames --name-only -z HEAD^1 HEAD > "$RUNNER_TEMP/habitat-changes"
+            mapfile -d '' -t paths < "$RUNNER_TEMP/habitat-changes"
+            if ((${#paths[@]})); then
+              profile=Docs
+              for path in "${paths[@]}"; do
+                case "$path" in
+                  *.md|scripts/check-docs.cjs|tests/docs.checks.cjs) ;;
+                  extension/*.js|extension/manifest.json|vscode-extension/*.js|tests/extension-*.checks.cjs|tests/vscode-extension.checks.cjs)
+                    profile=Extensions ;;
+                  *) profile=Full; break ;;
+                esac
+              done
+            fi
+          fi
+          echo "profile=$profile" >> "$GITHUB_OUTPUT"
   logic:
     name: Logic and distribution contracts
+    needs: scope
     runs-on: windows-latest
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
+        if: needs.scope.outputs.profile == 'Full'
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: src/Habitat.App/packages.lock.json
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -27,18 +67,32 @@ jobs:
         shell: powershell
         env:
           HABITAT_SKIP_PRODUCTION_BUILD: ${{ inputs.skip_production_build }}
-        run: ./scripts/verify.ps1 -SkipUi -SkipBuild:($env:HABITAT_SKIP_PRODUCTION_BUILD -eq 'true')
+          HABITAT_CHECK_PROFILE: ${{ needs.scope.outputs.profile }}
+        run: ./scripts/verify.ps1 -CheckProfile $env:HABITAT_CHECK_PROFILE -SkipUi -SkipBuild:($env:HABITAT_SKIP_PRODUCTION_BUILD -eq 'true')
+      - name: Preserve failed check output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: habitat-check-diagnostics
+          path: artifacts/verification/*/logs/*.log
+          if-no-files-found: ignore
+          retention-days: 3
   native-ui:
     name: Native WinUI
+    needs: scope
+    if: needs.scope.outputs.profile == 'Full'
     runs-on: windows-latest
+    timeout-minutes: 7
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: src/Habitat.App/packages.lock.json
       - name: Check the native app and window
         shell: powershell
-        run: ./scripts/check-tasks-ui.ps1 -TimeoutSeconds 600
+        run: ./scripts/check-tasks-ui.ps1 -TimeoutSeconds 180
       - name: Preserve native UI failure details
         if: failure()
         uses: actions/upload-artifact@v4
@@ -48,3 +102,4 @@ jobs:
             artifacts/ui-checks/**/tasks-ui-checks.log
             artifacts/ui-checks/**/window-menu-checks.log
           if-no-files-found: ignore
+          retention-days: 3

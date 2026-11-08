@@ -9,6 +9,7 @@ Implementación posterior a las auditorías del 15 y 18 de octubre de 2026. Se c
 | Creación de servicios, producción frente a pruebas y lanzadores | `Habitat.App/Services/AppServices` |
 | Marco, activación y cierre de la ventana | `MainWindow`, a través de `IWindowHost` |
 | Controles, estilos, distribución y foco | `MainPage` y sus archivos parciales |
+| Previsualizaciones y plazos de Gmail y Tasks | `GmailSidebarPreview` y `TaskSidebarPreview` en `Habitat.App/Features/Sidebar` |
 | Identidad, selección y retención de destinatarios | `Core/Features/Contacts/ContactDestinationSession` para las reglas y `App/Features/Destinations/ContactDestinationViews` para el ciclo de vida de los controles |
 | Ejecución periódica de programaciones | `Core/Features/Codex/CodexScheduleController` |
 | Estado de conversación y entrega | `Habitat.Core/Features/Conversation` |
@@ -187,6 +188,8 @@ La versión publicada se activó desde Windows el 15 de octubre de 2026. Se veri
 `ContactDestinationSession` decide identidades estables, canal y remitente preferidos, reconciliación tras editar o borrar y candidatos de expulsión. `ContactDestinationViews` deshabilita la ruta inmediatamente y espera al proveedor antes de liberar la sección. Conserva el destino actual y hasta 32 vistas inactivas. Los borradores, las operaciones y los envíos inciertos de Phone Link quedan protegidos aunque se supere el presupuesto, incluso tras cerrar el aviso con **Clear**.
 
 `CodexScheduleController` gestiona el intervalo de sondeo, la exclusión de ejecuciones simultáneas, las instantáneas de la cola, los fallos de almacenamiento y la parada. La vista presenta el estado e informa de su disponibilidad. El controlador vuelve a comprobarla antes de cada entrega. La cola persistente gestiona la reanudación y los resultados inciertos.
+
+Las vistas de Gmail y Tasks programan su siguiente acción con un temporizador de un disparo. Actualizan la vista tras cambios de datos, respetan las pausas por foco y se detienen al cerrar la página. Drive publica cambios al sincronizar y su coordinador comprueba el plazo antes de programar trabajo.
 
 El escritorio bloquea las fuentes automáticas una sola vez en la composición mediante `BrowserContactsService.DisableSources`. Preferencias y observaciones tardías no pueden reactivarlas. Los controles y métodos de importación retirados ya no se construyen. Se mantienen los formatos y pruebas de compatibilidad del dominio.
 

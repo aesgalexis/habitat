@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory)][string]$DriveClientPath,
-    [string]$InnoCompilerPath
+    [string]$InnoCompilerPath,
+    [ValidateRange(1, 1800)][int]$TimeoutSeconds = 360
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
@@ -8,59 +9,64 @@ $version = (Get-Content -LiteralPath (Join-Path $repo 'VERSION') -Raw).Trim()
 $client = (Resolve-Path -LiteralPath $DriveClientPath).Path
 $stage = Join-Path $repo ('artifacts/staged/release-' + [guid]::NewGuid().ToString('N'))
 $artifacts = Join-Path $repo 'artifacts'
+$work = Join-Path $artifacts ('verification/run-' + [guid]::NewGuid().ToString('N'))
+$logs = Join-Path $work 'release-logs'
 $watch = [Diagnostics.Stopwatch]::StartNew()
 $previousClient = $env:HabitatDriveOAuthClientFile
 $previousVerifier = $env:HABITAT_RELEASE_VERIFIER
 $previousMaintenance = $env:HABITAT_STORAGE_SKIP_AUTOMATIC
-$jobs = @()
+$env:DOTNET_CLI_HOME = Join-Path $repo '.dotnet-local'
+$env:NUGET_PACKAGES = Join-Path $repo '.nuget/packages'
+$windowsPowerShell = Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe'
+Import-Module (Join-Path $PSScriptRoot 'Habitat.Process.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'Habitat.Storage.psm1') -Force
 [IO.Directory]::CreateDirectory($artifacts) | Out-Null
-$releaseOperation = [Habitat.Storage.GeneratedStorage]::BeginOperation($artifacts, @($stage))
+$releaseOperation = [Habitat.Storage.GeneratedStorage]::BeginOperation($artifacts, @($stage, $work))
+function Invoke-ReleasePhase([string]$Name, [string]$Program, [string[]]$Arguments, [int]$Limit) {
+    if ($watch.Elapsed.TotalSeconds -ge $TimeoutSeconds) { throw "Release budget exhausted before $Name." }
+    $check = Start-HabitatProcess -Name $Name -FilePath $Program -Arguments $Arguments -LogDirectory $logs -TimeoutSeconds $Limit
+    Wait-HabitatProcesses -Checks @($check) -Budget $watch -BudgetSeconds $TimeoutSeconds
+}
+function Get-ScriptArguments([string]$Name, [string[]]$Parameters) {
+    @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot $Name)) + $Parameters
+}
+Push-Location $repo
 try {
     # The jobs share this tree. Sweep it once after both readers have finished.
     $env:HABITAT_STORAGE_SKIP_AUTOMATIC = '1'
     try {
         $env:HabitatDriveOAuthClientFile = $client
-        & (Join-Path $PSScriptRoot 'build-winui.ps1') -OutputDirectory $stage
+        Invoke-ReleasePhase 'shared-release-build' $windowsPowerShell (Get-ScriptArguments 'build-winui.ps1' @('-OutputDirectory', $stage)) 240
     } finally { $env:HabitatDriveOAuthClientFile = $previousClient }
     Write-Host ('Shared release build completed in {0:N1}s.' -f $watch.Elapsed.TotalSeconds)
 
-    $verifierOutput = Join-Path $repo 'artifacts/release-verifier/'
-    dotnet build (Join-Path $repo 'tools/Habitat.Release.Verify') --configuration Release "-p:BaseOutputPath=$verifierOutput"
-    if ($LASTEXITCODE -ne 0) { throw 'Could not build the release verifier.' }
+    $verifierOutput = Join-Path $work 'verifier/'
+    Invoke-ReleasePhase 'build-payload-verifier' 'dotnet' @('build', 'tools/Habitat.Release.Verify',
+        '--configuration', 'Release', "-p:BaseOutputPath=$verifierOutput") 90
     $env:HABITAT_RELEASE_VERIFIER = Join-Path $verifierOutput 'Release/net10.0/Habitat.Release.Verify.dll'
-    & (Join-Path $PSScriptRoot 'check-release-payload.ps1') -PayloadDirectory $stage -RequireDrive -ExpectedDriveClientPath $client
+    Invoke-ReleasePhase 'verify-shared-payload' $windowsPowerShell (Get-ScriptArguments 'check-release-payload.ps1' @(
+        '-PayloadDirectory', $stage, '-RequireDrive', '-ExpectedDriveClientPath', $client)) 60
 
-    $jobs += Start-Job -Name ZIP -ArgumentList $repo, $stage, $version -ScriptBlock {
-        param($repo, $stage, $version)
-        $ErrorActionPreference = 'Stop'
-        Set-Location -LiteralPath $repo
-        $watch = [Diagnostics.Stopwatch]::StartNew()
-        ./scripts/package-release.ps1 -StageDirectory $stage -RequireDrive
-        ./tests/package.checks.ps1 -PackagePath "artifacts/packages/HABITAT-$version-win-x64.zip" -ReferenceDirectory $stage -RequireDrive
-        Write-Host ('ZIP packaging and installation checks completed in {0:N1}s.' -f $watch.Elapsed.TotalSeconds)
+    $checks = @()
+    try {
+        foreach ($format in 'ZIP', 'EXE') {
+            $parameters = @('-Format', $format, '-StageDirectory', $stage, '-Version', $version)
+            if ($format -eq 'EXE' -and $InnoCompilerPath) { $parameters += @('-InnoCompilerPath', $InnoCompilerPath) }
+            $commandLine = Get-ScriptArguments 'verify-release-format.ps1' $parameters
+            $checks += Start-HabitatProcess -Name $format -FilePath $windowsPowerShell -Arguments $commandLine -LogDirectory $logs -TimeoutSeconds 180
+        }
+    } catch {
+        foreach ($check in $checks) { Close-HabitatProcess $check }
+        throw
     }
-    $jobs += Start-Job -Name EXE -ArgumentList $repo, $stage, $version, $InnoCompilerPath -ScriptBlock {
-        param($repo, $stage, $version, $compiler)
-        $ErrorActionPreference = 'Stop'
-        Set-Location -LiteralPath $repo
-        $watch = [Diagnostics.Stopwatch]::StartNew()
-        ./scripts/build-installer.ps1 -Version $version -StageDirectory $stage -RequireDrive -InnoCompilerPath $compiler
-        ./scripts/test-installer.ps1 -InstallerPath "artifacts/distribution/$version/HABITAT-$version-x64-setup.exe" -ReferenceDirectory $stage -RequireDrive
-        Write-Host ('EXE packaging and installation checks completed in {0:N1}s.' -f $watch.Elapsed.TotalSeconds)
-    }
-    $jobs | Wait-Job | Out-Null
-    foreach ($job in $jobs) { Receive-Job -Job $job -ErrorAction Continue }
-    $failed = @($jobs | Where-Object State -ne 'Completed')
-    if ($failed) { throw ('Release packaging failed: ' + ($failed.Name -join ', ')) }
+    Wait-HabitatProcesses -Checks $checks -Budget $watch -BudgetSeconds $TimeoutSeconds
     Complete-HabitatGeneratedOutput $artifacts $stage 'consumed'
+    Complete-HabitatGeneratedOutput $artifacts $work 'test'
 } finally {
-    try { $jobs | Remove-Job -Force }
-    finally {
-        $env:HABITAT_RELEASE_VERIFIER = $previousVerifier
-        $env:HABITAT_STORAGE_SKIP_AUTOMATIC = $previousMaintenance
-        $releaseOperation.Dispose()
-    }
+    $env:HABITAT_RELEASE_VERIFIER = $previousVerifier
+    $env:HABITAT_STORAGE_SKIP_AUTOMATIC = $previousMaintenance
+    $releaseOperation.Dispose()
+    Pop-Location
 }
 try { $null = Invoke-HabitatStorageMaintenance -ArtifactsRoot $artifacts -Clean -Automatic }
 catch { Write-Warning 'Generated storage maintenance could not finish. Release assets were retained.' }

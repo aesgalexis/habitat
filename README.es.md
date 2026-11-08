@@ -66,7 +66,7 @@ Las integraciones dependen de las aplicaciones conectadas y pueden necesitar man
 
 ## Compilar y verificar
 
-Para desarrollar necesitas **Windows x64, SDK .NET 10 y Node.js**. Desde la raíz del repositorio:
+Para desarrollar necesitas **Windows x64**, el SDK fijado en [global.json](global.json) y Node.js. Ejecuta estos comandos desde la raíz del repositorio.
 
 ```powershell
 dotnet restore Habitat.sln -p:Platform=x64

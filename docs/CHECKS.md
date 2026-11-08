@@ -12,13 +12,17 @@ Comprueba los enlaces Markdown locales de la raíz, `docs`, `packaging` y `vscod
 
 ## Verificación compartida
 
-Requiere Windows, SDK .NET 10 y Node.js; CI utiliza Node.js 24.
+Requiere Windows, el SDK fijado en [global.json](../global.json) y Node.js. CI utiliza Node.js 24.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify.ps1
 ```
 
 La verificación local ejecuta JavaScript, las diez suites .NET, las pruebas de paquetes y almacenamiento y la suite nativa WinUI. Una sola compilación Release produce las suites .NET, que se ejecutan en paralelo con datos aislados. GitHub ejecuta la parte nativa en otro runner en paralelo con las comprobaciones de lógica. El hook pre-push comprueba el whitespace de los commits que se envían. [Verificación](../scripts/verify.ps1) · [Hook pre-push](../.githooks/pre-push) · [GitHub Actions](../.github/workflows/verify.yml).
+
+Usa `-CheckProfile Docs` para la documentación y `-CheckProfile Extensions` para documentación, Chrome y VS Code. Los PR de esas áreas seleccionan el perfil correspondiente. Los cambios compartidos, los commits de main y las releases usan Full. CI cancela verificaciones de PR y main sustituidas por commits nuevos.
+
+El presupuesto local predeterminado es de 360 segundos para toda la verificación y 120 por suite de consola. Las fases de compilación y WinUI tienen límites propios. Usa `-TimeoutSeconds` y `-SuiteTimeoutSeconds` para un diagnóstico que necesite otros plazos. Al vencer el límite se detiene el árbol de la prueba y quedan sus logs parciales. CI conserva los diagnósticos fallidos durante tres días.
 
 `-NoRestore` reutiliza la restauración previa de .NET. La fixture mínima de compilación restaura sus referencias del SDK. `-SkipBuild` usa un filtro de la solución para compilar solo las suites .NET y su verificador. `-SkipUi` ejecuta las comprobaciones de consola. La publicación exige que pasen tanto la lógica como WinUI para el commit etiquetado. Las salidas y los datos de tareas de ensayo se generan en `artifacts/verification` y se retiran tras una ejecución correcta. Las pruebas del puente y de OAuth sintético usan sockets de bucle local.
 
@@ -40,7 +44,7 @@ La [suite de almacenamiento](../tests/storage.checks.ps1) verifica la limpieza d
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check-tasks-ui.ps1
 ```
 
-La verificación común da hasta 600 segundos a cada proceso de WinUI. Compila con `HabitatUiChecks=true` y utiliza servicios y almacenamiento aislados para probar también Gmail, VS Code y el drenaje de secciones. `-ContactDestinationsOnly` cubre la agenda manual, las fuentes antiguas, el rechazo de duplicados y la selección de un contacto. Su alias es `-ContactSourcesOnly`. `-ContactChannelsOnly` cubre la selección de canal, dirección y remitente, la ficha mínima y los flujos interceptados de Gmail, Messenger y Phone Link. [Parámetros del script](../scripts/check-tasks-ui.ps1).
+La verificación común da hasta 180 segundos a cada proceso de WinUI. Compila con `HabitatUiChecks=true` y utiliza servicios y almacenamiento aislados para probar también Gmail, VS Code y el drenaje de secciones. `-ContactDestinationsOnly` cubre la agenda manual, las fuentes antiguas, el rechazo de duplicados y la selección de un contacto. Su alias es `-ContactSourcesOnly`. `-ContactChannelsOnly` cubre la selección de canal, dirección y remitente, la ficha mínima y los flujos interceptados de Gmail, Messenger y Phone Link. [Parámetros del script](../scripts/check-tasks-ui.ps1).
 
 La ejecución completa reutiliza el binario de prueba en un segundo proceso para comprobar el menú y el ciclo de activación de `MainWindow`. CI conserva `tasks-ui-checks.log` y `window-menu-checks.log` cuando falla la verificación.
 

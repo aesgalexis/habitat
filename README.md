@@ -66,7 +66,7 @@ Browser and desktop integrations depend on the connected apps and can need maint
 
 ## Build and verify
 
-Development requires **Windows x64, .NET 10 SDK and Node.js**. From the repository root:
+Development requires **Windows x64**, the SDK pinned in [global.json](global.json), and Node.js. Run these commands from the repository root.
 
 ```powershell
 dotnet restore Habitat.sln -p:Platform=x64

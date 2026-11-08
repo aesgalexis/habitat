@@ -19,6 +19,8 @@
     <EnableWinAppRunSupport>false</EnableWinAppRunSupport>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode Condition="'$(RestoreLockedMode)' == '' and Exists('$(MSBuildProjectDirectory)/packages.lock.json')">true</RestoreLockedMode>
     <DefineConstants Condition="'$(HabitatUiChecks)' == 'true'">$(DefineConstants);HABITAT_UI_CHECKS</DefineConstants>
   </PropertyGroup>
 

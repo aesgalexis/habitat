@@ -4,6 +4,8 @@ on:
     tags: ['v*']
 permissions:
   contents: read
+env:
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
@@ -11,6 +13,7 @@ jobs:
   main_verification:
     name: Reuse verification for this commit
     runs-on: ubuntu-latest
+    timeout-minutes: 7
     permissions:
       actions: read
     outputs:
@@ -34,14 +37,18 @@ jobs:
                 echo 'reused=true' >> "$GITHUB_OUTPUT"
                 exit 0
               fi
-              if [[ "$conclusion" == failure ]]; then
+              if [[ "$conclusion" == failure || "$conclusion" == timed_out ]]; then
                 echo "::error::Verification run $id failed for this commit on main."
                 exit 1
               fi
               break
             fi
-            if [[ -z "$id" && "$SECONDS" -ge "$discovery_deadline" ]] || [[ "$SECONDS" -ge "$wait_deadline" ]]; then
+            if [[ -z "$id" && "$SECONDS" -ge "$discovery_deadline" ]]; then
               break
+            fi
+            if [[ "$SECONDS" -ge "$wait_deadline" ]]; then
+              echo "::error::Verification run $id did not finish within the release budget."
+              exit 1
             fi
             sleep 5
           done
@@ -56,13 +63,16 @@ jobs:
   package:
     name: Build and test release packages
     runs-on: windows-latest
+    timeout-minutes: 9
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: src/Habitat.App/packages.lock.json
       - name: Validate tag and main ancestry
         id: source
         shell: pwsh
@@ -112,12 +122,22 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           retention-days: 3
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: habitat-package-diagnostics
+          path: |
+            artifacts/verification/*/release-logs/*.log
+            artifacts/verification/*/*.log
+          if-no-files-found: ignore
+          retention-days: 3
   publish:
     needs: [main_verification, verify, package]
     if: >-
       ${{ !cancelled() && needs.main_verification.result == 'success' && needs.package.result == 'success' &&
           (needs.verify.result == 'success' || (needs.verify.result == 'skipped' && needs.main_verification.outputs.reused == 'true')) }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: write
     steps:
@@ -143,5 +163,14 @@ jobs:
           $section = [regex]::Match($changelog, '(?ms)^## ' + [regex]::Escape($version) + ' .*?(?=^## |\z)').Value
           if (-not $section) { throw 'Changelog section is missing.' }
           $section | Set-Content $notes -Encoding utf8
+          $upload = [Diagnostics.Stopwatch]::StartNew()
           gh release create "v$version" $zip "$zip.sha256" $installer "$installer.sha256" --verify-tag --title "HABITAT $version" --notes-file $notes
           if ($LASTEXITCODE -ne 0) { throw 'Release publication failed.' }
+          Write-Host ('Release upload completed in {0:N1}s.' -f $upload.Elapsed.TotalSeconds)
+      - name: Verify delivery and retire local assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $summary = ./scripts/complete-release.ps1 -Tag $env:GITHUB_REF_NAME -Repository $env:GITHUB_REPOSITORY -Apply
+          $summary | Write-Host

@@ -4,8 +4,13 @@ $smokeRepo = Split-Path -Parent $PSScriptRoot
 $metadata = Get-Content -LiteralPath (Join-Path $smokeRepo 'packaging/metadata.json') -Raw | ConvertFrom-Json
 $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{$($metadata.AppId)}_is1"
 if (Test-Path -LiteralPath $uninstallKey) { throw 'HABITAT is already installed for this user. Run this check in a clean Windows account or Windows Sandbox.' }
-$smokeRoot = Join-Path $smokeRepo ('artifacts/installer-smoke/' + [guid]::NewGuid().ToString('N'))
+$smokeArtifacts = Join-Path $smokeRepo 'artifacts'
+$smokeRoot = Join-Path $smokeArtifacts ('verification/run-' + [guid]::NewGuid().ToString('N'))
 $installation = Join-Path $smokeRoot 'installed'
+Import-Module (Join-Path $PSScriptRoot 'Habitat.Storage.psm1') -Force
+$null = [IO.Directory]::CreateDirectory($smokeArtifacts)
+$smokeOperation = [Habitat.Storage.GeneratedStorage]::BeginOperation($smokeArtifacts, @($smokeRoot))
+try {
 New-Item -ItemType Directory -Path $smokeRoot -Force | Out-Null
 $InstallerPath = (Resolve-Path -LiteralPath $InstallerPath).Path
 function Invoke-SilentInstaller([string]$Executable, [string[]]$InstallerArguments) {
@@ -89,3 +94,7 @@ try {
 }
 if (Test-Path -LiteralPath $uninstallKey) { throw 'Mixed installation check left an uninstall registration.' }
 Write-Host "Silent install, same-version upgrade, complete payload, self-contained runtimes, uninstall and ZIP installation protection passed. Logs: $smokeRoot"
+Complete-HabitatGeneratedOutput $smokeArtifacts $smokeRoot 'test'
+} finally { $smokeOperation.Dispose() }
+try { $null = Invoke-HabitatStorageMaintenance -ArtifactsRoot $smokeArtifacts -Clean -Automatic }
+catch { Write-Warning 'Generated storage maintenance could not finish. Installer diagnostics were retained.' }

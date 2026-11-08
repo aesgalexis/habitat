@@ -1,129 +1,108 @@
-param([switch]$SkipBuild, [switch]$NoRestore, [switch]$SkipUi)
+param(
+    [switch]$SkipBuild,
+    [switch]$NoRestore,
+    [switch]$SkipUi,
+    [ValidateSet('Full', 'Docs', 'Extensions')][string]$CheckProfile = 'Full',
+    [ValidateRange(1, 1800)][int]$TimeoutSeconds = 360,
+    [ValidateRange(1, 900)][int]$SuiteTimeoutSeconds = 120
+)
 $ErrorActionPreference = 'Stop'
 $verifyRoot = Split-Path -Parent $PSScriptRoot
 $env:DOTNET_CLI_HOME = Join-Path $verifyRoot '.dotnet-local'
 $env:NUGET_PACKAGES = Join-Path $verifyRoot '.nuget\packages'
 $verifyArtifacts = Join-Path $verifyRoot 'artifacts'
 $verifyOutput = Join-Path $verifyArtifacts ('verification/run-' + [guid]::NewGuid().ToString('N'))
+$verifyLogs = Join-Path $verifyOutput 'logs'
 $verifyWatch = [Diagnostics.Stopwatch]::StartNew()
 $previousVerifier = $env:HABITAT_RELEASE_VERIFIER
+Import-Module (Join-Path $PSScriptRoot 'Habitat.Process.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'Habitat.Storage.psm1') -Force
-[IO.Directory]::CreateDirectory($verifyArtifacts) | Out-Null
+$null = [IO.Directory]::CreateDirectory($verifyArtifacts)
 $verificationOperation = [Habitat.Storage.GeneratedStorage]::BeginOperation($verifyArtifacts, @($verifyOutput))
-Push-Location $verifyRoot
-try {
-    node tests/docs.checks.cjs
-    if ($LASTEXITCODE -ne 0) { throw 'Documentation checker regression cases failed.' }
-    node scripts/check-docs.cjs
-    if ($LASTEXITCODE -ne 0) { throw 'Documentation links failed.' }
-    & (Join-Path $verifyRoot 'tests/build.checks.ps1') -TestDirectory (Join-Path $verifyOutput 'build-regression')
-    foreach ($script in Get-ChildItem -LiteralPath (Join-Path $verifyRoot 'extension') -Filter '*.js') {
-        node --check $script.FullName
-        if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax check failed: $($script.Name)" }
+$windowsPowerShell = Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe'
+
+function Invoke-Phase([string]$Name, [string]$Program, [string[]]$Arguments, [int]$Limit = $SuiteTimeoutSeconds) {
+    if ($verifyWatch.Elapsed.TotalSeconds -ge $TimeoutSeconds) { throw "Verification budget exhausted before $Name." }
+    $process = Start-HabitatProcess -Name $Name -FilePath $Program -Arguments $Arguments -LogDirectory $verifyLogs -TimeoutSeconds $Limit
+    Wait-HabitatProcesses -Checks @($process) -Budget $verifyWatch -BudgetSeconds $TimeoutSeconds
+}
+function Invoke-ScriptPhase([string]$Name, [string]$Path, [string[]]$Parameters = @(), [int]$Limit = $SuiteTimeoutSeconds) {
+    $commandLine = @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $verifyRoot $Path)) + $Parameters
+    Invoke-Phase $Name $windowsPowerShell $commandLine $Limit
+}
+function Invoke-DocumentationChecks {
+    Invoke-Phase 'docs-regressions' 'node' @('tests/docs.checks.cjs', (Join-Path $verifyOutput 'docs-regression'))
+    Invoke-Phase 'docs-links' 'node' @('scripts/check-docs.cjs')
+}
+function Invoke-ExtensionChecks {
+    $scripts = @(Get-ChildItem -LiteralPath (Join-Path $verifyRoot 'extension') -Filter '*.js' | ForEach-Object FullName)
+    $scripts += @('vscode-extension/extension.js', 'vscode-extension/terminal-runs.js')
+    foreach ($script in $scripts) {
+        Invoke-Phase ('syntax-' + [IO.Path]::GetFileNameWithoutExtension($script)) 'node' @('--check', $script)
     }
-    node -e "JSON.parse(require('fs').readFileSync('extension/manifest.json', 'utf8'))"
-    if ($LASTEXITCODE -ne 0) { throw 'Invalid extension manifest.' }
-    node tests/extension-background.checks.cjs
-    if ($LASTEXITCODE -ne 0) { throw 'Extension checks failed.' }
-    node tests/extension-consent.checks.cjs
-    if ($LASTEXITCODE -ne 0) { throw 'Extension consent checks failed.' }
-    node tests/extension-translation.checks.cjs
-    if ($LASTEXITCODE -ne 0) { throw 'Translation extension checks failed.' }
-    node --check vscode-extension/extension.js
-    if ($LASTEXITCODE -ne 0) { throw 'VS Code extension syntax check failed.' }
-    node --check vscode-extension/terminal-runs.js
-    if ($LASTEXITCODE -ne 0) { throw 'VS Code terminal tracking syntax check failed.' }
-    node tests/vscode-extension.checks.cjs
-    if ($LASTEXITCODE -ne 0) { throw 'VS Code extension checks failed.' }
-    node tests/extension-search.checks.cjs
-    if ($LASTEXITCODE -ne 0) { throw 'Search extension checks failed.' }
-    node tests/extension-youtube.checks.cjs
-    if ($LASTEXITCODE -ne 0) { throw 'YouTube extension checks failed.' }
-    node tests/localization.checks.cjs
-    if ($LASTEXITCODE -ne 0) { throw 'Interface localization checks failed.' }
-    node tests/extension-facebook.checks.cjs
-    if ($LASTEXITCODE -ne 0) { throw 'Facebook extension checks failed.' }
-    node tests/extension-browser-contacts.checks.cjs
-    if ($LASTEXITCODE -ne 0) { throw 'Automatic browser contact checks failed.' }
-    node tests/extension-facebook-messaging.checks.cjs
-    if ($LASTEXITCODE -ne 0) { throw 'Facebook messaging checks failed.' }
+    Invoke-Phase 'extension-manifest' 'node' @('-e', "JSON.parse(require('fs').readFileSync('extension/manifest.json', 'utf8'))")
+    foreach ($suite in 'extension-background', 'extension-consent', 'extension-translation', 'vscode-extension', 'extension-search',
+        'extension-youtube', 'localization', 'extension-facebook', 'extension-browser-contacts', 'extension-facebook-messaging') {
+        Invoke-Phase $suite 'node' @("tests/$suite.checks.cjs")
+    }
+}
+function Invoke-FullChecks {
+    Invoke-DocumentationChecks
+    Invoke-ScriptPhase 'process-budget' 'tests/process-budget.checks.ps1' @('-TestDirectory', (Join-Path $verifyOutput 'process-budget'))
+    Invoke-ScriptPhase 'release-retirement' 'tests/release-retirement.checks.ps1' @('-TestDirectory', (Join-Path $verifyOutput 'release-retirement'))
+    Invoke-ScriptPhase 'build-regression' 'tests/build.checks.ps1' @('-TestDirectory', (Join-Path $verifyOutput 'build-regression'))
+    Invoke-ExtensionChecks
+
     $checksSolution = 'tests/Habitat.Checks.slnf'
     $solution = if ($SkipBuild) { $checksSolution } else { 'Habitat.sln' }
-    $buildArgs = @($solution, '--configuration', 'Release', '-p:Platform=x64', '-p:HabitatUiChecks=false',
+    $buildArgs = @('build', $solution, '--configuration', 'Release', '-p:Platform=x64', '-p:HabitatUiChecks=false',
         "-p:BaseOutputPath=$verifyOutput/build/")
     if ($NoRestore) { $buildArgs += '--no-restore' }
-    $phaseWatch = [Diagnostics.Stopwatch]::StartNew()
-    dotnet build @buildArgs
-    if ($LASTEXITCODE -ne 0) { throw 'Release build failed.' }
-    Write-Host ('.NET build completed in {0:N1}s.' -f $phaseWatch.Elapsed.TotalSeconds)
+    Invoke-Phase 'dotnet-build' 'dotnet' $buildArgs 210
 
     $releaseBin = Join-Path $verifyOutput 'build/Release'
-    $dotnetLogs = (New-Item -ItemType Directory -Path (Join-Path $verifyOutput 'dotnet-logs')).FullName
     $projects = (Get-Content -LiteralPath $checksSolution -Raw | ConvertFrom-Json).solution.projects
     $checkProcesses = @()
-    $failedChecks = @()
-    $phaseWatch.Restart()
     try {
         foreach ($project in $projects) {
             $name = [IO.Path]::GetFileNameWithoutExtension($project)
             if (-not $name.EndsWith('.Checks')) { continue }
             $executable = @(Get-ChildItem -LiteralPath $releaseBin -Filter "$name.exe" -File -Recurse)
             if ($executable.Count -ne 1) { throw "Expected one compiled executable for $name." }
-            $startInfo = [Diagnostics.ProcessStartInfo]::new($executable[0].FullName)
-            $startInfo.WorkingDirectory = $verifyRoot
-            $startInfo.UseShellExecute = $false
-            $startInfo.CreateNoWindow = $true
-            $startInfo.RedirectStandardOutput = $true
-            $startInfo.RedirectStandardError = $true
-            $process = [Diagnostics.Process]::Start($startInfo)
-            $checkProcesses += [PSCustomObject]@{
-                Name = $name
-                Process = $process
-                Output = $process.StandardOutput.ReadToEndAsync()
-                Error = $process.StandardError.ReadToEndAsync()
-            }
+            $checkProcesses += Start-HabitatProcess -Name $name -FilePath $executable[0].FullName -LogDirectory $verifyLogs -TimeoutSeconds $SuiteTimeoutSeconds
         }
-        foreach ($check in $checkProcesses) {
-            $check.Process.WaitForExit()
-            $stdout = $check.Output.GetAwaiter().GetResult()
-            $stderr = $check.Error.GetAwaiter().GetResult()
-            [IO.File]::WriteAllText((Join-Path $dotnetLogs ($check.Name + '.log')), $stdout + $stderr)
-            Write-Host $check.Name
-            if ($stdout) { Write-Host $stdout.TrimEnd() }
-            if ($stderr) { Write-Host $stderr.TrimEnd() }
-            if ($check.Process.ExitCode -ne 0) { $failedChecks += $check.Name }
-        }
-    } finally {
-        foreach ($check in $checkProcesses) {
-            if (-not $check.Process.HasExited) { $check.Process.Kill() }
-            $check.Process.Dispose()
-        }
+    } catch {
+        foreach ($check in $checkProcesses) { Close-HabitatProcess $check }
+        throw
     }
-    if ($failedChecks) { throw ('.NET checks failed: ' + ($failedChecks -join ', ')) }
-    Write-Host ('.NET checks completed in {0:N1}s.' -f $phaseWatch.Elapsed.TotalSeconds)
+    Wait-HabitatProcesses -Checks $checkProcesses -Budget $verifyWatch -BudgetSeconds $TimeoutSeconds
 
     $env:HABITAT_RELEASE_VERIFIER = Join-Path $releaseBin 'net10.0/Habitat.Release.Verify.dll'
-    & (Join-Path $verifyRoot 'tests/payload.checks.ps1') -ChecksAssembly (Join-Path $releaseBin 'net10.0/Habitat.Core.Checks.dll') `
-        -TestDirectory (Join-Path $verifyOutput 'payload')
-    & (Join-Path $verifyRoot 'tests\release.checks.ps1')
-    & (Join-Path $verifyRoot 'tests\storage.checks.ps1')
-    & (Join-Path $verifyRoot 'tests\update.checks.ps1')
-    & (Join-Path $verifyRoot 'tests\packaging.checks.ps1')
-    & (Join-Path $verifyRoot 'tests\signing-preparation.checks.ps1')
-    $chromeOutput = Join-Path $verifyOutput ('chrome-' + [guid]::NewGuid().ToString('N'))
-    & (Join-Path $verifyRoot 'scripts\package-chrome-extension.ps1') -OutputDirectory $chromeOutput
-    $chromeZip = Get-ChildItem -LiteralPath $chromeOutput -Filter '*.zip' | Select-Object -First 1
-    & (Join-Path $verifyRoot 'tests\chrome-package.checks.ps1') -PackagePath $chromeZip.FullName
-    & (Join-Path $verifyRoot 'tests\package.checks.ps1')
-    if (-not $SkipUi) {
-        & (Join-Path $verifyRoot 'scripts/check-tasks-ui.ps1') -OutputDirectory (Join-Path $verifyOutput 'ui') -TimeoutSeconds 600
+    Invoke-ScriptPhase 'payload' 'tests/payload.checks.ps1' @('-ChecksAssembly', (Join-Path $releaseBin 'net10.0/Habitat.Core.Checks.dll'),
+        '-TestDirectory', (Join-Path $verifyOutput 'payload'))
+    foreach ($suite in 'release', 'storage', 'update', 'packaging', 'signing-preparation') {
+        Invoke-ScriptPhase $suite "tests/$suite.checks.ps1"
     }
-    git diff --check
-    if ($LASTEXITCODE -ne 0) { throw 'Whitespace checks failed.' }
-    if ($SkipUi) { Write-Host 'Non-UI checks passed. Native UI verification was explicitly skipped.' }
-    else { Write-Host 'All HABITAT checks passed, including native UI. Production binaries and user data were not used.' }
+    $chromeOutput = Join-Path $verifyOutput 'chrome'
+    Invoke-ScriptPhase 'package-chrome' 'scripts/package-chrome-extension.ps1' @('-OutputDirectory', $chromeOutput)
+    $chromeZip = Get-ChildItem -LiteralPath $chromeOutput -Filter '*.zip' | Select-Object -First 1
+    Invoke-ScriptPhase 'chrome-package' 'tests/chrome-package.checks.ps1' @('-PackagePath', $chromeZip.FullName)
+    Invoke-ScriptPhase 'package' 'tests/package.checks.ps1'
+    if (-not $SkipUi) {
+        Invoke-ScriptPhase 'native-ui' 'scripts/check-tasks-ui.ps1' @('-OutputDirectory', (Join-Path $verifyOutput 'ui'), '-TimeoutSeconds', '180') 240
+    }
+}
+
+Push-Location $verifyRoot
+try {
+    switch ($CheckProfile) {
+        'Docs' { Invoke-DocumentationChecks }
+        'Extensions' { Invoke-DocumentationChecks; Invoke-ExtensionChecks }
+        'Full' { Invoke-FullChecks }
+    }
+    Invoke-Phase 'whitespace' 'git' @('diff', '--check')
     Complete-HabitatGeneratedOutput $verifyArtifacts $verifyOutput 'test'
-    Write-Host ('Verification completed in {0:N1}s.' -f $verifyWatch.Elapsed.TotalSeconds)
+    Write-Host ('{0} verification completed in {1:N1}s.' -f $CheckProfile, $verifyWatch.Elapsed.TotalSeconds)
 } finally {
     $env:HABITAT_RELEASE_VERIFIER = $previousVerifier
     $verificationOperation.Dispose()

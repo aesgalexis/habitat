@@ -4,7 +4,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { checkFile, checkRepository } = require('../scripts/check-docs.cjs');
 
-const output = path.join(__dirname, '../artifacts/documentation-checks');
+const artifacts = path.resolve(__dirname, '../artifacts');
+const output = path.resolve(process.argv[2] ?? path.join(artifacts, 'documentation-checks'));
+if (!output.startsWith(artifacts + path.sep)) throw new Error('Documentation fixtures must stay inside artifacts.');
 fs.mkdirSync(output, { recursive: true });
 const root = fs.mkdtempSync(path.join(output, 'fixture-'));
 fs.writeFileSync(path.join(root, 'Guide with spaces.md'), '# Guía útil\n\n## Repeated\n\n## Repeated\n');
@@ -33,4 +35,4 @@ assert.deepEqual(check('\uFEFF# First heading\n\n[first](#first-heading)'), []);
 fs.mkdirSync(path.join(root, 'docs'));
 fs.writeFileSync(path.join(root, 'docs', 'nested.md'), '[missing](missing.cs)');
 assert.ok(checkRepository(root).errors.some(error => /docs\/nested.md:1: missing target/.test(error)));
-console.log('Documentation checker regression cases passed. Fixtures remain under artifacts/documentation-checks.');
+console.log('Documentation checker regression cases passed.');

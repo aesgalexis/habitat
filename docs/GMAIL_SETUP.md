@@ -12,7 +12,7 @@ La autorización se conserva en el **Administrador de credenciales de Windows**,
 
 Las instalaciones anteriores migran automáticamente su archivo DPAPI de cuenta cuando es accesible y todavía no existe la entrada de Windows. El archivo anterior permanece cifrado como compatibilidad; después de migrar, el almacén de Windows es el principal, incluso si el archivo desaparece. Un error de acceso se presenta como **Saved account unavailable**, con opción de reintentar.
 
-`gmail-startup.log`, en la carpeta local de HABITAT y junto al ejecutable, registra el proceso, la compilación, el tipo de almacén, si el cliente y la sesión se cargaron y si se obtuvo la lista del buzón. No contiene tokens, direcciones de correo ni mensajes.
+`gmail-startup.log`, en la carpeta local de HABITAT, registra el proceso, la compilación, el tipo de almacén y el estado de la carga del cliente, la sesión y la lista del buzón.
 
 Con una sesión cargada, **Setup…** muestra el estado conectado, sin volver a pedir importación de JSON ni inicio de sesión. Para cambiar de cuenta o cliente, usa **Disconnect** primero. El registro `gmail-startup.log` se actualiza también si cambia el estado de sesión o aparece un error; solo incluye banderas y el tipo de error, sin contenido de correos ni credenciales.
 

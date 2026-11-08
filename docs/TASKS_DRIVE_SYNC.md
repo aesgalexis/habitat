@@ -19,6 +19,8 @@ Solo se crea el archivo de un módulo al sincronizarlo. Las revisiones permanece
 
 Las tareas se guardan primero en este PC. Las altas locales solicitan sincronización tras unos dos segundos; mientras HABITAT permanece abierto consulta cambios aproximadamente cada treinta segundos. Los fallos temporales se reintentan con espera creciente, hasta cinco minutos. Cerrar la aplicación detiene esa actividad. Desactivar un módulo conserva sus archivos locales y su base para reanudarlo. **Disconnect Google Drive** desconecta ambos módulos en ese PC sin borrar sus datos.
 
+El historial del disco utiliza la [compactación local](STORAGE.md#respaldos-y-diagnósticos-del-perfil). La compactación futura en Drive requiere un punto de recuperación verificable que los equipos antiguos puedan reconocer. Antes de retirar cualquier revisión remota se debe probar que un equipo desconectado puede reanudar desde su base anterior y que una interrupción durante la transición conserva la cadena válida.
+
 ## Cambios simultáneos y recuperación
 
 Cada tarea conserva su ID, texto original, estado y fecha de creación. Completar y reabrir se propagan entre equipos. Los cambios en tareas distintas y en campos compatibles se combinan. El mismo texto con IDs distintos sigue siendo dos tareas. La ausencia de una tarea en una copia no la elimina: esta versión no incorpora borrado físico.

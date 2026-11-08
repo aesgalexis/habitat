@@ -85,19 +85,28 @@ Configura el JSON del cliente de escritorio destinado a distribución como secre
 
 ## Preparar y publicar
 
-La [política de almacenamiento](STORAGE.md) retira outputs generados verificados después de siete días. Los scripts registran sus operaciones y carpetas de trabajo; los ZIP/EXE finales y las cachés para compilación offline se conservan. No borres manualmente releases o stages durante una operación.
+La [política de almacenamiento](STORAGE.md) retira las salidas de trabajo verificadas al finalizar. Las cachés se reutilizan entre compilaciones. Los entregables locales se retiran tras comprobar su publicación.
 
 El flujo de **Update**, sus plazos y la recuperación de cada formato se describen en [Actualizaciones desde HABITAT](UPDATES.md).
 
 1. Revisa los cambios y actualiza `VERSION`, `CHANGELOG.md`, las instrucciones de instalación del README y las versiones de las extensiones que cambien. Guarda en Git el código y las pruebas sintéticas.
 2. Integra el commit en `main` y crea la etiqueta anotada `v<version>` sobre ese commit. Si ambos están pendientes de subir, usa `git push --atomic origin main refs/tags/v<version>`. Si el commit ya está en GitHub, sube solo la etiqueta.
-3. Sigue la ejecución **Publish HABITAT** hasta que GitHub adjunte el EXE, el ZIP y sus SHA-256. Mientras genera y prueba los paquetes, el workflow busca la verificación del mismo commit en `main`. Reutiliza la ejecución si pasa. Si no encuentra una ejecución utilizable, verifica la etiqueta. Un resultado fallido bloquea la publicación.
+3. Sigue la ejecución **Publish HABITAT** hasta que GitHub adjunte el EXE, el ZIP y sus SHA-256. Mientras genera y prueba los paquetes, el workflow busca la verificación del mismo commit en `main`. Reutiliza la ejecución si pasa. Si no encuentra una ejecución utilizable, verifica la etiqueta. Un resultado fallido o una ejecución que excede el presupuesto bloquea la publicación.
+4. Revisa el resumen de entrega. La última fase compara el commit etiquetado, el tamaño y el SHA-256 de los cuatro archivos con GitHub antes de retirar las copias locales. La subida y las fases de compilación, verificación y empaquetado registran su duración.
 
 Puedes usar `scripts\verify.ps1` para ejecutar la verificación local completa durante el desarrollo. Para diagnosticar la distribución en una cuenta de pruebas sin instalación EXE previa, `scripts\build-release-assets.ps1 -DriveClientPath <archivo>` construye ambos formatos y prueba sus instalaciones.
 
 Los binarios se guardan como **assets de GitHub Releases del repositorio**, no en el historial de Git. El código del instalador, la receta de compilación y el criterio de versiones sí están versionados. El código fuente de cada versión queda fijado por su etiqueta. `release.json` identifica el commit fuente y las versiones de las extensiones; `build-manifest.json` verifica tamaño y SHA-256 de todos los archivos de la aplicación antes de activar una publicación.
 
 Los checks de CI validan lógica y distribución con datos sintéticos. Las pruebas reales de proveedores web, portapapeles o envío de mensajes son optativas y no forman parte de la publicación automatizada.
+
+## Cerrar una publicación local
+
+[complete-release.ps1](../scripts/complete-release.ps1) consulta la publicación y muestra los archivos elegibles. Añade `-Apply` para retirar las copias que coincidan. Con `-Worktree` se puede cerrar además una copia registrada bajo `artifacts/release-checkouts` si está en el commit publicado y solo contiene código versionado, el bloqueo vacío o enlaces reconocidos a la caché. Si hay cambios locales, archivos ignorados sin clasificar o diferencias de hash, el resumen indica qué se conserva.
+
+```powershell
+./scripts/complete-release.ps1 -Tag v0.20.0 -Repository aesgalexis/habitat
+```
 
 ## Payload común para ZIP y EXE
 

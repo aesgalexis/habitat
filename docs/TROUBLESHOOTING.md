@@ -44,7 +44,7 @@ No borres credenciales ni revocas accesos como primer paso de diagnóstico. Cons
 
 Reintenta desde **HABITAT menu → Update…**. Una descarga cancelada o fallida deja HABITAT abierto. Un fallo después del cierre intenta reabrir la instalación existente. Para instalar manualmente, descarga el paquete oficial, verifica su hash y conserva el formato EXE o ZIP de tu instalación.
 
-Los diagnósticos están bajo `%LOCALAPPDATA%\HABITAT\updates`: `operations.log`, `last-result.json` y la carpeta `update-<id>` correspondiente. Revisa el contenido antes de compartirlo. Consulta [UPDATES.md](UPDATES.md) para las garantías y límites de recuperación; el EXE y el ZIP no ofrecen la misma recuperación transaccional. No borres selectores o versiones anteriores para forzar una actualización.
+En `%LOCALAPPDATA%\HABITAT` está `operations.log`. El último resultado queda en `updates\last-result.json` y los registros recientes en `updates\diagnostics`. Una instalación fallida puede conservar su carpeta `update-<id>` para diagnóstico. Revisa los archivos antes de compartirlos y consulta [UPDATES.md](UPDATES.md) para recuperar cada formato.
 
 ## Ctrl+H no captura una selección
 

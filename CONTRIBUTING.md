@@ -4,7 +4,7 @@ Esta guía describe el flujo de desarrollo. Las reglas del repositorio están en
 
 ## Entorno y primera compilación
 
-Trabaja desde la raíz del clon en Windows x64. Necesitas el SDK .NET 10 para compilar y Node.js para las comprobaciones JavaScript; CI utiliza Node.js 24. NuGet restaura las dependencias .NET. Inno Setup solo es necesario para generar el EXE de distribución; consulta [RELEASING.md](docs/RELEASING.md).
+Trabaja desde la raíz del clon en Windows x64 con el SDK fijado en [global.json](global.json). CI lee ese mismo archivo y reutiliza la caché NuGet del repositorio. Necesitas Node.js para las comprobaciones JavaScript. CI utiliza Node.js 24. Inno Setup es necesario para generar el EXE de distribución. Consulta [RELEASING.md](docs/RELEASING.md).
 
 ```powershell
 dotnet restore Habitat.sln -p:Platform=x64
@@ -26,7 +26,7 @@ node scripts/check-docs.cjs
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify.ps1
 ```
 
-El primer comando solo comprueba documentación. El segundo ejecuta la verificación compartida y compila la solución. Consulta [CHECKS.md](docs/CHECKS.md) para seleccionar comprobaciones adicionales y conocer sus efectos.
+Usa el primer comando para enlaces de documentación. El segundo ejecuta la verificación completa. Para cambios acotados, elige el perfil de documentación o extensiones descrito en [CHECKS.md](docs/CHECKS.md).
 
 Mantén los datos de prueba bajo `artifacts`, especialmente las tareas. No utilices cuentas, conversaciones ni credenciales reales en pruebas ordinarias. Comprueba la interfaz en inglés, accesibilidad, conservación de borradores y estructura inicial común cuando cambies un destino.
 
