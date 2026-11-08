@@ -91,7 +91,7 @@ La verificación completa ejecuta comprobaciones automatizadas y una compilació
 - [Índice de documentación](docs/README.md) con las guías de instalación, integraciones, privacidad y desarrollo.
 - [Comunicar un problema](https://github.com/aesgalexis/habitat/issues) indicando la versión instalada y el estado de las conexiones relevantes.
 
-El código fuente declara la versión **0.20.0**. Los paquetes publicados y sus versiones se consultan en [GitHub Releases](https://github.com/aesgalexis/habitat/releases).
+El código fuente declara la versión **0.20.1**. Los paquetes publicados y sus versiones se consultan en [GitHub Releases](https://github.com/aesgalexis/habitat/releases).
 
 ## Licencia
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.20.1 — 2026-11-08
+
+- Un fallo al leer las preferencias suspende el guardado automático. **Preferences…** permite reintentar la lectura, restaurar la copia anterior o restablecer los ajustes conservando el archivo dañado.
+- Los respaldos locales de Tasks y Contacts compactan las revisiones antiguas en lotes verificados. Cada revisión conserva sus bytes originales y las copias recientes siguen disponibles como JSON. [Respaldos y diagnósticos](docs/STORAGE.md#respaldos-y-diagnósticos-del-perfil).
+- Las previsualizaciones de Gmail y Tasks programan sus propios plazos. Google Drive inicia trabajo cuando vence la sincronización de un módulo. Los diagnósticos tienen rotación y límites de espacio.
+- La verificación tiene perfiles por tipo de cambio, límites de espera y registros de fallos. El SDK y las dependencias de WinUI quedan fijados. La publicación reutiliza la verificación del mismo commit y comprueba los hashes entregados antes de retirar sus copias de trabajo.
+
 ## 0.20.0 — 2026-11-07
 
 - Tasks incorpora sincronización opcional con Google Drive: altas, completar y reabrir, combinación por ID y campo, revisión por tarea y conservación de cambios locales durante la red. Empieza desactivada y comparte la autorización de Contacts.
