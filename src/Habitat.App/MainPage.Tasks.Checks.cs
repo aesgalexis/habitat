@@ -316,35 +316,35 @@ public sealed partial class MainPage
             _tasks = [new(Guid.NewGuid(), "First pending", false, DateTimeOffset.UtcNow),
                 new(Guid.NewGuid(), "Completed excluded", true, DateTimeOffset.UtcNow),
                 new(Guid.NewGuid(), "Second pending", false, DateTimeOffset.UtcNow)];
-            _taskPreviewIndex = 0;
-            _taskWidgetHovered = _taskWidgetFocused = false;
+            _taskPreview.Index = 0;
+            _taskPreview.Hovered = _taskPreview.Focused = false;
             RenderTasks();
-            var due = _nextTaskRotation;
-            TickTasks(due.AddMilliseconds(-1));
-            if (TasksSummary.Text != "First pending") throw new InvalidOperationException("Tasks rotated too early.");
-            TickTasks(due);
-            if (TasksSummary.Text != "Second pending" || _nextTaskRotation != due.AddSeconds(8))
+            var due = _taskPreview.NextRotation;
+            _taskPreview.Advance(due.AddMilliseconds(-1));
+            if (_taskPreview.Summary.Text != "First pending") throw new InvalidOperationException("Tasks rotated too early.");
+            _taskPreview.Advance(due);
+            if (_taskPreview.Summary.Text != "Second pending" || _taskPreview.NextRotation != due.AddSeconds(8))
                 throw new InvalidOperationException("Tasks did not rotate after 8 seconds.");
-            TickTasks(due.AddSeconds(8));
-            if (TasksSummary.Text != "First pending") throw new InvalidOperationException("Task rotation did not wrap.");
-            _tasksPanelOpen = true;
-            TickTasks(due.AddSeconds(16));
-            _tasksPanelOpen = false;
-            _taskWidgetHovered = true;
-            TickTasks(due.AddSeconds(16));
-            _taskWidgetHovered = false;
-            _taskWidgetFocused = true;
-            TickTasks(due.AddSeconds(16));
-            _taskWidgetFocused = false;
-            if (TasksSummary.Text != "First pending") throw new InvalidOperationException("Task rotation did not pause.");
+            _taskPreview.Advance(due.AddSeconds(8));
+            if (_taskPreview.Summary.Text != "First pending") throw new InvalidOperationException("Task rotation did not wrap.");
+            _taskPreview.SetOpen(true);
+            _taskPreview.Advance(due.AddSeconds(16));
+            _taskPreview.SetOpen(false);
+            _taskPreview.Hovered = true;
+            _taskPreview.Advance(due.AddSeconds(16));
+            _taskPreview.Hovered = false;
+            _taskPreview.Focused = true;
+            _taskPreview.Advance(due.AddSeconds(16));
+            _taskPreview.Focused = false;
+            if (_taskPreview.Summary.Text != "First pending") throw new InvalidOperationException("Task rotation did not pause.");
             _tasks.RemoveAt(2);
             RenderTasks();
-            TickTasks(_nextTaskRotation);
-            if (TasksSummary.Text != "First pending") throw new InvalidOperationException("Single pending task rotated.");
+            _taskPreview.Advance(_taskPreview.NextRotation);
+            if (_taskPreview.Summary.Text != "First pending") throw new InvalidOperationException("Single pending task rotated.");
             _tasks.Clear();
             RenderTasks();
-            TickTasks(_nextTaskRotation);
-            if (TasksSummary.Text != "No pending tasks") throw new InvalidOperationException("Empty task preview failed.");
+            _taskPreview.Advance(_taskPreview.NextRotation);
+            if (_taskPreview.Summary.Text != "No pending tasks") throw new InvalidOperationException("Empty task preview failed.");
             File.AppendAllText(path, "PASS: 8-second task rotation, wrap, completed exclusion, pauses and empty list\n");
             // The app injects an isolated store for this check. Exercise actual
             // save and completion actions without ever accessing user tasks.
@@ -397,7 +397,7 @@ public sealed partial class MainPage
                 throw new InvalidOperationException("Sidebar order or equal widget widths failed.");
             File.AppendAllText(path, "PASS: Weather above Gmail above Tasks with equal widths in the expanded sidebar\n");
             CheckWeatherSidebar();
-            var taskGlyph = (Microsoft.UI.Xaml.Controls.FontIcon)TasksSymbol.Children[0];
+            var taskGlyph = (Microsoft.UI.Xaml.Controls.FontIcon)_taskPreview.Symbol.Children[0];
             var mailGlyph = (Microsoft.UI.Xaml.Controls.FontIcon)((Microsoft.UI.Xaml.Controls.StackPanel)GmailButton.Content).Children[0];
             var expandedTaskPosition = taskGlyph.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point());
             var expandedMailPosition = mailGlyph.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point());
@@ -435,8 +435,8 @@ public sealed partial class MainPage
             toggleInvoke.Invoke();
             await Task.Delay(200);
             if (!_sidebarExpanded || _widgets.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point()).X != sidebarLeft ||
-                TasksButton.ActualWidth != GmailWidget.ActualWidth || TasksSummary.TextAlignment != Microsoft.UI.Xaml.TextAlignment.Left ||
-                GmailWidgetSubject.TextAlignment != Microsoft.UI.Xaml.TextAlignment.Left)
+                TasksButton.ActualWidth != GmailWidget.ActualWidth || _taskPreview.Summary.TextAlignment != Microsoft.UI.Xaml.TextAlignment.Left ||
+                _gmailPreview.Subject.TextAlignment != Microsoft.UI.Xaml.TextAlignment.Left)
                 throw new InvalidOperationException("Manual expansion moved the left edge or changed the original widget text alignment.");
             UpdateWritingLayout();
             await Task.Delay(100);

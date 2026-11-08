@@ -12,6 +12,15 @@ internal static class UpdateDiagnosticsChecks
         check(redacted.Contains("Get-FileHash") && !redacted.Contains("SyntheticPrivate") && !redacted.Contains("TOP_SECRET") &&
             !redacted.Contains("synthetic@example") && !redacted.Contains("example.invalid") && !redacted.Contains("sensitive") && !redacted.Contains("phrase"),
             "Updater diagnostics redact paths, email addresses, URLs and credential values while retaining useful command names.");
+        var boundedPath = Path.Combine(root, "diagnostics-budget", "operations.log");
+        var bounded = new BoundedDiagnosticLog(boundedPath, 128);
+        bounded.Append("One repeated error", "same-error");
+        for (var index = 0; index < 200; index++) bounded.Append("One repeated error", "same-error");
+        check(File.ReadAllLines(boundedPath).Length == 1, "A burst of identical diagnostics is recorded once.");
+        for (var index = 0; index < 20; index++) bounded.Append("Different operation " + index);
+        check(File.ReadAllText(boundedPath).Contains("Different operation 19") &&
+            new FileInfo(boundedPath).Length <= 128 && new FileInfo(boundedPath + ".previous").Length <= 128,
+            "Diagnostic rotation keeps the latest event and at most one bounded predecessor.");
         var cache = Path.Combine(root, "preparation diagnostics");
         using (var http = new HttpClient(new Unavailable()))
         using (var client = new ReleaseUpdateClient(new(0, 16, 1), UpdatePackageKind.Zip, cache, http))

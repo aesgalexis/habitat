@@ -2,7 +2,7 @@ namespace Habitat.Services;
 
 internal static class AtomicFile
 {
-    public static void Write(string path, ReadOnlySpan<byte> bytes)
+    public static void Write(string path, ReadOnlySpan<byte> bytes, string? backupPath = null)
     {
         path = Path.GetFullPath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -14,7 +14,9 @@ internal static class AtomicFile
                 stream.Write(bytes);
                 stream.Flush(flushToDisk: true);
             }
-            if (File.Exists(path)) Replace(temporary, path);
+            if (backupPath is not null)
+                Replace(temporary, path, (source, target) => File.Replace(source, target, backupPath));
+            else if (File.Exists(path)) Replace(temporary, path);
             else File.Move(temporary, path);
         }
         finally

@@ -1,6 +1,7 @@
 using Habitat.Features.Contacts;
 using Habitat.Models;
 using Habitat.Services;
+using System.IO.Compression;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -103,6 +104,29 @@ Check(Directory.EnumerateFiles(path + ".history", "*.json").Count() == 2, "Every
 await Reject<InvalidOperationException>(() => new ContactStore(path).SaveAsync(reopened, reopened.Revision), "Stale sessions must not overwrite newer changes.");
 var afterConflict = await store.LoadAsync();
 Check(afterConflict.People.Length == 1 && afterConflict.Revision == 2, "A rejected stale save must preserve the committed merge.");
+var compactPath = Path.Combine(root, "compacted-contacts.json");
+var compactHistory = compactPath + ".history";
+Directory.CreateDirectory(compactHistory);
+var historyJson = new JsonSerializerOptions { WriteIndented = true };
+for (var revision = 1; revision <= 39; revision++)
+    File.WriteAllBytes(Path.Combine(compactHistory, $"{revision:D12}.json"),
+        JsonSerializer.SerializeToUtf8Bytes(book with { Revision = revision }, historyJson));
+File.Copy(Path.Combine(compactHistory, "000000000039.json"), compactPath);
+var compactStore = new ContactStore(compactPath);
+var compactSaved = await compactStore.SaveAsync(book, 39);
+Check(compactSaved.Revision == 40 && Directory.EnumerateFiles(compactHistory, "*.json").Count() == 8,
+    "Contacts compaction retains the newest eight plain recovery files.");
+using (var archive = ZipFile.OpenRead(Directory.EnumerateFiles(compactHistory, "history-*.zip").Single()))
+{
+    Check(archive.Entries.Count == 32, "All older contact revisions are accessible in the archive.");
+    archive.GetEntry("000000000001.json")!.ExtractToFile(compactPath, overwrite: true);
+}
+var archivedContact = await compactStore.LoadAsync();
+Check(archivedContact.Revision == 1 && archivedContact.People.Length == book.People.Length,
+    "An older address book can be restored with its saved data.");
+await Reject<InvalidDataException>(() => compactStore.SaveAsync(ContactBook.Empty, 1),
+    "A different revision cannot overwrite an archived contact backup.");
+Check((await compactStore.LoadAsync()).Revision == 1, "An archived revision conflict keeps the current contacts file.");
 var session = new ContactSession(new ContactStore(path));
 await session.LoadAsync();
 Check(session.Loaded && session.Error is null, "Session loads saved data.");

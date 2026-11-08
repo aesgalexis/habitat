@@ -8,6 +8,8 @@ internal sealed class TaskStore
 {
     private readonly string _path;
     private readonly bool _isolated;
+    private readonly BoundedDiagnosticLog _log;
+    private readonly RevisionHistory _history;
     private bool _loaded;
     private string? _fingerprint;
     private HashSet<Guid> _knownIds = [];
@@ -19,6 +21,8 @@ internal sealed class TaskStore
         var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var persistent = path is null ? AppDataPaths.DesktopLocalDirectory() : local;
         _path = Path.GetFullPath(path ?? Path.Combine(persistent, "HABITAT", "tasks.json"));
+        _log = new(_path + ".log");
+        _history = new(HistoryPath, "revision-*.json", IsRevision);
         // A packaged or sandboxed launch must not create another user list.
         // Explicit paths are reserved for isolated tests and recovery tools.
         _isolated = path is null && (AppDataPaths.HasPackageIdentity() || IsTemporaryProfile(local) ||
@@ -88,7 +92,11 @@ internal sealed class TaskStore
         }
         // Keep a verified copy even before the first change in this session.
         if (bytes is not null) Archive(bytes, force: RecoveredFromBackup);
-        if (bytes is not null) UpdateHistoryIndex(items, bytes);
+        if (bytes is not null)
+        {
+            CompactHistory();
+            UpdateHistoryIndex(items, bytes);
+        }
         Remember(items, bytes);
         LogLoad(items);
         return items;
@@ -120,6 +128,7 @@ internal sealed class TaskStore
         }
         finally { DeleteTemporary(prepared); }
         Remember(items, bytes);
+        CompactHistory();
         UpdateHistoryIndex(items, bytes);
     }
 
@@ -151,13 +160,21 @@ internal sealed class TaskStore
     }
 
     private bool HasHistory() => Directory.Exists(HistoryPath) &&
-        Directory.EnumerateFiles(HistoryPath, "revision-*.json").Any();
+        (Directory.EnumerateFiles(HistoryPath, "revision-*.json").Any() || _history.CatalogFiles().Any());
+
+    private static bool IsRevision(string name) => name.StartsWith("revision-", StringComparison.Ordinal) &&
+        name.EndsWith(".json", StringComparison.Ordinal) && name.Length > 79 && name[^70] == '-' &&
+        name.AsSpan(name.Length - 69, 64).IndexOfAnyExcept("0123456789abcdefABCDEF") < 0;
+
+    private void CompactHistory() => _history.Compact(error =>
+        _log.Append($"{DateTimeOffset.Now:O} Task history compaction: {error.GetType().Name} {error.HResult:X8}", "history compaction"));
 
     private string? Archive(byte[] bytes, bool force = false, bool pending = false)
     {
         Directory.CreateDirectory(HistoryPath);
         var digest = Fingerprint(bytes)!;
-        if (!force && Directory.EnumerateFiles(HistoryPath, $"revision-*-{digest}.json").Any()) return null;
+        if (!force && (_historyRevisions.Contains(digest) ||
+            Directory.EnumerateFiles(HistoryPath, $"revision-*-{digest}.json").Any())) return null;
         var destination = Path.Combine(HistoryPath, $"revision-{DateTimeOffset.UtcNow:yyyyMMddHHmmssfffffff}-{Guid.NewGuid():N}-{digest}.json" + (pending ? ".pending" : ""));
         var temporary = destination + ".tmp";
         try
@@ -174,7 +191,7 @@ internal sealed class TaskStore
         revisions = [];
         List<TaskItem> recovered = [];
         if (!Directory.Exists(HistoryPath)) return recovered;
-        var catalog = TaskHistoryIndex.Catalog(HistoryPath);
+        var catalog = TaskHistoryIndex.Catalog(_history);
         if (TaskHistoryIndex.TryRead(HistoryPath, catalog, out recovered, out revisions))
         {
             _historyItems = recovered;
@@ -182,14 +199,17 @@ internal sealed class TaskStore
             return recovered;
         }
         var ids = new HashSet<Guid>();
-        foreach (var backup in Directory.EnumerateFiles(HistoryPath, "revision-*.json").OrderDescending(StringComparer.Ordinal))
+        var verifiedNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (name, bytes) in _history.ReadNewestFirst(64 * 1024 * 1024))
         {
             try
             {
-                var bytes = File.ReadAllBytes(backup);
+                if (verifiedNames.Contains(name)) continue;
+                var fingerprint = Fingerprint(bytes)!;
+                if (!Path.GetFileNameWithoutExtension(name).EndsWith("-" + fingerprint, StringComparison.Ordinal)) continue;
                 var items = Parse(bytes);
-                if (!Path.GetFileNameWithoutExtension(backup).EndsWith("-" + Fingerprint(bytes), StringComparison.Ordinal)) continue;
-                revisions.Add(Fingerprint(bytes)!);
+                verifiedNames.Add(name);
+                revisions.Add(fingerprint);
                 foreach (var item in items)
                     if (ids.Add(item.Id)) recovered.Add(item);
             }
@@ -197,7 +217,7 @@ internal sealed class TaskStore
         }
         _historyItems = recovered;
         _historyRevisions = revisions;
-        if (catalog == TaskHistoryIndex.Catalog(HistoryPath)) TaskHistoryIndex.Write(HistoryPath, recovered, revisions);
+        if (catalog == TaskHistoryIndex.Catalog(_history)) TaskHistoryIndex.Write(HistoryPath, _history, recovered, revisions);
         return recovered;
     }
 
@@ -207,7 +227,7 @@ internal sealed class TaskStore
         _historyItems = [.. items, .. _historyItems.Where(item => ids.Add(item.Id))];
         var digest = Fingerprint(bytes)!;
         _historyRevisions = [digest, .. _historyRevisions.Where(revision => revision != digest)];
-        TaskHistoryIndex.Write(HistoryPath, _historyItems, _historyRevisions);
+        TaskHistoryIndex.Write(HistoryPath, _history, _historyItems, _historyRevisions);
     }
 
     private byte[] RestoreLatestBackup(byte[]? original, List<TaskItem> history, bool rolledBack)
@@ -233,12 +253,9 @@ internal sealed class TaskStore
 
     private void LogLoad(IReadOnlyList<TaskItem> items)
     {
-        try
-        {
-            File.AppendAllText(_path + ".log", $"{DateTimeOffset.Now:O} PID={Environment.ProcessId} Path={_path} Pending={items.Count(item => !item.IsCompleted)} Completed={items.Count(item => item.IsCompleted)} Recovered={RecoveredFromBackup}\n");
-        }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+        var completed = items.Count(item => item.IsCompleted);
+        var state = $"Pending={items.Count - completed} Completed={completed} Recovered={RecoveredFromBackup}";
+        _log.Append($"{DateTimeOffset.Now:O} PID={Environment.ProcessId} {state}", state);
     }
 
     private void WriteCurrent(byte[] bytes, bool exists)

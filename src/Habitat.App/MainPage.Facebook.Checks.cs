@@ -98,7 +98,7 @@ public sealed partial class MainPage
                     var widgetPosition = _widgets.TransformToVisual(this).TransformPoint(new());
                     var foreground = (Microsoft.UI.Xaml.Media.SolidColorBrush)FacebookIcon.Foreground;
                     var mailGlyph = (FontIcon)((StackPanel)GmailButton.Content).Children[0];
-                    var taskGlyph = (FontIcon)TasksSymbol.Children[0];
+                    var taskGlyph = (FontIcon)_taskPreview.Symbol.Children[0];
                     var facebookCenter = FacebookIcon.TransformToVisual(this).TransformPoint(new(FacebookIcon.ActualWidth / 2, FacebookIcon.ActualHeight / 2));
                     var mailCenter = mailGlyph.TransformToVisual(this).TransformPoint(new(mailGlyph.ActualWidth / 2, mailGlyph.ActualHeight / 2));
                     var taskCenter = taskGlyph.TransformToVisual(this).TransformPoint(new(taskGlyph.ActualWidth / 2, taskGlyph.ActualHeight / 2));

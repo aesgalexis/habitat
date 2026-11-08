@@ -33,6 +33,9 @@ public sealed partial class MainPage
     private async Task StopCoreAsync()
     {
         _timer.Stop();
+        _gmailPreview.Stop();
+        _taskPreview.Stop();
+        if (_services.DriveSync is { } drive) drive.Changed -= RefreshDriveTasks;
         _codexScheduleConfirmation.Hide();
         _composer.Stop();
         CancelEmptyYouTubeReset();

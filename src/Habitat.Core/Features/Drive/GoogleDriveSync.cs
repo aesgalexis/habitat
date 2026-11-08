@@ -93,6 +93,10 @@ internal sealed class GoogleDriveSync(GoogleDriveConnection connection, ContactD
     internal Task SyncNowAsync(CancellationToken token) => SynchronizeAsync(DateTimeOffset.UtcNow, true, false, token);
     internal Task TickAsync(DateTimeOffset now, bool skipContacts, CancellationToken token) => SynchronizeAsync(now, false, skipContacts, token);
 
+    internal bool IsDue(DateTimeOffset now, bool skipContacts) => !Busy && connection.Connected &&
+        (Settings.Contacts && !skipContacts && !contacts.NeedsAttention && now >= _nextContacts ||
+         Settings.Tasks && !tasks.NeedsAttention && now >= _nextTasks);
+
     private async Task SynchronizeAsync(DateTimeOffset now, bool force, bool skipContacts, CancellationToken token)
     {
         if (!connection.Connected || !await _running.WaitAsync(0, token)) return;

@@ -110,16 +110,12 @@ internal sealed class AppServices : IAsyncDisposable
         if (Bridge.IsStarted) Storage.StartAfterBridgeReady();
     }
 
+    private readonly BoundedDiagnosticLog _operationsLog;
+
     public void ReportError(string operation, Exception exception)
     {
-        try
-        {
-            Directory.CreateDirectory(Paths.LocalDirectory);
-            File.AppendAllText(Path.Combine(Paths.LocalDirectory, "operations.log"),
-                $"{DateTimeOffset.Now:O} {operation}: {exception.GetType().Name} {exception.HResult:X8}{Environment.NewLine}");
-        }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+        var key = $"{operation}: {exception.GetType().Name} {exception.HResult:X8}";
+        _operationsLog.Append($"{DateTimeOffset.Now:O} {typeof(AppServices).Assembly.GetName().Version} {key}", key);
     }
 
     private GmailClientConfiguration? ReadBundledDriveClient()
@@ -145,6 +141,7 @@ internal sealed class AppServices : IAsyncDisposable
         if (!paths.IsIsolated) throw new InvalidOperationException("UI checks require isolated infrastructure.");
 #endif
         Paths = paths;
+        _operationsLog = new(Path.Combine(paths.LocalDirectory, "operations.log"));
         Wallpapers = new WallpaperService(paths);
         GlobalHotkey = new GlobalHotkeyService(paths);
         Bridge = new BridgeService(paths.IsIsolated ? 0 : 8765, facebookTracePath: paths.FacebookMessageTracePath);

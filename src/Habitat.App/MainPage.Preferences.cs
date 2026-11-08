@@ -13,13 +13,13 @@ public sealed partial class MainPage
     private async Task ShowPreferencesAsync(string? category)
     {
         if (HasAppearanceOverlay || _operations.IsStopping) return;
+        if (!await RecoverPreferencesIfNeededAsync()) return;
         var contacts = CreateContactsPreferences();
         _contactsPreferences = contacts;
         await contacts.InitializeAsync();
         if (_newContact) { contacts.NewContact(); _newContact = false; }
         if (_contactToManage is { } personId) { contacts.SelectPerson(personId); _contactToManage = null; }
         var drive = _services.DriveSync is { } sync ? new GoogleDrivePreferencesView(sync, PickDriveClientAsync, _services.LaunchBrowser) : null;
-        if (drive is not null) drive.Changed += RefreshDriveTasks;
         var view = new PreferencesView(_preferences, _services.DiscoverWindowsAppsAsync,
             () => _services.PickWindowsAppAsync(_windowHost?.Handle ?? 0), _services.Wallpapers,
             () => _services.PickWallpapersAsync(_windowHost?.Handle ?? 0), contacts, drive, _services.Storage.RunAsync)
@@ -89,12 +89,10 @@ public sealed partial class MainPage
             await view.Storage.StopAsync();
             _contactsPreferences = null;
             await contacts.StopAsync();
-            if (drive is not null) { drive.Changed -= RefreshDriveTasks; await drive.StopAsync(); }
+            if (drive is not null) await drive.StopAsync();
             _appearanceDialogOpen = false; previewRevision++;
         }
 
-        var locationChanged = _preferences.WeatherCity != view.WeatherCity.Text.Trim() ||
-            _preferences.UseDeviceLocation != view.UseDeviceLocation.IsOn;
         var updatedPreferences = _preferences with
         {
             Theme = view.Theme.SelectedIndex switch { 1 => "night", 2 => "hybrid", _ => "day" },
@@ -121,8 +119,60 @@ public sealed partial class MainPage
             return;
         }
         view.Wallpaper.Complete(true, _preferences.Wallpaper);
+        ApplySavedPreferences(updatedPreferences);
+        FocusComposer();
+    }
+
+    private async Task<bool> RecoverPreferencesIfNeededAsync()
+    {
+        var path = _services.Paths.PreferencesPath;
+        var recovered = Preferences.Load(path);
+        if (_preferences.CanSave && recovered.CanSave) return true;
+        _appearanceDialogOpen = true;
+        try
+        {
+            while (!recovered.CanSave && !_operations.IsStopping)
+            {
+                var damaged = recovered.LoadState == PreferencesLoadState.Damaged;
+                var hasBackup = damaged && Preferences.HasBackup(path);
+                var action = hasBackup ? "RestoreSavedPreferences" : damaged ? "ResetPreferences" : "Retry";
+                var explanation = hasBackup ? "PreferencesBackupAvailable" :
+                    damaged ? "PreferencesBackupMissing" : "PreferencesTemporarilyUnavailable";
+                var dialog = new ContentDialog
+                {
+                    XamlRoot = XamlRoot,
+                    Title = UiText.Get("Preferences"),
+                    Content = new TextBlock { Text = UiText.Get(explanation), TextWrapping = TextWrapping.Wrap },
+                    PrimaryButtonText = UiText.Get(action),
+                    CloseButtonText = UiText.Get("Close"),
+                    DefaultButton = ContentDialogButton.Close
+                };
+                StyleDialog(dialog);
+                if (await ShowDialogAsync(dialog) != ContentDialogResult.Primary || _operations.IsStopping)
+                {
+                    FocusComposer();
+                    return false;
+                }
+
+                recovered = damaged
+                    ? Preferences.RecoverDamaged(path, hasBackup, exception => _services.ReportError("Recover preferences", exception))
+                    : Preferences.Load(path);
+            }
+        }
+        finally { _appearanceDialogOpen = false; }
+
+        if (_operations.IsStopping) return false;
+        ApplySavedPreferences(recovered);
+        await ApplyGlobalHotkeyAsync();
+        return !_operations.IsStopping;
+    }
+
+    private void ApplySavedPreferences(Preferences saved)
+    {
+        var locationChanged = _preferences.WeatherCity != saved.WeatherCity ||
+            _preferences.UseDeviceLocation != saved.UseDeviceLocation;
         var previousFacebookCardsLarge = FacebookCardsLarge;
-        _preferences = updatedPreferences;
+        _preferences = saved;
         ApplyFacebookCardSize(previousFacebookCardsLarge);
         _marketsSession.Configure(_preferences.Markets);
         ApplyInterfaceLanguage();
@@ -138,6 +188,5 @@ public sealed partial class MainPage
             _nextWeatherRefresh = DateTimeOffset.MinValue;
             PaintWeather();
         }
-        FocusComposer();
     }
 }

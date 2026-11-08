@@ -36,18 +36,11 @@ public sealed partial class MainPage
     private bool _taskAdding;
     private Task _initialTaskLoad = Task.CompletedTask;
     private bool _tasksPanelOpen;
-    private int _taskPreviewIndex;
-    private bool _taskWidgetHovered;
-    private bool _taskWidgetFocused;
-    private DateTimeOffset _nextTaskRotation = DateTimeOffset.MinValue;
-    private static readonly TimeSpan TaskRotationInterval = TimeSpan.FromSeconds(8);
-    private readonly Button TasksButton = new();
-    private readonly TextBlock TasksTitle = UiLanguage.Watch(new TextBlock() { Text = UiText.Get("Tasks"), FontSize = 11, Opacity = 0.72 }, ("Text", () => (object?)(UiText.Get("Tasks"))));
-    private readonly StackPanel TasksSymbol = new() { Spacing = 3, Width = 24, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-    private readonly TextBlock TasksBadge = new() { FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center };
-    private readonly StackPanel TasksPreview = new() { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
-    private readonly TextBlock TasksSummary = new() { FontSize = 14, TextTrimming = TextTrimming.CharacterEllipsis };
-    private readonly TextBlock TasksHint = new() { FontSize = 12, Opacity = 0.8 };
+    private readonly Features.Sidebar.TaskSidebarPreview _taskPreview;
+    private Button TasksButton => _taskPreview.Button;
+    private TextBlock TasksTitle => _taskPreview.Title;
+    private TextBlock TasksBadge => _taskPreview.Badge;
+    private StackPanel TasksPreview => _taskPreview.Details;
     private readonly StackPanel TasksPanel = new() { Spacing = 12 };
     private readonly ScrollViewer _taskArea = new()
     {
@@ -93,41 +86,7 @@ public sealed partial class MainPage
         };
         _widgets.SizeChanged += (_, _) => SizeTopWidgets(surface);
         _taskArea.SizeChanged += (_, _) => UpdateWritingLayout();
-        var content = new Grid { ColumnSpacing = 8, VerticalAlignment = VerticalAlignment.Center };
-        content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var symbol = TasksSymbol;
-        symbol.Children.Add(new FontIcon { Glyph = "\uE9D5", FontSize = 24, HorizontalAlignment = HorizontalAlignment.Center });
-        TasksBadge.VerticalAlignment = VerticalAlignment.Center;
-        // Reserve the badge line even when its text is hidden. The glyph must
-        // not move vertically when sidebar details appear/disappear.
-        symbol.Children.Add(new Border { Height = 18, Child = TasksBadge });
-        content.Children.Add(symbol);
-        TasksPreview.Children.Add(TasksTitle);
-        TasksPreview.Children.Add(TasksSummary);
-        TasksPreview.Children.Add(TasksHint);
-        TasksPreview.HorizontalAlignment = HorizontalAlignment.Stretch;
-        Grid.SetColumn(TasksPreview, 1);
-        content.Children.Add(TasksPreview);
-        TasksButton.Content = content;
-        TasksButton.Height = 78;
-        TasksButton.Padding = new Thickness(8);
-        TasksButton.HorizontalContentAlignment = HorizontalAlignment.Stretch;
-        TasksButton.VerticalContentAlignment = VerticalAlignment.Center;
-        TasksButton.VerticalAlignment = VerticalAlignment.Center;
         TasksButton.Click += (_, _) => SetTasksOpen(!_tasksPanelOpen);
-        TasksButton.PointerEntered += (_, _) => _taskWidgetHovered = true;
-        TasksButton.PointerExited += (_, _) =>
-        {
-            _taskWidgetHovered = false;
-            _nextTaskRotation = DateTimeOffset.UtcNow + TaskRotationInterval;
-        };
-        TasksButton.GotFocus += (_, _) => _taskWidgetFocused = true;
-        TasksButton.LostFocus += (_, _) =>
-        {
-            _taskWidgetFocused = false;
-            _nextTaskRotation = DateTimeOffset.UtcNow + TaskRotationInterval;
-        };
         _widgets.Children.Add(TasksButton);
 
         TasksPanel.Children.Add(UiLanguage.Watch(new TextBlock { Text = UiText.Get("Tasks"), FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }, ("Text", () => (object?)(UiText.Get("Tasks")))));
@@ -233,10 +192,8 @@ public sealed partial class MainPage
     private void SetTasksOpen(bool open)
     {
         _tasksPanelOpen = open;
-        _nextTaskRotation = DateTimeOffset.UtcNow + TaskRotationInterval;
         _taskArea.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        TasksHint.Text = UiLanguage.Value(TasksHint, "Text", () => open ? UiText.Get("ClickToCollapseTheList") : UiText.Get("ClickToViewYourList"));
-        UiLanguage.SetName(TasksButton, () => UiText.Format("TasksPending", (open ? UiText.Get("Hide") : UiText.Get("Show")), TasksBadge.Text));
+        _taskPreview.SetOpen(open);
         UpdateWritingLayout();
         if (open)
             DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
@@ -318,11 +275,7 @@ public sealed partial class MainPage
     {
         _renderedTasks = _tasks;
         var pending = _tasks.Count(task => !task.IsCompleted);
-        TasksBadge.Text = _tasksLoaded ? pending.ToString() : "!";
-        RenderTaskPreview();
-        _nextTaskRotation = DateTimeOffset.UtcNow + TaskRotationInterval;
-        TasksHint.Text = UiLanguage.Value(TasksHint, "Text", () => _tasksPanelOpen ? UiText.Get("ClickToCollapseTheList") : UiText.Get("ClickToViewYourList"));
-        UiLanguage.SetName(TasksButton, () => UiText.Format("TasksPending", (_tasksPanelOpen ? UiText.Get("Hide") : UiText.Get("Show")), TasksBadge.Text));
+        _taskPreview.Render(_tasks, _tasksLoaded, _tasksPanelOpen);
         TaskInput.IsEnabled = TaskAdd.IsEnabled = _tasksLoaded;
         TasksRetry.Visibility = _tasksLoaded ? Visibility.Collapsed : Visibility.Visible;
         TasksPending.Children.Clear();
@@ -354,23 +307,6 @@ public sealed partial class MainPage
             !drive.Connection.Connected ? "Connect Google Drive to sync tasks." :
             drive.Tasks.Status ?? (drive.Tasks.HasPendingChanges ? "Changes waiting to sync." : "Tasks sync is ready.");
         AutomationProperties.SetLiveSetting(TasksDriveStatus, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
-    }
-
-    private void RenderTaskPreview()
-    {
-        var pending = _tasks.Where(task => !task.IsCompleted).ToArray();
-        _taskPreviewIndex = pending.Length == 0 ? 0 : Math.Clamp(_taskPreviewIndex, 0, pending.Length - 1);
-        TasksSummary.Text = !_tasksLoaded ? UiText.Get("TasksUnavailable") : pending.ElementAtOrDefault(_taskPreviewIndex)?.Text ?? UiText.Get("NoPendingTasks");
-    }
-
-    private void TickTasks(DateTimeOffset now)
-    {
-        var count = _tasks.Count(task => !task.IsCompleted);
-        if (!_tasksLoaded || count < 2 || _tasksPanelOpen || _taskWidgetHovered || _taskWidgetFocused ||
-            _appearanceDialogOpen || now < _nextTaskRotation) return;
-        _taskPreviewIndex = (_taskPreviewIndex + 1) % count;
-        _nextTaskRotation = now + TaskRotationInterval;
-        RenderTaskPreview();
     }
 
     private void UpdateCompletedSection()

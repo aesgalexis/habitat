@@ -34,21 +34,20 @@ public sealed partial class MainPage
         return GmailClientConfiguration.FromJson(await File.ReadAllTextAsync(file, _operations.Token));
     }
 
-    private void TickDriveContacts()
+    private void TickDriveContacts(DateTimeOffset now)
     {
-        if (_operations.IsStopping || _services.DriveSync is not { Busy: false } drive) return;
+        var skipContacts = _contactsPreferences is { IsEditingContact: true } or { IsBusy: true };
+        if (_operations.IsStopping || _services.DriveSync is not { } drive || !drive.IsDue(now, skipContacts)) return;
         _ = RunOperationAsync(async () =>
         {
             var book = _services.Contacts.Book;
             var status = drive.Contacts.Status;
             var settings = _contactsPreferences;
-            await drive.TickAsync(DateTimeOffset.UtcNow,
-                _contactsPreferences is { IsEditingContact: true } or { IsBusy: true }, _operations.Token);
+            await drive.TickAsync(now, skipContacts, _operations.Token);
             if (_operations.IsStopping) return;
             if (_contactsPreferences is { IsBusy: false, IsEditingContact: false } contacts &&
                 (!ReferenceEquals(book, _services.Contacts.Book) || status != drive.Contacts.Status || !ReferenceEquals(settings, contacts)))
                 contacts.Refresh();
-            RefreshDriveTasks();
         });
     }
 

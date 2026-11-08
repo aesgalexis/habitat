@@ -2,6 +2,7 @@ using Habitat;
 using Habitat.Models;
 using Habitat.Services;
 using System.Diagnostics;
+using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
 
@@ -126,6 +127,7 @@ Check((storedPreferences with { VSCodeFolders = preferences.VSCodeFolders, Windo
     storedPreferences.VSCodeFolders.SequenceEqual(preferences.VSCodeFolders) && storedPreferences.WindowsApps.SequenceEqual(preferences.WindowsApps) &&
     storedPreferences.EnabledDestinations!.SequenceEqual(ComposerDestinations.Ordered),
     "All existing preference values and remembered project folders survive atomic storage.");
+PreferencesRecoveryChecks.Run(root, Check);
 var replacement = Path.Combine(root, "prepared.json");
 File.WriteAllText(replacement, "replacement");
 var replaceAttempts = 0;
@@ -190,24 +192,59 @@ var history = largePath + ".history";
 Directory.CreateDirectory(history);
 var largeItems = Enumerable.Range(0, 1000).Select(i => new TaskItem(Guid.NewGuid(), "Synthetic task " + i, false, DateTimeOffset.UtcNow)).ToList();
 byte[] latest = [];
+var originalRevisions = new HashSet<string>(StringComparer.Ordinal);
+long originalHistoryBytes = 0;
 for (var revision = 0; revision < 200; revision++)
 {
     largeItems[0] = largeItems[0] with { Text = "Revision " + revision };
     latest = JsonSerializer.SerializeToUtf8Bytes(largeItems);
-    File.WriteAllBytes(Path.Combine(history, $"revision-{revision:D8}-{Convert.ToHexString(SHA256.HashData(latest))}.json"), latest);
+    var name = $"revision-{revision:D8}-{Convert.ToHexString(SHA256.HashData(latest))}.json";
+    originalRevisions.Add(name);
+    originalHistoryBytes += latest.LongLength;
+    File.WriteAllBytes(Path.Combine(history, name), latest);
 }
 File.WriteAllBytes(largePath, latest);
 var watch = Stopwatch.StartNew();
-Check(new TaskStore(largePath).Load().Count == 1000, "Cold history scan preserves all tasks.");
+Check(new TaskStore(largePath).Load().Count == 1000, "Cold history scan and compaction preserve all tasks.");
 var cold = watch.Elapsed.TotalMilliseconds;
+Check(new TaskStore(largePath).Load().Count == 1000, "A later load completes the next bounded compaction batch.");
 watch.Restart();
 Check(new TaskStore(largePath).Load().Count == 1000, "Indexed history preserves all tasks.");
 var warm = watch.Elapsed.TotalMilliseconds;
+var packedHistoryBytes = Directory.EnumerateFiles(history, "history-*.zip").Sum(file => new FileInfo(file).Length) +
+    Directory.EnumerateFiles(history, "revision-*.json").Sum(file => new FileInfo(file).Length);
+var verifiedRevisions = Directory.EnumerateFiles(history, "revision-*.json").Select(Path.GetFileName).ToHashSet(StringComparer.Ordinal);
+foreach (var archivePath in Directory.EnumerateFiles(history, "history-*.zip"))
+{
+    using var archive = ZipFile.OpenRead(archivePath);
+    foreach (var entry in archive.Entries)
+    {
+        using var content = entry.Open();
+        Check(entry.Name.EndsWith("-" + Convert.ToHexString(SHA256.HashData(content)) + ".json", StringComparison.Ordinal),
+            "Packed revisions keep their original bytes.");
+        verifiedRevisions.Add(entry.Name);
+    }
+}
+Check(originalRevisions.All(verifiedRevisions.Contains) && packedHistoryBytes < originalHistoryBytes / 2 &&
+    Directory.EnumerateFiles(history, "revision-*.json").Count() == 8,
+    "Compaction preserves every revision, compresses the older history and keeps eight ordinary recovery files.");
+string duplicatePath;
+using (var archive = ZipFile.OpenRead(Directory.EnumerateFiles(history, "history-*.zip").First()))
+{
+    var duplicate = archive.Entries.First();
+    duplicatePath = Path.Combine(history, duplicate.Name);
+    duplicate.ExtractToFile(duplicatePath);
+}
+Check(new TaskStore(largePath).Load().SequenceEqual(largeItems), "A loose copy left after archive publication cannot change recovery.");
+File.Copy(duplicatePath, largePath, overwrite: true);
+File.WriteAllText(duplicatePath, "{damaged duplicate");
+var fromPacked = new TaskStore(largePath);
+Check(fromPacked.Load().SequenceEqual(largeItems) && fromPacked.RecoveredFromBackup,
+    "A damaged loose duplicate cannot hide a known older revision stored in the archive.");
 File.WriteAllText(Path.Combine(history, "index.json"), "{damaged");
 File.Delete(largePath);
-Check(new TaskStore(largePath).Load().SequenceEqual(largeItems), "A damaged index falls back to the original verified revisions for recovery.");
-Check(Directory.EnumerateFiles(history, "revision-*.json").Count() >= 200, "Optimization never deletes historical revisions.");
-Console.WriteLine($"History benchmark: 1,000 tasks / 200 revisions; full scan {cold:F1} ms, indexed {warm:F1} ms.");
+Check(new TaskStore(largePath).Load().SequenceEqual(largeItems), "A damaged index falls back to loose and packed revisions for recovery.");
+Console.WriteLine($"History benchmark: 1,000 tasks / 200 revisions; {originalHistoryBytes:N0} -> {packedHistoryBytes:N0} bytes; first scan and compaction {cold:F1} ms, indexed {warm:F1} ms.");
 Console.WriteLine($"Core checks passed: {checks}. Only isolated synthetic data was used.");
 
 sealed class ManualTime : TimeProvider

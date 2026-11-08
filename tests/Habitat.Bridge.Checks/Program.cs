@@ -506,10 +506,10 @@ using (var messaging = new ClientWebSocket())
 }
 Console.WriteLine($"Facebook messaging bridge checks passed: {checks}. Synthetic sockets only; no Facebook tab or message.");
 var rotationPath = Path.Combine(Path.GetDirectoryName(messengerTracePath)!, "rotation.jsonl");
-File.WriteAllText(rotationPath, new string('x', 512 * 1024 + 1));
+File.WriteAllText(rotationPath, new string('x', 512 * 1024 + 1) + "\n{\"phase\":\"previous\"}\n");
 var rotationTrace = new Habitat.Features.Facebook.FacebookMessageTrace(TimeProvider.System, rotationPath);
 rotationTrace.Write(Guid.NewGuid().ToString("N"), "queued");
-Check(File.Exists(rotationPath + ".previous") && new FileInfo(rotationPath).Length < 1024,
+Check(File.ReadAllText(rotationPath + ".previous") == "{\"phase\":\"previous\"}\n" && new FileInfo(rotationPath).Length < 1024,
     "Messenger logging rotates a bounded previous file without touching application data.");
 
 var workerInfo = new System.Diagnostics.ProcessStartInfo("node")

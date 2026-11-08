@@ -85,11 +85,13 @@ public sealed partial class MainPage : Page
         _destinationCatalog = new(_preferences.EnabledDestinations, _preferences.WindowsApps);
         _taskStore = services.Tasks;
         _taskSession = services.TaskSession;
+        _taskPreview = new(DispatcherQueue, () => _appearanceDialogOpen);
         _weatherSession = new WeatherSession(services.Weather, services.GetLocationAsync);
         _marketsSession = new MarketsSession(services.Markets);
         _marketsSession.Configure(_preferences.Markets);
         _marketsSession.Changed += () => { if (!_operations.IsStopping) RenderMarkets(); };
         _gmailSession = new GmailSession(services.CreateGmailAuth, services.CreateGmail, GmailError);
+        _gmailPreview = new(DispatcherQueue, _gmailSession, RestoreGmailSessionAsync, () => RefreshGmailAsync());
         _gmailSession.Changed += () => { if (!_operations.IsStopping) RenderGmail(); };
         _bridge = services.Bridge;
         _launchBrowser = services.LaunchBrowser;
@@ -103,6 +105,7 @@ public sealed partial class MainPage : Page
         _bridge.EventReceived += Bridge_EventReceived;
         _bridge.StartFailed += Bridge_StartFailed;
         BuildInterface();
+        if (_services.DriveSync is { } drive) drive.Changed += RefreshDriveTasks;
         ApplyInterfaceLanguage();
         _timer = DispatcherQueue.CreateTimer();
         _timer.Interval = TimeSpan.FromMilliseconds(250);
@@ -346,14 +349,16 @@ public sealed partial class MainPage : Page
     {
         // Freeze the migrated selection so future catalog additions remain opt-in.
         SavePreferences();
-        _ = RunOperationAsync(ApplyGlobalHotkeyAsync);
+        if (_preferences.CanSave) _ = RunOperationAsync(ApplyGlobalHotkeyAsync);
         ApplyPreferences();
         UpdateDestinationStatus();
         _timer.Start();
+        _gmailPreview.Start();
+        _taskPreview.Start();
         TickCodexSchedules(DateTimeOffset.UtcNow);
         RestoreUpdateRestartState();
         FocusComposer();
-        if (!_preferences.SetupGuideSeen) _ = RunOperationAsync(ShowSetupAsync);
+        if (_preferences.CanSave && !_preferences.SetupGuideSeen) _ = RunOperationAsync(ShowSetupAsync);
         _services.Storage.WindowReady();
     }
 
@@ -396,9 +401,7 @@ public sealed partial class MainPage : Page
     private void TickPage(DateTimeOffset now)
     {
         TickUpdates();
-        TickGmail();
-        TickDriveContacts();
-        TickTasks(now);
+        TickDriveContacts(now);
         TickMarkets();
         TickCodexSchedules(now);
         if (!_weatherRefreshing && !HasAppearanceOverlay && now >= _nextWeatherRefresh)

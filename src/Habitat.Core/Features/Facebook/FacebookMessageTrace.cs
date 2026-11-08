@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Habitat.Services;
 
 namespace Habitat.Features.Facebook;
 
@@ -14,6 +15,8 @@ internal sealed record FacebookMessageTraceEntry(DateTimeOffset Time, string Ope
 internal sealed class FacebookMessageTrace(TimeProvider clock, string? path)
 {
     private readonly object _gate = new();
+    private readonly BoundedDiagnosticLog? _sink = path is null ? null : new(path);
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private FacebookMessageTraceEntry? _last;
     internal FacebookMessageTraceEntry? Last { get { lock (_gate) return _last; } }
     internal void Write(string operation, string stage, string? status = null, string? error = null, FacebookMessageDiagnostic? details = null)
@@ -21,15 +24,7 @@ internal sealed class FacebookMessageTrace(TimeProvider clock, string? path)
         lock (_gate)
         {
             _last = new(clock.GetUtcNow(), operation, stage, status, error, details);
-            if (path is null) return;
-            try
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-                if (File.Exists(path) && new FileInfo(path).Length > 512 * 1024) File.Move(path, path + ".previous", true);
-                File.AppendAllText(path, JsonSerializer.Serialize(_last, new JsonSerializerOptions(JsonSerializerDefaults.Web)) + "\n");
-            }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
+            _sink?.Append(JsonSerializer.Serialize(_last, Json));
         }
     }
 }

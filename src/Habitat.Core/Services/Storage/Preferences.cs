@@ -1,8 +1,11 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Habitat.Services;
 
 namespace Habitat;
+
+internal enum PreferencesLoadState { Loaded, New, Damaged, Unavailable }
 
 internal sealed record Preferences(string Theme, double Opacity)
 {
@@ -29,19 +32,27 @@ internal sealed record Preferences(string Theme, double Opacity)
     public int? WindowWidth { get; init; }
     public int? WindowHeight { get; init; }
 
+    internal PreferencesLoadState LoadState { get; private init; }
+    internal bool CanSave => LoadState is PreferencesLoadState.New or PreferencesLoadState.Loaded;
     private static string FilePath => AppDataPaths.Production.PreferencesPath;
+    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
 
-    public static Preferences Load(string? storagePath = null)
+    public static Preferences Load(string? storagePath = null) => Read(storagePath ?? FilePath, out _);
+
+    private static Preferences Read(string path, out string? text)
     {
+        text = null;
         try
         {
-            using var document = JsonDocument.Parse(File.ReadAllText(storagePath ?? FilePath));
+            text = File.ReadAllText(path);
+            using var document = JsonDocument.Parse(text);
             var saved = document.Deserialize<Preferences>();
             if (saved is not null && saved.Theme is "day" or "night" or "hybrid")
             {
                 var catalog = new DestinationCatalog(saved.EnabledDestinations, saved.WindowsApps);
                 return saved with
                 {
+                    LoadState = PreferencesLoadState.Loaded,
                     InterfaceLanguage = UiText.NormalizeLanguage(saved.InterfaceLanguage),
                     Wallpaper = (saved.Wallpaper ?? new()).Normalize(),
                     Markets = (saved.Markets ?? new()).Normalize(),
@@ -55,18 +66,55 @@ internal sealed record Preferences(string Theme, double Opacity)
                 };
             }
         }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+        catch (FileNotFoundException) { return Defaults(PreferencesLoadState.New); }
+        catch (DirectoryNotFoundException) { return Defaults(PreferencesLoadState.New); }
+        catch (IOException) { return Defaults(PreferencesLoadState.Unavailable); }
+        catch (UnauthorizedAccessException) { return Defaults(PreferencesLoadState.Unavailable); }
         catch (JsonException) { }
-        return new Preferences("hybrid", 15) { EnabledDestinations = ComposerDestinations.Ordered.ToArray() };
+        return Defaults(PreferencesLoadState.Damaged);
+    }
+
+    private static Preferences Defaults(PreferencesLoadState state) => new("hybrid", 15)
+    {
+        LoadState = state, EnabledDestinations = ComposerDestinations.Ordered.ToArray()
+    };
+
+    internal static bool HasBackup(string path) => Load(path + ".previous").LoadState == PreferencesLoadState.Loaded;
+
+    internal static Preferences RecoverDamaged(string path, bool restoreBackup, Action<Exception>? reportError = null)
+    {
+        var current = Load(path);
+        if (current.LoadState != PreferencesLoadState.Damaged) return current;
+        var replacement = Defaults(PreferencesLoadState.Loaded);
+        if (restoreBackup)
+        {
+            replacement = Load(path + ".previous");
+            if (replacement.LoadState != PreferencesLoadState.Loaded) return current;
+        }
+        try
+        {
+            // Keep the exact file that was replaced, even if another program changed it after the read.
+            AtomicFile.Write(path, JsonSerializer.SerializeToUtf8Bytes(replacement, Json), path + ".damaged-" + Guid.NewGuid().ToString("N"));
+            return replacement;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            reportError?.Invoke(exception);
+            return current;
+        }
     }
 
     public bool Save(string? storagePath = null, Action<Exception>? reportError = null)
     {
         try
         {
+            if (!CanSave) throw new IOException("Reload unreadable preferences before saving.");
             var path = storagePath ?? FilePath;
-            AtomicFile.Write(path, JsonSerializer.SerializeToUtf8Bytes(this, new JsonSerializerOptions { WriteIndented = true }));
+            var existing = Read(path, out var previousText);
+            if (!existing.CanSave) throw new IOException("The preferences file could not be read safely.");
+            var text = JsonSerializer.Serialize(this, Json);
+            if (text != previousText)
+                AtomicFile.Write(path, Encoding.UTF8.GetBytes(text), existing.LoadState == PreferencesLoadState.Loaded ? path + ".previous" : null);
             return true;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)

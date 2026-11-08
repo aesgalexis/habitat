@@ -1,5 +1,7 @@
 using System.Text.Json;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
+using Habitat.Services;
 
 namespace Habitat.Features.Contacts;
 
@@ -8,6 +10,8 @@ namespace Habitat.Features.Contacts;
 internal sealed class ContactStore(string path)
 {
     private readonly string _path = Path.GetFullPath(path);
+    private readonly RevisionHistory _history = new(Path.GetFullPath(path) + ".history", "*.json", IsRevision);
+    private readonly BoundedDiagnosticLog _log = new(Path.GetFullPath(path) + ".log");
     private readonly SemaphoreSlim _gate = new(1);
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
     private const long MaxBytes = 128 * 1024 * 1024;
@@ -33,7 +37,7 @@ internal sealed class ContactStore(string path)
         catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
         {
             bool history;
-            try { history = Directory.EnumerateFiles(_path + ".history", "*.json").Any(); }
+            try { history = Directory.EnumerateFiles(_path + ".history", "*.json").Any() || _history.CatalogFiles().Any(); }
             catch (DirectoryNotFoundException) { history = false; }
             if (history)
                 throw new InvalidDataException("The contacts file is missing. Backups were kept in " + Path.GetFileName(_path) + ".history; restore the file before making changes.");
@@ -66,13 +70,16 @@ internal sealed class ContactStore(string path)
                     Directory.CreateDirectory(history);
                     if (File.Exists(_path))
                     {
-                        var backup = Path.Combine(history, current.Revision.ToString("D12") + ".json");
-                        if (!File.Exists(backup)) File.Copy(_path, backup);
+                        var name = RevisionName(current.Revision);
+                        var backup = Path.Combine(history, name);
+                        if (!File.Exists(backup) && _history.ReadPacked(name, MaxBytes) is null) File.Copy(_path, backup);
                     }
-                    var recovery = Path.Combine(history, saved.Revision.ToString("D12") + ".json");
-                    if (File.Exists(recovery))
+                    var savedName = RevisionName(saved.Revision);
+                    var recovery = Path.Combine(history, savedName);
+                    var existing = File.Exists(recovery) ? File.ReadAllBytes(recovery) : _history.ReadPacked(savedName, MaxBytes);
+                    if (existing is not null)
                     {
-                        if (!File.ReadAllBytes(recovery).AsSpan().SequenceEqual(bytes))
+                        if (!existing.AsSpan().SequenceEqual(bytes))
                             throw new InvalidDataException("A different contacts revision already exists in recovery history. Restore the latest valid revision before making changes. Your files were kept.");
                     }
                     else
@@ -82,6 +89,8 @@ internal sealed class ContactStore(string path)
                     }
                     // After the durable write, finish the commit even if cancellation arrives.
                     File.Move(temporary, _path, true);
+                    _history.Compact(error => _log.Append(
+                        $"{DateTimeOffset.Now:O} Contact history compaction: {error.GetType().Name} {error.HResult:X8}", "history compaction"));
                     return saved;
                 }
                 finally { if (File.Exists(temporary)) File.Delete(temporary); }
@@ -89,6 +98,12 @@ internal sealed class ContactStore(string path)
         }
         finally { _gate.Release(); }
     }
+
+    private static string RevisionName(long revision) => revision.ToString("D12", CultureInfo.InvariantCulture) + ".json";
+
+    private static bool IsRevision(string name) => name.EndsWith(".json", StringComparison.Ordinal) &&
+        long.TryParse(name.AsSpan(0, name.Length - 5), NumberStyles.None, CultureInfo.InvariantCulture, out var revision) &&
+        name == RevisionName(revision);
 
     internal static void Validate(ContactBook book)
     {
