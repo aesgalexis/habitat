@@ -1,3 +1,4 @@
+using Habitat.Storage;
 using System.IO.Compression;
 using System.Net;
 using System.Security.Cryptography;
@@ -17,6 +18,7 @@ internal interface IAppUpdateService : IDisposable
     Task<ReleaseAppUpdate?> CheckAsync(CancellationToken token);
     Task<PreparedAppUpdate> PrepareAsync(ReleaseAppUpdate release, IProgress<int> progress, CancellationToken token);
     Task LaunchInstallerAsync(PreparedAppUpdate prepared, CancellationToken token);
+    Task DiscardAsync(PreparedAppUpdate prepared) => Task.CompletedTask;
 }
 
 // Only published, stable releases of our repository are eligible. Download
@@ -111,7 +113,7 @@ internal sealed class ReleaseUpdateClient : IDisposable
             EnsureNoLinks(_cache);
             Directory.CreateDirectory(directory);
             var packagePath = Path.Combine(directory, release.Package.Name);
-                Phase("package-download");
+            Phase("package-download");
             using (var response = await GetAsync(release.Package.Url, token))
             {
                 response.EnsureSuccessStatusCode();
@@ -156,15 +158,26 @@ internal sealed class ReleaseUpdateClient : IDisposable
         catch (Exception exception)
         {
             diagnostics.Record(phase, exception);
-            // This unique directory contains only this download and is always a
-            // direct child of our explicit cache; never touch installed files.
+            Discard(directory);
+            throw;
+        }
+    }
+
+    internal void Discard(string directory)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
             try
             {
                 if (Directory.Exists(directory)) { EnsureNoLinks(directory); Directory.Delete(directory, true); }
             }
-            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException) { diagnostics.Record("cleanup", cleanup); }
-            throw;
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            { UpdateDiagnosticLog.ForDirectory(directory).Record("cleanup", exception); }
+            return;
         }
+        var report = GeneratedStorage.DiscardUpdateWorkspace(_cache, directory);
+        if (report.Errors.Count != 0)
+            UpdateDiagnosticLog.ForDirectory(directory).Record("cleanup", new IOException("The update workspace could not be fully retired."));
     }
 
     private async Task<HttpResponseMessage> GetAsync(Uri uri, CancellationToken token)

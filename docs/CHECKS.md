@@ -18,9 +18,9 @@ Requiere Windows, SDK .NET 10 y Node.js; CI utiliza Node.js 24.
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify.ps1
 ```
 
-La verificación ejecuta comprobaciones JavaScript, las diez suites .NET, pruebas de compilación, paquetes, almacenamiento, actualizaciones y preparación de firma, la suite nativa WinUI y una compilación Release. El mismo script se usa en el hook pre-push y en CI. [Verificación](../scripts/verify.ps1) · [Hook pre-push](../.githooks/pre-push) · [GitHub Actions](../.github/workflows/verify.yml).
+La verificación local ejecuta JavaScript, las diez suites .NET, las pruebas de paquetes y almacenamiento y la suite nativa WinUI. Una sola compilación Release produce las suites .NET, que se ejecutan en paralelo con datos aislados. GitHub ejecuta la parte nativa en otro runner en paralelo con las comprobaciones de lógica. El hook pre-push comprueba el whitespace de los commits que se envían. [Verificación](../scripts/verify.ps1) · [Hook pre-push](../.githooks/pre-push) · [GitHub Actions](../.github/workflows/verify.yml).
 
-`-NoRestore` omite la restauración inicial de la solución. La fixture mínima de compilación restaura sus referencias del SDK. `-SkipBuild` omite la compilación Release final. `-SkipUi` permite ejecutar solo las comprobaciones no visuales de consola en una sesión sin escritorio. El resultado registra la omisión de WinUI. CI y las publicaciones ejecutan la suite completa. Las salidas y los datos de tareas de ensayo quedan bajo `artifacts/verification`. Las pruebas del puente y de OAuth sintético usan sockets de bucle local.
+`-NoRestore` reutiliza la restauración previa de .NET. La fixture mínima de compilación restaura sus referencias del SDK. `-SkipBuild` usa un filtro de la solución para compilar solo las suites .NET y su verificador. `-SkipUi` ejecuta las comprobaciones de consola. La publicación exige que pasen tanto la lógica como WinUI para el commit etiquetado. Las salidas y los datos de tareas de ensayo se generan en `artifacts/verification` y se retiran tras una ejecución correcta. Las pruebas del puente y de OAuth sintético usan sockets de bucle local.
 
 Para un área concreta, conserva una ruta de salida explícita dentro de `artifacts`. Por ejemplo:
 
@@ -48,7 +48,7 @@ Prioriza comprobaciones no visuales. El control visual requiere una necesidad re
 
 Desde 0.18.2, los casos de Contacts abren Preferences con Drive desconectado y con un vínculo guardado, prueban ambos temas y verifican el desplegable avanzado tras refrescar. Los casos de programación de Codex añaden dos ventanas nativas sintéticas: verifican selección por chat, transferencia y confirmación en la ventana fijada, invocación del botón Send desde segundo plano y conservación del otro borrador. El proveedor puede activar la ventana verificada; no se inyecta Enter en ese caso. Los servicios y credenciales están aislados y no se abre ni se envía nada al Codex real.
 
-`-PreferencesOnly` comprueba las categorías de Preferences, la conservación de cambios y las acciones de Storage con resultados simulados. `-TimeoutSeconds` ajusta el máximo de cada proceso. Su valor por defecto es 180 segundos. Una ejecución directa crea una carpeta registrada para retención bajo `artifacts/ui-checks/run-<id>`.
+`-PreferencesOnly` comprueba las categorías de Preferences, la conservación de cambios y las acciones de Storage con resultados simulados. `-TimeoutSeconds` ajusta el máximo de cada proceso. Su valor por defecto es 180 segundos. Una ejecución directa usa `artifacts/ui-checks/run-<id>` y retira esa carpeta cuando las comprobaciones pasan. Puedes indicar `-OutputDirectory` para conservar los archivos de una ejecución.
 
 ## Pruebas con aplicaciones y servicios reales
 

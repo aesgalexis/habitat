@@ -77,6 +77,8 @@ namespace Habitat.Storage
         private static readonly StringComparer Names = StringComparer.OrdinalIgnoreCase;
         private static readonly Regex ReleaseName = new Regex(@"^release-[a-f0-9]{32}$", RegexOptions.CultureInvariant);
         private static readonly Regex Id = new Regex(@"^[a-f0-9]{32}$", RegexOptions.CultureInvariant);
+        private static readonly Regex GeneratedStage = new Regex(@"^staged/(build|install|package|release|update)-[a-f0-9]{32}$", RegexOptions.CultureInvariant);
+        private static readonly Regex UpdateWorkspace = new Regex(@"^update-[a-f0-9]{32}$", RegexOptions.CultureInvariant);
 
         // A normal EXE installation has no build tree. Only an explicit, local
         // registration may associate it with a developer's generated storage.
@@ -318,6 +320,37 @@ namespace Habitat.Storage
             return RunAt(artifactsRoot, clean, runningDirectory, DateTime.UtcNow, token);
         }
 
+        // Called by the owner after cancellation or after the installer and new app
+        // have finished using the workspace. Diagnostics and the result are siblings.
+        public static StorageReport DiscardUpdateWorkspace(string cacheDirectory, string directory)
+        {
+            var report = new StorageReport();
+            try
+            {
+                var root = Full(cacheDirectory); var path = Full(directory);
+                if (!Names.Equals(System.IO.Path.GetDirectoryName(path), root) || !UpdateWorkspace.IsMatch(System.IO.Path.GetFileName(path)))
+                    throw new IOException("An owned update workspace is required.");
+                if (!System.IO.Directory.Exists(path)) return report;
+                var clean = Environment.GetEnvironmentVariable("HABITAT_STORAGE_DRY_RUN") != "1";
+                using (var pins = new Pins(true, root))
+                {
+                    pins.Add(root);
+                    using (var tree = new Tree(path, clean, CancellationToken.None))
+                    {
+                        report.RecoverableBytes = tree.Files.Values.Sum(file => file.Length);
+                        report.Candidates = 1;
+                        if (clean) DeleteTree(tree, report, System.IO.Path.GetFileName(path), CancellationToken.None);
+                    }
+                }
+            }
+            catch (Exception error)
+            {
+                if (!IsFileError(error) && !(error is ArgumentException)) throw;
+                report.Unavailable = true; report.Errors.Add(error.GetType().Name);
+            }
+            return report;
+        }
+
         // Explicit clock keeps retention tests deterministic without weakening the policy.
         public static StorageReport RunAt(string artifactsRoot, bool clean, string runningDirectory, DateTime now, CancellationToken token)
         {
@@ -401,9 +434,9 @@ namespace Habitat.Storage
                                 pins.Add(System.IO.Path.GetDirectoryName(path));
                                 using (var tree = new Tree(path, clean, token))
                                 {
-                                    if (tree.Entries.Any(item => item.LastChange > now.AddDays(-RetentionDays) &&
-                                        (candidate.Value == null || candidate.Value.Kind != "cleanup" || !item.Directory)))
-                                    { report.Preserved.Add(relative + ": seven-day safety margin"); continue; }
+                                    var grace = RetentionGrace(relative, candidate.Value);
+                                    if (grace > TimeSpan.Zero && tree.Entries.Any(item => item.LastChange > now - grace))
+                                    { report.Preserved.Add(relative + ": safety margin"); continue; }
                                     if (candidate.Value == null) PreflightBuild(tree);
                                     var inventory = tree.Inventory(token);
                                     if (candidate.Value != null)
@@ -418,12 +451,7 @@ namespace Habitat.Storage
                                     // Persist the validated inventory first. If interrupted,
                                     // only unchanged remaining files can be retried.
                                     SaveReceipt(root, new GeneratedReceipt { Path = relative, Kind = "cleanup", Files = inventory, Directories = tree.Directories() }, pins);
-                                    foreach (var item in tree.Entries.AsEnumerable().Reverse())
-                                    {
-                                        token.ThrowIfCancellationRequested();
-                                        try { item.Delete(); if (!item.Directory) report.FreedBytes += item.Length; }
-                                        catch (Exception error) { if (!IsFileError(error)) throw; report.Errors.Add(relative + ": " + error.GetType().Name); }
-                                    }
+                                    DeleteTree(tree, report, relative, token);
                                 }
                                 if (!System.IO.Directory.Exists(path)) File.Delete(ReceiptFile(root, relative));
                             }
@@ -439,6 +467,24 @@ namespace Habitat.Storage
             { if (!IsFileError(error) && !(error is SerializationException) && !(error is ArgumentException)) throw;
                 report.Unavailable = true; report.Errors.Add(error.GetType().Name); }
             return report;
+        }
+
+        private static TimeSpan RetentionGrace(string relative, GeneratedReceipt receipt)
+        {
+            if (receipt != null && receipt.Kind != "build") return TimeSpan.Zero;
+            if (receipt == null && (GeneratedStage.IsMatch(relative) || relative.StartsWith("releases/", StringComparison.Ordinal)))
+                return TimeSpan.Zero;
+            return TimeSpan.FromDays(RetentionDays);
+        }
+
+        private static void DeleteTree(Tree tree, StorageReport report, string relative, CancellationToken token)
+        {
+            foreach (var item in tree.Entries.AsEnumerable().Reverse())
+            {
+                token.ThrowIfCancellationRequested();
+                try { item.Delete(); if (!item.Directory) report.FreedBytes += item.Length; }
+                catch (Exception error) { if (!IsFileError(error)) throw; report.Errors.Add(relative + ": " + error.GetType().Name); }
+            }
         }
 
         private static void AddChildren(string root, string name, Dictionary<string, GeneratedReceipt> candidates, Pins pins, bool releases)

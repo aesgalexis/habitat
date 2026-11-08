@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory = $true)]
-    [string]$StageDirectory
+    [string]$StageDirectory,
+    [switch]$DeferStorageMaintenance
 )
 
 $ErrorActionPreference = "Stop"
@@ -71,7 +72,8 @@ function Start-ProjectRelease([string]$Directory) {
     throw 'The new release did not become ready.'
 }
 try {
-    $installed = Install-HabitatRelease -ArtifactsRoot $artifactsRoot -StageDirectory $stagedRoot -BeforeActivate {
+    $installed = Install-HabitatRelease -ArtifactsRoot $artifactsRoot -StageDirectory $stagedRoot `
+        -DeferStorageMaintenance:$DeferStorageMaintenance -BeforeActivate {
         param($previous)
         Write-UpdateLog 'Waiting for the current ChatGPT response before activating the verified build.'
         $deadline = (Get-Date).AddMinutes(15)

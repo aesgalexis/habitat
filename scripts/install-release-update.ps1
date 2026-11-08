@@ -6,8 +6,9 @@ $ErrorActionPreference = 'Stop'
 $request = $null
 $appExited = $false
 $work = [IO.Path]::GetFullPath($PSScriptRoot)
-$resultPath = Join-Path (Split-Path -Parent $work) 'last-result.json'
-$diagnosticDirectory = Join-Path (Split-Path -Parent $work) 'diagnostics'
+$cache = Split-Path -Parent $work
+$resultPath = Join-Path $cache 'last-result.json'
+$diagnosticDirectory = Join-Path $cache 'diagnostics'
 $diagnosticPath = Join-Path $diagnosticDirectory ((Split-Path -Leaf $work) + '.jsonl')
 $phase = 'request-read'
 
@@ -154,3 +155,11 @@ public static class HabitatReleaseUpdateProfile {
     }
     exit 1
 }
+# The helper itself was launched from the disposable directory. Release the
+# current-directory handle before removing the download and extracted payload.
+try {
+    Set-Location -LiteralPath $cache
+    [Environment]::CurrentDirectory = $cache
+    $cleanup = [Habitat.Storage.GeneratedStorage]::DiscardUpdateWorkspace($cache, $work)
+    if ($cleanup.Errors.Count) { throw 'The update workspace could not be fully retired.' }
+} catch { Write-UpdatePhase 'cleanup' $_ }

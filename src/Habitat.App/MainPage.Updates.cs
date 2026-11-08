@@ -103,6 +103,7 @@ public sealed partial class MainPage
         _updateDialogOpen = true;
         ContentDialog? progressDialog = null;
         Task<ContentDialogResult>? showing = null;
+        PreparedAppUpdate? prepared = null;
         var committing = false;
         var savedDrafts = false;
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_operations.Token);
@@ -167,7 +168,7 @@ public sealed partial class MainPage
             });
             _updateStatus = status.Text;
             RenderUpdateButton();
-            var prepared = await _services.Updates.PrepareAsync(release, progress, cancellation.Token);
+            prepared = await _services.Updates.PrepareAsync(release, progress, cancellation.Token);
             _updateStatus = status.Text = "Waiting for current work to finish…";
             RenderUpdateButton();
             using var waiting = CancellationTokenSource.CreateLinkedTokenSource(cancellation.Token);
@@ -207,6 +208,7 @@ public sealed partial class MainPage
             committing = false;
             progressDialog?.Hide();
             if (showing is not null) await showing;
+            if (prepared is not null && !_updateHandoff) await _services.Updates.DiscardAsync(prepared);
             if (savedDrafts && !_updateHandoff)
             {
                 try { File.Delete(_services.Paths.UpdateDraftsPath); }

@@ -54,6 +54,6 @@ La activación de hooks es una decisión explícita del colaborador:
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\instalar-autopush.ps1
 ```
 
-Este comando configura `core.hooksPath` a `.githooks`. El hook [pre-commit](.githooks/pre-commit) busca algunos patrones de secretos; no sustituye una revisión. [Pre-push](.githooks/pre-push) ejecuta `scripts/verify.ps1` para los pushes. [Post-commit](.githooks/post-commit) hace push automático únicamente desde `codex/autosave`: un commit en esa rama puede publicar código en GitHub inmediatamente.
+Este comando configura `core.hooksPath` a `.githooks`. Pre-commit busca patrones conocidos de secretos. Pre-push comprueba el whitespace de los commits enviados a ramas. GitHub ejecuta la verificación de lógica y WinUI en los PR y al actualizar `main`. Post-commit sube automáticamente los checkpoints de `codex/autosave`. [Hooks](.githooks) · [Verificación](docs/CHECKS.md).
 
 Para consultar la configuración local, usa `git config --get core.hooksPath`. No actives ni cambies los hooks de otra persona durante una tarea sin que forme parte del encargo. Las publicaciones siguen el procedimiento de [RELEASING.md](docs/RELEASING.md); los checkpoints no son releases.

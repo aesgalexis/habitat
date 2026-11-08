@@ -23,6 +23,10 @@ if ((Get-HabitatActiveDirectory (Join-Path $installed 'artifacts')) -ne $first -
     -not (Test-Path -LiteralPath (Join-Path $first 'browser-extension/manifest.json')) -or
     -not (Test-Path -LiteralPath (Join-Path $first 'vscode-extension/test.vsix')) -or
     [IO.File]::ReadAllText((Join-Path $installed 'README.md')) -ne 'source must be preserved') { throw 'ZIP update did not preserve sources and matching integrations.' }
+if ($env:HABITAT_STORAGE_DRY_RUN -ne '1' -and $env:HABITAT_STORAGE_SKIP_AUTOMATIC -ne '1' -and
+    @(Get-ChildItem -LiteralPath (Join-Path $installed 'artifacts/staged') -Directory).Count) {
+    throw 'A successful ZIP update retained its redundant staging copy.'
+}
 $script:updateStarts = 0
 $rejected = $false
 try {

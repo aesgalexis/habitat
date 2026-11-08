@@ -8,10 +8,54 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 jobs:
-  release:
-    runs-on: windows-latest
+  main_verification:
+    name: Reuse verification for this commit
+    runs-on: ubuntu-latest
     permissions:
-      contents: write
+      actions: read
+    outputs:
+      reused: ${{ steps.verify.outputs.reused }}
+    steps:
+      - id: verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          discovery_deadline=$((SECONDS + 15))
+          wait_deadline=$((SECONDS + 360))
+          while :; do
+            run=$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/verify.yml/runs" \
+              -f branch=main -f event=push -f "head_sha=$GITHUB_SHA" -F per_page=1 \
+              --jq ".workflow_runs[] | select(.head_sha == \"$GITHUB_SHA\" and .head_branch == \"main\" and .event == \"push\" and .head_repository.full_name == \"$GITHUB_REPOSITORY\") | [.id, .status, (.conclusion // \"pending\")] | @tsv")
+            IFS=$'\t' read -r id status conclusion <<< "$run"
+            if [[ "$status" == completed ]]; then
+              if [[ "$conclusion" == success ]]; then
+                echo "Reusing verified commit from run $id."
+                echo 'reused=true' >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              if [[ "$conclusion" == failure ]]; then
+                echo "::error::Verification run $id failed for this commit on main."
+                exit 1
+              fi
+              break
+            fi
+            if [[ -z "$id" && "$SECONDS" -ge "$discovery_deadline" ]] || [[ "$SECONDS" -ge "$wait_deadline" ]]; then
+              break
+            fi
+            sleep 5
+          done
+          echo 'Verifying the tagged commit in this workflow.'
+          echo 'reused=false' >> "$GITHUB_OUTPUT"
+  verify:
+    needs: main_verification
+    if: needs.main_verification.outputs.reused == 'false'
+    uses: ./.github/workflows/verify.yml
+    with:
+      skip_production_build: true
+  package:
+    name: Build and test release packages
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -19,74 +63,70 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
       - name: Validate tag and main ancestry
+        id: source
         shell: pwsh
         run: |
           $version = (Get-Content VERSION -Raw).Trim()
           if ($env:GITHUB_REF_NAME -ne "v$version") { throw 'Tag differs from VERSION.' }
           git merge-base --is-ancestor HEAD origin/main
           if ($LASTEXITCODE -ne 0) { throw 'Release commit must belong to main.' }
-      - name: Verify logic, contracts and production build
+          "version=$version" >> $env:GITHUB_OUTPUT
+      - name: Install EXE compiler
         shell: powershell
-        run: ./scripts/verify.ps1
-      - name: Build shared release payload and ZIP
-        id: payload
+        run: |
+          choco install innosetup --version=6.7.1 --yes --no-progress --allow-downgrade
+          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed.' }
+      - name: Build shared payload and test ZIP and EXE
         shell: powershell
         env:
           HABITAT_DRIVE_OAUTH_CLIENT_JSON: ${{ secrets.HABITAT_DRIVE_OAUTH_CLIENT_JSON }}
         run: |
           $clientJson = $env:HABITAT_DRIVE_OAUTH_CLIENT_JSON
           Remove-Item Env:HABITAT_DRIVE_OAUTH_CLIENT_JSON -ErrorAction SilentlyContinue
-          if (-not $clientJson) {
-            throw 'Google Drive desktop client is required for the official release.'
-          } else {
-            try {
-              $client = ConvertFrom-Json -InputObject $clientJson -ErrorAction Stop
-              if ($clientJson.Length -gt 65536 -or $client.installed.client_id -notmatch '^[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$' -or
-                  [string]::IsNullOrWhiteSpace($client.installed.client_secret)) { throw 'Invalid client.' }
-            } catch { throw 'Configure a Google Desktop OAuth client for Drive release builds.' }
-            $clientPath = Join-Path $env:RUNNER_TEMP ('habitat-drive-' + [guid]::NewGuid().ToString('N') + '.json')
-            try {
-              $env:HabitatDriveOAuthClientFile = $clientPath
-              $configuration = @{ installed = @{
-                client_id = $client.installed.client_id
-                client_secret = $client.installed.client_secret
-              }} | ConvertTo-Json -Compress
-              [IO.File]::WriteAllText($clientPath, $configuration, [Text.UTF8Encoding]::new($false))
-              $releaseStage = Join-Path (Get-Location) ('artifacts/staged/release-' + [guid]::NewGuid().ToString('N'))
-              ./scripts/build-winui.ps1 -OutputDirectory $releaseStage
-              ./scripts/check-release-payload.ps1 -PayloadDirectory $releaseStage -RequireDrive -ExpectedDriveClientPath $clientPath
-              ./scripts/package-release.ps1 -StageDirectory $releaseStage -RequireDrive
-              [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "stage=$releaseStage`n", [Text.UTF8Encoding]::new($false))
-            } finally {
-              Remove-Item -LiteralPath $clientPath -ErrorAction SilentlyContinue
-              Remove-Item Env:HabitatDriveOAuthClientFile -ErrorAction SilentlyContinue
-            }
+          if (-not $clientJson) { throw 'Google Drive desktop client is required for the official release.' }
+          try {
+            $client = ConvertFrom-Json -InputObject $clientJson -ErrorAction Stop
+            if ($clientJson.Length -gt 65536 -or $client.installed.client_id -notmatch '^[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$' -or
+                [string]::IsNullOrWhiteSpace($client.installed.client_secret)) { throw 'Invalid client.' }
+          } catch { throw 'Configure a Google Desktop OAuth client for Drive release builds.' }
+          $clientPath = Join-Path $env:RUNNER_TEMP ('habitat-drive-' + [guid]::NewGuid().ToString('N') + '.json')
+          try {
+            $configuration = @{ installed = @{
+              client_id = $client.installed.client_id
+              client_secret = $client.installed.client_secret
+            }} | ConvertTo-Json -Compress
+            [IO.File]::WriteAllText($clientPath, $configuration, [Text.UTF8Encoding]::new($false))
+            ./scripts/build-release-assets.ps1 -DriveClientPath $clientPath
+          } finally {
+            Remove-Item -LiteralPath $clientPath -ErrorAction SilentlyContinue
           }
-      - name: Verify real package and isolated installation
-        shell: powershell
-        env:
-          HABITAT_STAGE: ${{ steps.payload.outputs.stage }}
-        run: |
-          $version = (Get-Content VERSION -Raw).Trim()
-          ./tests/package.checks.ps1 -PackagePath "artifacts/packages/HABITAT-$version-win-x64.zip" -ReferenceDirectory $env:HABITAT_STAGE -RequireDrive
-      - name: Install EXE compiler
-        shell: powershell
-        run: |
-          choco install innosetup --version=6.7.1 --yes --no-progress --allow-downgrade
-          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed.' }
-      - name: Build and verify EXE installer
-        shell: powershell
-        env:
-          HABITAT_STAGE: ${{ steps.payload.outputs.stage }}
-        run: |
-          $version = (Get-Content VERSION -Raw).Trim()
-          ./scripts/build-installer.ps1 -Version $version -StageDirectory $env:HABITAT_STAGE -RequireDrive
-          ./scripts/test-installer.ps1 -InstallerPath "artifacts/distribution/$version/HABITAT-$version-x64-setup.exe" -ReferenceDirectory $env:HABITAT_STAGE -RequireDrive
-      - name: Publish release assets
+      - uses: actions/upload-artifact@v4
+        with:
+          name: habitat-release-assets
+          path: |
+            artifacts/packages/HABITAT-${{ steps.source.outputs.version }}-win-x64.zip
+            artifacts/packages/HABITAT-${{ steps.source.outputs.version }}-win-x64.zip.sha256
+            artifacts/distribution/${{ steps.source.outputs.version }}/HABITAT-${{ steps.source.outputs.version }}-x64-setup.exe
+            artifacts/distribution/${{ steps.source.outputs.version }}/HABITAT-${{ steps.source.outputs.version }}-x64-setup.exe.sha256
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 3
+  publish:
+    needs: [main_verification, verify, package]
+    if: >-
+      ${{ !cancelled() && needs.main_verification.result == 'success' && needs.package.result == 'success' &&
+          (needs.verify.result == 'success' || (needs.verify.result == 'skipped' && needs.main_verification.outputs.reused == 'true')) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: habitat-release-assets
+          path: artifacts
+      - name: Publish verified release assets
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -94,7 +134,11 @@ jobs:
           $version = (Get-Content VERSION -Raw).Trim()
           $zip = "artifacts/packages/HABITAT-$version-win-x64.zip"
           $installer = "artifacts/distribution/$version/HABITAT-$version-x64-setup.exe"
-          $notes = "artifacts/packages/release-notes.md"
+          foreach ($asset in $zip, $installer) {
+            $expected = ((Get-Content -LiteralPath "$asset.sha256" -Raw).Trim() -split '\s+')[0]
+            if ((Get-FileHash -LiteralPath $asset -Algorithm SHA256).Hash -ne $expected) { throw "Artifact checksum does not match: $asset" }
+          }
+          $notes = "artifacts/release-notes.md"
           $changelog = Get-Content CHANGELOG.md -Raw
           $section = [regex]::Match($changelog, '(?ms)^## ' + [regex]::Escape($version) + ' .*?(?=^## |\z)').Value
           if (-not $section) { throw 'Changelog section is missing.' }

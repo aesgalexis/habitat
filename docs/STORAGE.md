@@ -1,6 +1,6 @@
 # Retención y limpieza de archivos generados
 
-Implementación local, pendiente de publicación. La política se ejecuta sobre los archivos de cada PC; no contiene rutas de usuario ni requiere los tamaños del diagnóstico de otro equipo.
+La política se ejecuta sobre los archivos de cada PC. Las rutas y los tamaños se determinan localmente.
 
 ## Usar la limpieza
 
@@ -19,20 +19,30 @@ El motor [Habitat.GeneratedStorage.cs](../scripts/Habitat.GeneratedStorage.cs) s
 | Compilación pendiente más reciente | Manifiesto completo, aún sin registro de consumo y fuera de una operación activa |
 | Directorios de operaciones activas | Registro bajo `.storage-operations` y lease abierto por el productor; se protege también cualquier candidato que los contenga o esté dentro |
 | Versiones con procesos HABITAT o HABITAT.Hotkey abiertos | Identidad del ejecutable, además del bloqueo de archivos |
-| Archivos recientes | Siete días desde la fecha más reciente de creación o modificación de cualquier elemento del árbol |
+| Salidas históricas o compilaciones fallidas recientes | Siete días desde la fecha más reciente de creación o modificación de cualquier elemento del árbol |
 
 Fuera de esas protecciones, se consideran elegibles:
 
-- `artifacts/releases/release-<id>`, el antiguo `artifacts/win-x64` y directorios directamente bajo `artifacts/staged` cuyo manifiesto completo coincida con todos los archivos, tamaños y SHA-256 y contenga los binarios requeridos. Se retiran también compilaciones antiguas sustituidas por una pendiente más reciente. Un stage consumido se registra al terminar correctamente la instalación o el paquete; sigue respetando los siete días.
+- `artifacts/releases/release-<id>` y stages generados con identificador único se retiran en la siguiente pasada si ya tienen sustituto y el manifiesto coincide con todos los archivos, tamaños y SHA-256. El antiguo `artifacts/win-x64` y los stages de nombre personalizado conservan el margen de siete días mientras no exista un registro de consumo.
 - Payloads históricos de Inno Setup en `artifacts/packaging/<id>/payload`, únicamente con el mismo manifiesto completo.
-- Nuevas carpetas de trabajo de paquetes, verificación y pruebas UI que sus productores hayan registrado expresamente como generadas al terminar. El recibo externo contiene el inventario completo y hashes; cualquier archivo añadido o modificado impide retirarlas.
+- Carpetas de trabajo de paquetes y pruebas con recibo de finalización, y stages consumidos por una instalación o un empaquetado. Son elegibles en cuanto terminan sus operaciones. El recibo externo contiene el inventario completo y hashes. Cualquier archivo añadido o modificado impide retirarlas.
 - Salidas parciales de nuevas compilaciones fallidas, únicamente si `dotnet publish` ha devuelto el control y el productor ha podido registrar un inventario exacto. Un proceso interrumpido sin ese inventario deja su salida conservada.
 
-Los scripts de compilación, instalación, empaquetado y verificación aplican retención al terminar correctamente, aunque HABITAT no se abra. No se borra una compilación al crearla. Los ZIP y EXE finales se conservan como entregables; esta política retira sus carpetas de trabajo duplicadas.
+Los scripts de compilación, instalación, empaquetado y verificación aplican retención al terminar correctamente, aunque HABITAT no se abra. La compilación pendiente se puede activar hasta que se consuma o una nueva la sustituya. Un stage suministrado al empaquetador sigue la política de compilaciones pendientes. La publicación compartida retira el suyo después de validar ZIP y EXE. El motor conserva los ZIP y EXE finales como entregables; quien realiza la publicación debe retirar esas copias locales cuando haya verificado su entrega.
+
+## Cierre del trabajo local
+
+Al terminar una publicación, elimina sus worktrees de preparación una vez comprobados sus cambios locales, archivos ignorados y referencias en Git. Preserva aparte las configuraciones, los diagnósticos necesarios y cualquier cambio único. Desvincula las junctions de NuGet sin recorrer su destino antes de retirar una copia de trabajo.
+
+Conserva una sola versión del SDK local tras verificar que permite compilar y ejecutar las comprobaciones. Las cachés de paquetes compartidas se reutilizan para evitar descargas y compilaciones repetidas. Las copias de código para pruebas deben cerrarse junto con la prueba, guardando únicamente los cambios únicos y su procedencia cuando hagan falta.
+
+Los respaldos importantes son los datos, las configuraciones y los cambios de fuente sin publicar. Los ejecutables de versiones antiguas y las copias completas de dependencias no sustituyen esos respaldos. La limpieza histórica requiere clasificar los archivos y verificar las copias preservadas antes de borrar. El motor automático no extiende su alcance a fuentes, SDK, datos personales o paquetes finales.
+
+El actualizador tiene su propio directorio de trabajo por intento bajo `%LOCALAPPDATA%\HABITAT\updates`. Lo retira al cancelar antes de la entrega al instalador o al confirmar el arranque de la versión nueva. Los diagnósticos se escriben aparte y se conservan junto a `last-result.json`. Un error de instalación posterior a la entrega conserva la carpeta de trabajo para investigar el fallo.
 
 ## Límites y seguridad
 
-La limpieza usa exclusivamente `artifacts` de la instalación ZIP activa o de desarrollo. Una instalación EXE puede asociarse explícitamente con los outputs de este repositorio mediante [register-generated-storage.ps1](../scripts/register-generated-storage.ps1), ejecutado desde Windows normal. El registro local queda ligado a esa instalación exacta en `HABITAT/generated-storage.json` del perfil; nunca se incluye en paquetes ni contiene credenciales. Cada PC registra su propia ruta, sin rutas personales en el código. Sin ese registro, un EXE no busca repositorios por el disco. Los ejecutables sueltos y las sesiones de pruebas/sandbox no habilitan la limpieza. La aplicación informa si no puede verificar una ubicación.
+El análisis de Storage usa `artifacts` de la instalación ZIP activa o de desarrollo. Una instalación EXE puede asociarse explícitamente con los outputs de este repositorio mediante [register-generated-storage.ps1](../scripts/register-generated-storage.ps1), ejecutado desde Windows normal. El registro local queda ligado a esa instalación exacta en `HABITAT/generated-storage.json` del perfil; nunca se incluye en paquetes ni contiene credenciales. Cada PC registra su propia ruta, sin rutas personales en el código. Sin ese registro, un EXE no busca repositorios por el disco. Los ejecutables sueltos y las sesiones de pruebas/sandbox no habilitan la limpieza. La aplicación informa si no puede verificar una ubicación.
 
 Para asociar un EXE que ya incluya esta función con los archivos generados de este clon:
 
@@ -48,7 +58,7 @@ El bloqueo exclusivo `artifacts/update.lock` coordina limpieza e instalación, i
 
 Antes del primer borrado se guarda un inventario de limpieza. Si se interrumpe, un intento posterior solo retira los archivos restantes que aún coincidan; nunca acepta archivos nuevos. Los errores de un candidato no impiden intentar otros. No se cambian atributos ni se fuerzan archivos bloqueados.
 
-Se conservan código, cambios locales, recuperación, configuraciones, credenciales, tareas, conversaciones y perfiles del navegador. Tampoco se limpian `.nuget`, `.dotnet-local`, `artifacts/tooling`, cachés del SDK, descargas/diagnósticos del perfil ni paquetes finales. El motor no deduplica ni convierte dependencias en enlaces compartidos.
+Se conservan código, cambios locales, recuperación, configuraciones, credenciales, tareas, conversaciones y perfiles del navegador. También se conservan `.nuget`, `.dotnet-local`, `artifacts/tooling`, cachés del SDK, diagnósticos y paquetes finales.
 
 Las carpetas históricas de pruebas, `release-checkouts`, copias de fuente o recuperación y bundles sin recibos no se retiran por su nombre, tamaño o antigüedad. Aunque contengan binarios idénticos, no puede demostrarse que todo el árbol sea prescindible. La primera limpieza puede, por tanto, dejar un volumen considerable sin clasificar. No existe una opción para forzar su borrado desde la app.
 
@@ -60,7 +70,7 @@ Desde el repositorio:
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/clean-generated-storage.ps1
 ```
 
-Sin `-Clean` solo analiza. El informe JSON incluye candidatos, bytes, protecciones y fallos. `-Clean` realiza una limpieza real con nueva validación. `HABITAT_STORAGE_DRY_RUN=1` fuerza la simulación; los scripts omiten sus pasadas automáticas repetidas en esa sesión y el análisis explícito sigue disponible. `HABITAT_STORAGE_SKIP_AUTOMATIC=1` omite únicamente el mantenimiento del arranque para validar una instalación, sin deshabilitar las acciones manuales de Storage. Son variables del proceso de validación, no preferencias persistentes; una apertura normal posterior recupera el mantenimiento automático.
+Sin `-Clean` solo analiza. El informe JSON incluye candidatos, bytes, protecciones y fallos. `-Clean` realiza una limpieza real con nueva validación. `HABITAT_STORAGE_DRY_RUN=1` fuerza la simulación. `HABITAT_STORAGE_SKIP_AUTOMATIC=1` omite las pasadas automáticas en el arranque y en los scripts, mientras el análisis y la limpieza manual siguen disponibles. Ambas variables se aplican al proceso que ejecuta la validación.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/storage.checks.ps1

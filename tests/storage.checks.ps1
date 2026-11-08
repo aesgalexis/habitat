@@ -50,21 +50,24 @@ $stages = @(); $releases = @()
 foreach ($index in 1..4) {
     $stage = Stage (Join-Path $root ('staged/build-' + [guid]::NewGuid().ToString('N')))
     $stages += $stage
-    $releases += Install-HabitatRelease -ArtifactsRoot $root -StageDirectory $stage
+    $releases += Install-HabitatRelease -ArtifactsRoot $root -StageDirectory $stage -DeferStorageMaintenance
 }
 $pending = Stage (Join-Path $root ('staged/build-' + [guid]::NewGuid().ToString('N')))
+$superseded = Stage (Join-Path $root ('staged/build-' + [guid]::NewGuid().ToString('N')))
+[IO.Directory]::SetCreationTimeUtc($superseded, [DateTime]::UtcNow.AddMinutes(-1))
 $inProgress = Stage (Join-Path $root ('staged/build-' + [guid]::NewGuid().ToString('N')))
 $operation = [Habitat.Storage.GeneratedStorage]::BeginOperation($root, @($inProgress))
 try {
-    $analysis = Scan
-    Check (-not $analysis.Unavailable -and -not $analysis.Busy -and $analysis.RecoverableBytes -gt 0) 'Dry run must identify old verified outputs.'
+    $analysis = [Habitat.Storage.GeneratedStorage]::Run($root, $false, $null, $token)
+    Check (-not $analysis.Unavailable -and -not $analysis.Busy -and $analysis.RecoverableBytes -gt 0) 'Dry run must identify redundant verified outputs as soon as they are replaced.'
     Check (@($releases | Where-Object { Test-Path -LiteralPath $_ }).Count -eq 4) 'Analysis deleted a release.'
     $cleaned = Scan $true
     Check (-not $cleaned.Unavailable -and $cleaned.Errors.Count -eq 0 -and $cleaned.FreedBytes -eq $analysis.RecoverableBytes) ('Cleanup accounting must match deleted bytes: ' + ($cleaned | ConvertTo-Json -Depth 4))
     Check ((Test-Path -LiteralPath $releases[3]) -and (Test-Path -LiteralPath $releases[2])) 'Active and previous releases must survive.'
     Check (-not (Test-Path -LiteralPath $releases[0]) -and -not (Test-Path -LiteralPath $releases[1])) 'Obsolete verified releases were not removed.'
     Check ((Test-Path -LiteralPath $pending) -and (Test-Path -LiteralPath $inProgress)) 'Pending and leased stages must survive.'
-    Check (@($stages | Where-Object { Test-Path -LiteralPath $_ }).Count -eq 0) 'Consumed stages must be retired after the safety margin.'
+    Check (-not (Test-Path -LiteralPath $superseded)) 'A superseded generated build should not wait out the historical safety margin.'
+    Check (@($stages | Where-Object { Test-Path -LiteralPath $_ }).Count -eq 0) 'Consumed stages must be retired once their operations have ended.'
     Check ((Scan $true).FreedBytes -eq 0) 'Cleanup must be repeatable.'
 } finally { $operation.Dispose() }
 
@@ -128,16 +131,20 @@ $testOutput = Join-Path $root ('verification/run-' + [guid]::NewGuid().ToString(
 [IO.Directory]::CreateDirectory($testOutput) | Out-Null
 [IO.File]::WriteAllText((Join-Path $testOutput 'synthetic-tasks.json'), 'isolated test data')
 [Habitat.Storage.GeneratedStorage]::Complete($root, $testOutput, 'test')
-$fresh = [Habitat.Storage.GeneratedStorage]::Run($root, $true, $null, $token)
-Check (Test-Path -LiteralPath $testOutput) 'Fresh completed outputs need seven days of grace.'
 $testOperation = [Habitat.Storage.GeneratedStorage]::BeginOperation($root, @($testOutput))
-try { Check ((Scan $true).Eligible -notcontains $testOutput.Substring($root.Length + 1).Replace('\', '/')) 'A running test output must remain protected.' }
+try {
+    $null = [Habitat.Storage.GeneratedStorage]::Run($root, $true, $null, $token)
+    Check (Test-Path -LiteralPath $testOutput) 'A running test output must remain protected even after its inventory has been recorded.'
+}
 finally { $testOperation.Dispose() }
-Check ((Scan $true).FreedBytes -gt 0 -and -not (Test-Path -LiteralPath $testOutput)) 'Completed isolated test output was not retired.'
+Check (([Habitat.Storage.GeneratedStorage]::Run($root, $true, $null, $token)).FreedBytes -gt 0 -and
+    -not (Test-Path -LiteralPath $testOutput)) 'Completed isolated test output was not retired promptly.'
 $failedBuild = Join-Path $root ('staged/build-' + [guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($failedBuild) | Out-Null
 [IO.File]::WriteAllText((Join-Path $failedBuild 'partial-output.dll'), 'incomplete generated build')
 [Habitat.Storage.GeneratedStorage]::Complete($root, $failedBuild, 'build')
+Check (([Habitat.Storage.GeneratedStorage]::Run($root, $false, $null, $token)).Eligible -notcontains
+    $failedBuild.Substring($root.Length + 1).Replace('\', '/')) 'Failed builds must keep their diagnostic margin.'
 Check ((Scan $true).FreedBytes -gt 0 -and -not (Test-Path -LiteralPath $failedBuild)) 'A returned, failed build needs a producer inventory before its partial output may be retired.'
 $longOutput = Join-Path $root ('verification/run-' + [guid]::NewGuid().ToString('N'))
 $longDirectory = Join-Path $longOutput (('x' * 70) + '/' + ('y' * 70) + '/' + ('z' * 70))
@@ -224,7 +231,6 @@ $cancelled = $false
 try { [Habitat.Storage.GeneratedStorage]::RunAt($root, $true, $null, $clock, $cancel.Token) } catch { $cancelled = $true }
 finally { $cancel.Dispose() }
 Check ($cancelled -and (Test-Path -LiteralPath $releases[3])) 'Cancellation must stop maintenance without touching the active release.'
-Check ([Habitat.Storage.GeneratedStorage]::RunAt($root, $false, $null, [DateTime]::UtcNow.AddDays(6), $token).RecoverableBytes -eq 0) 'The grace period must apply independently to all recent outputs.'
 Check ([Habitat.Storage.GeneratedStorage]::RunAt((Split-Path -Parent $root), $true, $null, $clock, $token).Unavailable) 'The generated root itself must never become a cleanup candidate.'
 foreach ($tag in @('9000001A','9000701A','9000F01A')) {
     Check ([Habitat.Storage.GeneratedStorage]::IsCloudMetadataTag([uint32]::Parse($tag, [Globalization.NumberStyles]::HexNumber))) 'A documented Cloud Files tag was not recognized.'
@@ -239,5 +245,28 @@ $before = [IO.File]::ReadAllText((Join-Path $root 'previous-release.txt'))
 $rollbackStage = Stage (Join-Path $root ('staged/build-' + [guid]::NewGuid().ToString('N')))
 try { Install-HabitatRelease -ArtifactsRoot $root -StageDirectory $rollbackStage -AfterActivate { throw 'Synthetic startup failure' } } catch { }
 Check ([IO.File]::ReadAllText((Join-Path $root 'previous-release.txt')) -eq $before -and [IO.File]::ReadAllText((Join-Path $root 'current-release.txt')) -eq $pointer) 'Rollback must restore both active and previous pointers.'
+
+$cache = Join-Path $testRun 'updates'
+$workspace = Join-Path $cache ('update-' + [guid]::NewGuid().ToString('N'))
+$extracted = Join-Path $workspace 'package'
+$diagnostics = Join-Path $cache 'diagnostics'
+$null = [IO.Directory]::CreateDirectory($extracted)
+$null = [IO.Directory]::CreateDirectory($diagnostics)
+[IO.File]::WriteAllText((Join-Path $workspace 'package.zip'), 'synthetic download')
+[IO.File]::WriteAllText((Join-Path $extracted 'file'), 'synthetic extraction')
+$result = Join-Path $cache 'last-result.json'
+[IO.File]::WriteAllText($result, 'synthetic result')
+$cleanup = [Habitat.Storage.GeneratedStorage]::DiscardUpdateWorkspace($cache, $diagnostics)
+Check ($cleanup.Unavailable -and (Test-Path -LiteralPath $diagnostics)) 'Update cleanup must reject sibling directories.'
+$workspaceLink = Join-Path $workspace 'linked'
+$null = New-Item -ItemType Junction -Path $workspaceLink -Target $diagnostics
+try {
+    $cleanup = [Habitat.Storage.GeneratedStorage]::DiscardUpdateWorkspace($cache, $workspace)
+    Check ($cleanup.Unavailable -and (Test-Path -LiteralPath $extracted)) 'A linked update workspace must be preserved without deleting any contents.'
+} finally { [IO.Directory]::Delete($workspaceLink) }
+$cleanup = [Habitat.Storage.GeneratedStorage]::DiscardUpdateWorkspace($cache, $workspace)
+Check ($cleanup.Errors.Count -eq 0 -and $cleanup.FreedBytes -gt 0 -and -not (Test-Path -LiteralPath $workspace)) `
+    ('A finished update can retire both its downloaded archive and extracted payload. ' + ($cleanup | ConvertTo-Json -Compress))
+Check ((Test-Path -LiteralPath $diagnostics) -and (Test-Path -LiteralPath $result)) 'Update cleanup must preserve diagnostics and the last result.'
 Write-Host "Storage checks passed: $script:count assertions. Synthetic installations only: $testRun"
 } finally { $env:HABITAT_STORAGE_DRY_RUN = $inheritedDryRun }

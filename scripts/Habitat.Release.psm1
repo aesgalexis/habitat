@@ -138,7 +138,8 @@ function Install-HabitatRelease {
         [scriptblock]$BeforeActivate = {},
         [scriptblock]$AfterActivate = {},
         [scriptblock]$BeforeRollback = {},
-        [scriptblock]$AfterRollback = {}
+        [scriptblock]$AfterRollback = {},
+        [switch]$DeferStorageMaintenance
     )
     $stage = Assert-HabitatChildPath $ArtifactsRoot $StageDirectory
     $pointer = Join-Path $ArtifactsRoot 'current-release.txt'
@@ -193,8 +194,10 @@ function Install-HabitatRelease {
                     [Habitat.Storage.GeneratedStorage]::Complete($ArtifactsRoot, $stage, 'consumed')
                 }
             } catch { Write-Warning 'The installed stage could not be registered for later cleanup.' }
-            try { $null = Invoke-HabitatStorageMaintenance -ArtifactsRoot $ArtifactsRoot -Clean -Automatic }
-            catch { Write-Warning 'Generated storage maintenance could not finish. Installation succeeded.' }
+            if (-not $DeferStorageMaintenance) {
+                try { $null = Invoke-HabitatStorageMaintenance -ArtifactsRoot $ArtifactsRoot -Clean -Automatic }
+                catch { Write-Warning 'Generated storage maintenance could not finish. Installation succeeded.' }
+            }
         }
     }
 }

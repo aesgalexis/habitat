@@ -42,6 +42,12 @@ internal static class ReleaseUpdateChecks
         var prepared = await client.PrepareAsync(release, progress, default);
         check(File.ReadAllBytes(prepared.PackagePath).SequenceEqual(fixture.Package) && progress.Percent == 100,
             "Downloads are complete and verified before an installer can be launched.");
+        if (Environment.GetEnvironmentVariable("HABITAT_STORAGE_DRY_RUN") != "1")
+        {
+            client.Discard(prepared.Directory);
+            check(!Directory.Exists(prepared.Directory) && File.Exists(UpdateDiagnosticLog.ForDirectory(prepared.Directory).Path),
+                "Discarding a prepared update retires its download and preserves diagnostics.");
+        }
         check(fixture.Addresses.All(uri => uri.Scheme == "https") && fixture.RequestsWithCredentials == 0,
             "Checks and downloads do not send credentials or user content.");
         fixture.CorruptHash = true;

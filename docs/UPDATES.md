@@ -18,7 +18,7 @@ Las versiones antiguas que todavía no incluyen el actualizador necesitan instal
 
 ## Integridad, ejecución y diagnóstico
 
-La instalación y el arranque incorporan [retención de archivos generados](STORAGE.md). Se conserva la versión activa, la anterior y las operaciones en curso, con un margen de siete días. **Preferences… → Storage** permite analizar y limpiar con la misma política. El rollback restaura ambos punteros de releases.
+La instalación y el arranque incorporan [retención de archivos generados](STORAGE.md). En ZIP se conserva la versión activa, la anterior y las operaciones en curso. Las publicaciones verificadas que han sido sustituidas se retiran al pasar la limpieza. **Preferences… → Storage** permite analizar y limpiar con la misma política. El rollback restaura ambos punteros de releases.
 
 Se aceptan exclusivamente assets con el nombre y ruta esperados de este repositorio, a través de HTTPS. Los redireccionamientos se limitan a los hosts de descarga de GitHub. Antes de la instalación se vuelve a consultar la publicación, se verifica tamaño y SHA-256 y, para ZIP, también versión, runtime y el manifiesto completo. La extracción rechaza rutas que salgan del directorio, duplicados y enlaces. Un SHA-256 detecta corrupción; no equivale a una firma de editor. La firma de código continúa aplazada según [SIGNING.md](SIGNING.md).
 
@@ -40,9 +40,9 @@ La corrección requiere instalar una versión que ya la incluya; descargar un pa
 2. Cierra HABITAT y utiliza el mismo formato de la instalación anterior: ejecuta el EXE sobre la misma carpeta o extrae todo el ZIP y ejecuta `Install-HABITAT.cmd` con la misma ruta de instalación. No mezcles los formatos.
 3. Abre HABITAT desde su acceso de Windows y comprueba **About HABITAT…**. Las tareas, preferencias, credenciales y demás datos persistentes se conservan. Guarda los borradores antes de cerrar manualmente.
 
-Si falla otra vez, conserva el mensaje exacto, las versiones instalada y de destino, y el `update-error.log` de la carpeta `update-<id>` más reciente. El fallo de carga de módulos se identifica por `Get-FileHash` y `CommandNotFoundException`; otros errores requieren su propio diagnóstico.
+Si falla otra vez, conserva el mensaje exacto, las versiones instalada y de destino y el archivo `diagnostics\update-<id>.jsonl` más reciente. Un fallo de carga de módulos puede identificarse por `Get-FileHash` y `CommandNotFoundException`.
 
-Los paquetes y diagnósticos quedan en `%LOCALAPPDATA%\HABITAT\updates\update-<id>`. `last-result.json` registra el resultado de la última instalación y `%LOCALAPPDATA%\HABITAT\operations.log` registra fallos de comprobación o descarga. No se envían conversaciones, tareas, credenciales ni telemetría al desarrollador. GitHub recibe las consultas de publicación y, al actualizar, las descargas con sus metadatos normales de red.
+El paquete se descarga a `%LOCALAPPDATA%\HABITAT\updates\update-<id>`. Esa carpeta se retira al cancelar la preparación o después de comprobar el arranque de la versión nueva. Si la instalación falla después del cierre de HABITAT, se conserva para diagnóstico. Los logs de fases quedan en `updates\diagnostics`, `last-result.json` registra el resultado de la última instalación y `%LOCALAPPDATA%\HABITAT\operations.log` registra fallos de comprobación o descarga. El actualizador mantiene las conversaciones, las tareas, las credenciales y sus diagnósticos en el dispositivo. GitHub recibe las consultas de publicación y las descargas con sus metadatos normales de red.
 
 ## Verificación
 

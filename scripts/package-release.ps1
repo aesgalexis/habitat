@@ -8,18 +8,20 @@ if ($LASTEXITCODE -ne 0) { throw 'Could not determine the source commit.' }
 $version = (Get-Content -LiteralPath (Join-Path $repo 'VERSION') -Raw).Trim()
 if ($version -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') { throw 'VERSION must contain a numeric SemVer version.' }
 $artifactsRoot = Join-Path $repo 'artifacts'
-if (-not $StageDirectory) {
+$ownsStage = -not $StageDirectory
+if ($ownsStage) {
     $StageDirectory = Join-Path $artifactsRoot ('staged\package-' + [guid]::NewGuid().ToString('N'))
-    & (Join-Path $PSScriptRoot 'build-winui.ps1') -OutputDirectory $StageDirectory
 }
-$stage = (Resolve-Path -LiteralPath $StageDirectory).Path
+$stage = if ($ownsStage) { $StageDirectory } else { (Resolve-Path -LiteralPath $StageDirectory).Path }
 if (-not $stage.StartsWith($artifactsRoot + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Stage must stay inside artifacts.' }
 Import-Module (Join-Path $PSScriptRoot 'Habitat.Release.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'Habitat.Storage.psm1') -Force
 $output = Join-Path $artifactsRoot 'packages'
 $bundle = Join-Path $output ('bundle-' + [guid]::NewGuid().ToString('N'))
+[IO.Directory]::CreateDirectory($artifactsRoot) | Out-Null
 $packageOperation = [Habitat.Storage.GeneratedStorage]::BeginOperation($artifactsRoot, @($stage, $bundle))
 try {
+if ($ownsStage) { & (Join-Path $PSScriptRoot 'build-winui.ps1') -OutputDirectory $stage }
 Test-HabitatBuildManifest $stage
 foreach ($assembly in 'HABITAT.dll', 'HABITAT.Hotkey.dll', 'Habitat.Core.dll', 'Habitat.Activation.dll') {
     $info = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $stage $assembly))
@@ -63,7 +65,7 @@ $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant
 Write-Host "Release package: $zip"
 Write-Host "SHA-256: $hash"
 Complete-HabitatGeneratedOutput $artifactsRoot $bundle 'package'
-Complete-HabitatGeneratedOutput $artifactsRoot $stage 'consumed'
+if ($ownsStage) { Complete-HabitatGeneratedOutput $artifactsRoot $stage 'consumed' }
 } finally { $packageOperation.Dispose() }
 try { $null = Invoke-HabitatStorageMaintenance -ArtifactsRoot $artifactsRoot -Clean -Automatic }
 catch { Write-Warning 'Generated storage maintenance could not finish. Release package was retained.' }

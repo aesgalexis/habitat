@@ -41,6 +41,10 @@ Import-Module (Join-Path $PSScriptRoot 'Habitat.Release.psm1') -Force
 New-HabitatBuildManifest $output
 Test-HabitatBuildManifest $output
 $buildVerified = $true
+Write-Host "Verified HABITAT build prepared at $output"
+if ($Install) {
+    & (Join-Path $PSScriptRoot 'apply-staged-update.ps1') -StageDirectory $output -DeferStorageMaintenance
+}
 } finally {
     if ($publishFinished -and -not $buildVerified -and [IO.Directory]::Exists($output)) {
         Complete-HabitatGeneratedOutput $artifactsRoot $output 'build'
@@ -49,9 +53,6 @@ $buildVerified = $true
 }
 try { $null = Invoke-HabitatStorageMaintenance -ArtifactsRoot $artifactsRoot -Clean -Automatic }
 catch { Write-Warning 'Generated storage maintenance could not finish. Build output was retained.' }
-Write-Host "Verified HABITAT build prepared at $output"
-if ($Install) {
-    & (Join-Path $PSScriptRoot 'apply-staged-update.ps1') -StageDirectory $output
-} else {
+if (-not $Install) {
     Write-Host "To activate from your normal Windows session: scripts\apply-staged-update.ps1 -StageDirectory '$output'"
 }

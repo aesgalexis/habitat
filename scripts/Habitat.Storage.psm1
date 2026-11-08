@@ -13,7 +13,9 @@ function Invoke-HabitatStorageMaintenance {
     param([Parameter(Mandatory)][string]$ArtifactsRoot, [switch]$Clean, [switch]$Automatic)
     # Validation sessions already perform an explicit dry-run analysis. Avoid
     # repeatedly hashing the same installation after every build/check script.
-    if ($Automatic -and $env:HABITAT_STORAGE_DRY_RUN -eq '1') { return [Habitat.Storage.StorageReport]::new() }
+    if ($Automatic -and ($env:HABITAT_STORAGE_DRY_RUN -eq '1' -or $env:HABITAT_STORAGE_SKIP_AUTOMATIC -eq '1')) {
+        return [Habitat.Storage.StorageReport]::new()
+    }
     [Habitat.Storage.GeneratedStorage]::Run($ArtifactsRoot, $Clean.IsPresent, $null, [Threading.CancellationToken]::None)
 }
 

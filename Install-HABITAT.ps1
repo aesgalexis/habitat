@@ -34,6 +34,7 @@ $version = (Get-Content -LiteralPath (Join-Path $packageRoot 'VERSION') -Raw).Tr
 $metadata = Get-Content -LiteralPath (Join-Path $packageRoot 'release.json') -Raw | ConvertFrom-Json
 if ($metadata.version -ne $version -or $metadata.runtime -ne 'win-x64') { throw 'Invalid release metadata.' }
 Import-Module (Join-Path $packageRoot 'scripts\Habitat.Release.psm1') -Force
+Import-Module (Join-Path $packageRoot 'scripts\Habitat.Storage.psm1')
 $payload = Join-Path $packageRoot 'artifacts\staged\app'
 Test-HabitatBuildManifest $payload
 foreach ($required in 'HABITAT.Hotkey.exe', 'HABITAT.Hotkey.dll', 'Habitat.Activation.dll') {
@@ -50,15 +51,16 @@ New-Item -ItemType Directory -Path $destination -Force | Out-Null
 foreach ($name in 'HABITAT.vbs', 'HABITAT-Hotkey.vbs', 'VERSION', 'release.json', 'README.md', 'CHANGELOG.md', 'LICENSE', 'docs', 'scripts', 'extension', 'vscode-extension') {
     Copy-Item -LiteralPath (Join-Path $packageRoot $name) -Destination $destination -Recurse -Force
 }
-$stage = Join-Path $destination ('artifacts\staged\install-' + [guid]::NewGuid().ToString('N'))
-[IO.Directory]::CreateDirectory((Join-Path $destination 'artifacts')) | Out-Null
-$installOperation = [Habitat.Storage.GeneratedStorage]::BeginOperation((Join-Path $destination 'artifacts'), @($stage))
+$installArtifacts = Join-Path $destination 'artifacts'
+$stage = Join-Path $installArtifacts ('staged\install-' + [guid]::NewGuid().ToString('N'))
+[IO.Directory]::CreateDirectory($installArtifacts) | Out-Null
+$installOperation = [Habitat.Storage.GeneratedStorage]::BeginOperation($installArtifacts, @($stage))
 try {
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 Get-ChildItem -LiteralPath $payload -Force | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $stage -Recurse -Force }
 if ($NoLaunch) {
     # Offline deployment / tests: no process, startup registry or user-data access.
-    $installed = Install-HabitatRelease -ArtifactsRoot (Join-Path $destination 'artifacts') -StageDirectory $stage -BeforeActivate {
+    $installed = Install-HabitatRelease -ArtifactsRoot $installArtifacts -StageDirectory $stage -DeferStorageMaintenance -BeforeActivate {
         param($previous)
         foreach ($name in 'HABITAT', 'HABITAT.Hotkey') {
             if (Get-Process -Name $name -ErrorAction SilentlyContinue | Where-Object {
@@ -68,7 +70,7 @@ if ($NoLaunch) {
     }
     Write-Host "Verified release installed: $installed"
 } else {
-    & (Join-Path $destination 'scripts\apply-staged-update.ps1') -StageDirectory $stage
+    & (Join-Path $destination 'scripts\apply-staged-update.ps1') -StageDirectory $stage -DeferStorageMaintenance
 }
 if (-not $NoShortcuts) {
     $shortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) 'HABITAT.lnk'
@@ -82,6 +84,8 @@ if (-not $NoShortcuts) {
     $shortcut.Save()
 }
 } finally { $installOperation.Dispose() }
+try { $null = Invoke-HabitatStorageMaintenance -ArtifactsRoot $installArtifacts -Clean -Automatic }
+catch { Write-Warning 'Generated storage maintenance could not finish. Installation succeeded.' }
 Write-Host "HABITAT $version installed in $destination"
 Write-Host 'Open Set up HABITAT from the app menu to connect Chrome and optional integrations.'
 Write-Host 'Chrome extension: https://chromewebstore.google.com/detail/ennnldolgdbbkgmpjjpkafeajihpimii'

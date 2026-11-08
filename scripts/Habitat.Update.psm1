@@ -1,5 +1,6 @@
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'Habitat.Release.psm1')
+Import-Module (Join-Path $PSScriptRoot 'Habitat.Storage.psm1')
 
 function Assert-HabitatUpdatePath([string]$Root, [string]$Path) {
     $rootPath = [IO.Path]::GetFullPath($Root).TrimEnd('\', '/')
@@ -36,9 +37,12 @@ function Install-HabitatZipUpdate {
     }
     Copy-Item -LiteralPath (Join-Path $PackageRoot 'release.json') -Destination $stage
     New-HabitatBuildManifest $stage
-    return Install-HabitatRelease -ArtifactsRoot $artifacts -StageDirectory $stage -BeforeActivate $BeforeActivate `
+    $installed = Install-HabitatRelease -ArtifactsRoot $artifacts -StageDirectory $stage -BeforeActivate $BeforeActivate -DeferStorageMaintenance `
         -AfterActivate $StartRelease -BeforeRollback $StopRelease -AfterRollback $StartRelease
     } finally { $operation.Dispose() }
+    try { $null = Invoke-HabitatStorageMaintenance -ArtifactsRoot $artifacts -Clean -Automatic }
+    catch { Write-Warning 'Generated storage maintenance could not finish. Installation succeeded.' }
+    return $installed
 }
 
 Export-ModuleMember -Function Assert-HabitatUpdatePath, Get-HabitatInstallerArguments, Install-HabitatZipUpdate

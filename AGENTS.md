@@ -44,3 +44,12 @@ Estas reglas se aplican a todo el repositorio.
 - El propietario ha elegido SignPath Foundation como vía futura, pero ha aplazado la solicitud hasta mejorar el empaquetado (decisión del 19 de octubre de 2026).
 - Limita este trabajo a preparación local. No envíes solicitudes de admisión o firma, crees cuentas, instales la GitHub App, aceptes condiciones, añadas credenciales ni actives workflows de SignPath hasta que el usuario retome expresamente el proceso.
 - Conserva el estado y los pendientes en `docs/SIGNING.md`. Los borradores no significan que el proyecto esté admitido, firmado o patrocinado.
+
+## Retención durante el desarrollo
+
+- Mantén una sola versión del SDK local que permita compilar el proyecto. Antes de retirar una versión sustituida, comprueba la compilación y la ejecución con la que se conserva.
+- Conserva solo las compilaciones que estén en uso o pendientes de una prueba concreta, y como máximo una versión anterior cuando haga falta para recuperar una actualización. Retira las copias obsoletas al cerrar ese trabajo.
+- Tras comprobar una publicación, retira sus ZIP, instaladores y worktrees locales de preparación. Conserva los commits en Git y verifica antes que no haya cambios locales, configuraciones ni datos únicos en esas carpetas.
+- Los respaldos deben proteger datos importantes, configuraciones y cambios de código sin publicar. Guarda esos archivos con su procedencia; evita respaldar aplicaciones completas, dependencias o resultados de pruebas reconstruibles.
+- Usa los scripts del repositorio para las verificaciones, con sus directorios aislados y su limpieza al finalizar. Si creas una copia de código o una prueba temporal adicional, retírala al terminar después de preservar los archivos únicos.
+- Mantén la caché NuGet compartida para acelerar las compilaciones. Al retirar un worktree, elimina únicamente su enlace a esa caché, sin recorrer ni borrar el destino.

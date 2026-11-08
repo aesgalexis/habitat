@@ -13,13 +13,17 @@ if (-not $taskOutput.StartsWith($taskArtifacts + [IO.Path]::DirectorySeparatorCh
     throw 'UI check output must stay inside this project artifacts directory.'
 }
 Import-Module (Join-Path $PSScriptRoot 'Habitat.Storage.psm1') -Force
+[IO.Directory]::CreateDirectory($taskArtifacts) | Out-Null
 $uiOperation = [Habitat.Storage.GeneratedStorage]::BeginOperation($taskArtifacts, @($taskOutput))
 try {
+$buildWatch = [Diagnostics.Stopwatch]::StartNew()
 dotnet publish (Join-Path $taskProjectRoot "src\Habitat.App\Habitat.App.csproj") `
     --configuration Release --runtime win-x64 --self-contained true `
     -p:Platform=x64 -p:HabitatUiChecks=true -p:PublishReadyToRun=false "-p:BaseOutputPath=$taskOutput/build/" --output $taskOutput
 if ($LASTEXITCODE -ne 0) { throw "Could not build the tasks UI checks." }
+Write-Host ('WinUI build completed in {0:N1}s.' -f $buildWatch.Elapsed.TotalSeconds)
 function Invoke-HabitatUiCheckProcess([string]$Mode, [string]$LogName) {
+    $watch = [Diagnostics.Stopwatch]::StartNew()
     $taskProcess = Start-Process -FilePath (Join-Path $taskOutput 'HABITAT.exe') -ArgumentList $Mode `
         -WorkingDirectory $taskOutput -WindowStyle Hidden -PassThru
     if (-not $taskProcess.WaitForExit($TimeoutSeconds * 1000)) {
@@ -28,6 +32,7 @@ function Invoke-HabitatUiCheckProcess([string]$Mode, [string]$LogName) {
     }
     Get-Content -LiteralPath (Join-Path $taskOutput $LogName)
     if ($taskProcess.ExitCode -ne 0) { throw "Native UI checks failed: $Mode (exit $($taskProcess.ExitCode))." }
+    Write-Host ('{0} completed in {1:N1}s.' -f $Mode, $watch.Elapsed.TotalSeconds)
 }
 $checkMode = if ($PreferencesOnly) { '--preferences-ui-only' } elseif ($ContactDestinationsOnly) { '--contact-destinations-ui-only' } elseif ($ContactChannelsOnly) { '--contact-channels-ui-only' } elseif ($ContactSourcesOnly) { '--contact-sources-ui-only' } elseif ($PhoneLinkOnly) { '--phone-link-ui-only' } elseif ($FacebookOnly) { '--facebook-ui-only' } elseif ($UpdatesOnly) { '--updates-ui-only' } elseif ($ConversationOnly) { '--conversation-ui-only' } elseif ($WindowMenuOnly) { '--window-menu-ui-only' } elseif ($ScrollEdgesOnly) { '--scroll-edges-ui-only' } elseif ($CodexSchedulesOnly) { '--codex-schedules-ui-only' } elseif ($HotkeyOnly) { '--hotkey-ui-only' } elseif ($VSCodeOnly) { '--vscode-ui-only' } else { '--all-ui-checks' }
 Invoke-HabitatUiCheckProcess $checkMode $(if ($WindowMenuOnly) { 'window-menu-checks.log' } else { 'tasks-ui-checks.log' })

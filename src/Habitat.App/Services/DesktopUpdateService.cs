@@ -75,5 +75,9 @@ internal sealed class DesktopUpdateService : IAppUpdateService
         }
     }
 
+    public Task DiscardAsync(PreparedAppUpdate prepared) => _client is { } client
+        ? Task.Run(() => client.Discard(prepared.Directory))
+        : Task.CompletedTask;
+
     public void Dispose() => _client?.Dispose();
 }
