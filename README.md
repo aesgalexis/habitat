@@ -91,7 +91,7 @@ The full suite runs automated checks and a Release build with isolated test data
 - [Documentation index](docs/README.md) for setup, integrations, privacy and technical guides.
 - [Report an issue](https://github.com/aesgalexis/habitat/issues) with the installed version and relevant connection status.
 
-This source tree declares version **0.20.2**. Published packages and their versions are listed in [GitHub Releases](https://github.com/aesgalexis/habitat/releases).
+This source tree declares version **0.20.3**. Published packages and their versions are listed in [GitHub Releases](https://github.com/aesgalexis/habitat/releases).
 
 ## License
 

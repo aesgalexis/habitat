@@ -98,13 +98,30 @@ foreach ($invalid in '../outside', 'releases/release-000000000000000000000000000
     Check ((Scan $true).Unavailable -and (Test-Path -LiteralPath $releases[3])) 'An unsafe pointer must disable cleanup.'
 }
 [IO.File]::WriteAllText((Join-Path $root 'current-release.txt'), $pointer)
+Add-Type -TypeDefinition @'
+using System;
+using System.Threading.Tasks;
+
+public static class HabitatStorageLockCheck
+{
+    public static Task ReleaseAfter(IDisposable resource, int delayMilliseconds)
+    {
+        return Task.Delay(delayMilliseconds).ContinueWith(_ => resource.Dispose());
+    }
+}
+'@
 $lock = [Habitat.Storage.GeneratedStorage]::AcquireLock($root)
+$unlock = $null
 try {
     Check ((Scan $true).Busy) 'The updater and cleaner must share an exclusive lock.'
-    $rejected = $false
-    try { [Habitat.Storage.GeneratedStorage]::BeginOperation($root, @($pending)) } catch { $rejected = $true }
-    Check $rejected 'A producer must not register during cleanup or activation.'
-} finally { $lock.Dispose() }
+    $unlock = [HabitatStorageLockCheck]::ReleaseAfter($lock, 500)
+    $registration = [Habitat.Storage.GeneratedStorage]::BeginOperation($root, @($pending))
+    try { Check ($null -ne $registration) 'A producer must register after the short-lived lock is released.' }
+    finally { $registration.Dispose() }
+} finally {
+    if ($unlock) { $unlock.GetAwaiter().GetResult() }
+    $lock.Dispose()
+}
 
 # Unknown folders and altered output are retained, irrespective of their age/name.
 $unknown = Join-Path $root 'recovery-backup'

@@ -1,12 +1,12 @@
 # Changelog
 
-## 0.20.2 — 2026-11-08
+## 0.20.3 — 2026-11-08
 
 - Un fallo al leer las preferencias suspende el guardado automático. **Preferences…** permite reintentar la lectura, restaurar la copia anterior o restablecer los ajustes conservando el archivo dañado.
 - Los respaldos locales de Tasks y Contacts compactan las revisiones antiguas en lotes verificados. Cada revisión conserva sus bytes originales y las copias recientes siguen disponibles como JSON. [Respaldos y diagnósticos](docs/STORAGE.md#respaldos-y-diagnósticos-del-perfil).
 - Las previsualizaciones de Gmail y Tasks programan sus propios plazos. Google Drive inicia trabajo cuando vence la sincronización de un módulo. Los diagnósticos tienen rotación y límites de espacio.
 - La verificación tiene perfiles por tipo de cambio, límites de espera y registros de fallos. El SDK y las dependencias de WinUI quedan fijados. La publicación reutiliza la verificación del mismo commit y comprueba los hashes entregados antes de retirar sus copias de trabajo.
-- Las pruebas paralelas conservan la salida de procesos descendientes y la suite WinUI comprueba la recuperación de preferencias y la reversión de cambios si falla el guardado.
+- El resultado de las pruebas se comprueba independientemente del cierre de sus registros. La suite WinUI cubre la recuperación de preferencias y la reversión de cambios si falla el guardado. El ZIP y el EXE toleran contenciones breves del bloqueo de almacenamiento durante el empaquetado paralelo.
 
 ## 0.20.0 — 2026-11-07
 

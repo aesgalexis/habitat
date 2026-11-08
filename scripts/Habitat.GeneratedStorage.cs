@@ -74,6 +74,8 @@ namespace Habitat.Storage
     public static class GeneratedStorage
     {
         public const int RetentionDays = 7;
+        private const int ErrorSharingViolation = 32;
+        private const int ProducerLockWaitMilliseconds = 5000;
         private static readonly StringComparer Names = StringComparer.OrdinalIgnoreCase;
         private static readonly Regex ReleaseName = new Regex(@"^release-[a-f0-9]{32}$", RegexOptions.CultureInvariant);
         private static readonly Regex Id = new Regex(@"^[a-f0-9]{32}$", RegexOptions.CultureInvariant);
@@ -266,7 +268,7 @@ namespace Habitat.Storage
             using (var pins = new Pins(true, root))
             {
                 pins.Add(root);
-                using (AcquireLock(root))
+                using (AcquireLock(root, ProducerLockWaitMilliseconds))
                 {
                     var relative = paths.Select(path => Relative(root, Full(path))).ToArray();
                     foreach (var path in relative) CheckRelative(path);
@@ -293,7 +295,7 @@ namespace Habitat.Storage
             using (var pins = new Pins(true, root))
             {
                 pins.Add(System.IO.Path.GetDirectoryName(path));
-                using (AcquireLock(root))
+                using (AcquireLock(root, ProducerLockWaitMilliseconds))
                 using (var tree = new Tree(path, false, CancellationToken.None))
                     SaveReceipt(root, new GeneratedReceipt { Path = relative, Kind = kind, Files = tree.Inventory(CancellationToken.None), Directories = tree.Directories() }, pins);
             }
@@ -301,13 +303,28 @@ namespace Habitat.Storage
 
         public static FileStream AcquireLock(string artifactsRoot)
         {
+            return AcquireLock(artifactsRoot, 0);
+        }
+
+        private static FileStream AcquireLock(string artifactsRoot, int waitMilliseconds)
+        {
             var root = Full(artifactsRoot);
             using (var pins = new Pins(true, root))
             {
                 pins.Add(root);
                 var path = System.IO.Path.Combine(root, "update.lock");
-                var handle = CreateFile(NativePath(path), 0xC0000080u, 0, IntPtr.Zero, 4, 0x02200000, IntPtr.Zero);
-                if (handle.IsInvalid) { handle.Dispose(); throw new IOException("Maintenance or update already in progress.", new Win32Exception(Marshal.GetLastWin32Error())); }
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                SafeFileHandle handle;
+                while (true)
+                {
+                    handle = CreateFile(NativePath(path), 0xC0000080u, 0, IntPtr.Zero, 4, 0x02200000, IntPtr.Zero);
+                    if (!handle.IsInvalid) break;
+                    var error = Marshal.GetLastWin32Error();
+                    handle.Dispose();
+                    if (error != ErrorSharingViolation || watch.ElapsedMilliseconds >= waitMilliseconds)
+                        throw new IOException("Could not acquire the generated storage lock.", new Win32Exception(error));
+                    Thread.Sleep(50);
+                }
                 FileInformation info;
                 if (!GetFileInformationByHandle(handle, out info) || (info.Attributes & 0x410) != 0 || info.Links != 1)
                 { handle.Dispose(); throw new IOException("Unsafe update lock."); }
